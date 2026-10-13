@@ -9,7 +9,7 @@
 | T05 | Coletor Livelo → Smiles (Wayback + fontes públicas) | pendente | | pendente | fixture + contrato |
 | T06 | Conjunto de ouro (50 campanhas) | pendente | | pendente | data/gold |
 | T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
-| T08 (T08a) | Baseline B0/B1 e walk-forward | Programador 3 | Claude Code | em_revisao | src/preditor/baseline.py, walkforward.py; testes sintéticos verdes; PR feat/t08a-baseline |
+| T08 (T08a) | Baseline B0/B1 e walk-forward | Programador 3 | Claude Code | devolvida | src/preditor/baseline.py, walkforward.py; PR #3. Teste cruzado: 5 defeitos bloqueantes (vazamento first_seen_at, purge 15d < horizonte 30d, meses não-calendário, sem dedup ±3d, segmentada contamina geral). Ver docs/qa/t08a/RELATORIO.md |
 | T09 | API, job diário, dashboard Vercel | pendente | | pendente | MVP |
 
 Teste cruzado (outro agente roda e tenta quebrar) ainda não executado em T01 a T03.
