@@ -12,5 +12,5 @@
 | T08a | Baseline B0/B1 e walk-forward | Programador 3 | concluida | PR #3 mergeado; vazamento aprovado; T08 mantém grade diária e reconstrução point-in-time |
 | T09a | Dashboard v0 com dados de exemplo | Designer Frontend | em_revisao | PR #9: D1–D9, N1 e N2 corrigidos; main mesclada; reteste final pedido ao QA |
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
-| T05 | Coletor RSS e backfill Wayback | Programador 2 | em_revisao | src/preditor/collector.py + testes; PR em aberto |
+| T05 | Coletor RSS e backfill Wayback | Programador 2 | concluida | Reteste ff7e1d9: 93 passed (sem testes novos), ruff ok; B1-B6 corrigidos; ressalvas R1 (testes de regressao), R2 bytes, R3 mesmo now, R4 published_time, R5 par sem direcao, R6 label. Ver docs/qa/t05/RELATORIO.md |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
