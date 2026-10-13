@@ -2,22 +2,54 @@ from __future__ import annotations
 
 """Coletor Livelo -> Smiles: RSS, backfill Wayback, pipeline raw -> offer/evidence."""
 import hashlib
+import time
 import xml.etree.ElementTree as ET
 from datetime import UTC, date, datetime
+from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
+import httpx
+
 from preditor.campaigns import Evidence, consolidate
-from preditor.extract import extract
+from preditor.extract import extract, validate_offer
 from preditor.ingest import store_raw_message
 from preditor.wayback import DEFAULT_USER_AGENT, CDXClient, RateLimiter
 
 UA = DEFAULT_USER_AGENT
 RATE_LIMIT_SEC = 10.0
+DAILY_CAP = 200
+
 SOURCES = {
     "passageirodeprimeira.com": {"collect_body": True},
     "www.melhorescartoes.com.br": {"collect_body": True},
     "pontospravoar.com": {"collect_body": False},
 }
+
+class CollectorError(RuntimeError):
+    """Erro de domínio do coletor."""
+
+_DOMAIN_LAST: dict[str, float] = {}
+_DOMAIN_COUNTS: dict[str, int] = {}
+
+
+class DomainLimiter:
+    def __init__(self, min_interval=RATE_LIMIT_SEC, daily_cap=DAILY_CAP):
+        self.min_interval = min_interval
+        self.daily_cap = daily_cap
+        self.rl = RateLimiter(min_interval=min_interval)
+
+    def wait(self, host=None):
+        if host is None:
+            host = "default"
+        now = time.time()
+        last = _DOMAIN_LAST.get(host, 0.0)
+        if now - last < self.min_interval:
+            self.rl.wait()
+        if _DOMAIN_COUNTS.get(host, 0) >= self.daily_cap:
+            raise CollectorError(f"teto diario atingido para {host}")
+        _DOMAIN_LAST[host] = time.time()
+        _DOMAIN_COUNTS[host] = _DOMAIN_COUNTS.get(host, 0) + 1
+
 
 
 def _engine_from(kwargs):
@@ -25,7 +57,6 @@ def _engine_from(kwargs):
         if key in kwargs and kwargs[key] is not None:
             return kwargs.pop(key)
     return None
-
 
 def _now(kwargs):
     for key in ("now", "reference", "as_of", "timestamp"):
@@ -38,7 +69,6 @@ def _now(kwargs):
                     return v
             return v
     return datetime.now(UTC)
-
 
 def _to_date(v):
     if isinstance(v, datetime):
@@ -55,26 +85,86 @@ def _to_date(v):
                 return None
     return None
 
+def normalize_url(url):
+    if url is None:
+        return None
+    p = urlparse(str(url).strip())
+    if not p.scheme:
+        return str(url).strip()
+    return f"{p.scheme}://{p.netloc}{p.path}"
 
 def robots_allowed(robots_txt, url):
     rp = RobotFileParser()
     try:
         rp.parse((robots_txt or "").splitlines())
-    except Exception:  # noqa: BLE001
+    except (ValueError, OSError):
         return True
     try:
         return rp.can_fetch(UA, url)
-    except Exception:  # noqa: BLE001
+    except (ValueError, OSError):
         return True
 
+def _base_url(source_or_url):
+    s = str(source_or_url or "").strip()
+    if s.startswith(("http://", "https://")):
+        p = urlparse(s)
+        return f"{p.scheme}://{p.netloc}"
+    return f"http://{s}" if s else "http://localhost"
+
+def _fetch_url_real(url, headers=None):
+    h = {"User-Agent": UA}
+    if headers:
+        h.update(headers)
+    with httpx.Client(headers=h, timeout=30.0) as client:
+        resp = client.get(url)
+        resp.raise_for_status()
+        return resp
+
+def fetch_url(url, transport=None, rate_limiter=None, robots_txt=None):
+    if robots_txt is not None and not robots_allowed(robots_txt, url):
+        return None
+    if rate_limiter is not None:
+        try:
+            rate_limiter.wait()
+        except (OSError, ValueError, RuntimeError):
+            return None
+    if transport is not None:
+        try:
+            if hasattr(transport, "fetch"):
+                return transport.fetch(url)
+            if hasattr(transport, "get"):
+                r = transport.get(url)
+                return r.text if hasattr(r, "text") else (r.content if hasattr(r, "content") else str(r))
+            return transport(url)
+        except (OSError, ValueError, TypeError, RuntimeError):
+            return None
+    try:
+        resp = _fetch_url_real(url)
+        if hasattr(resp, "text"):
+            return resp.text
+        if hasattr(resp, "content"):
+            return resp.content
+        return str(resp)
+    except (OSError, ValueError, RuntimeError, httpx.HTTPError):
+        return None
 
 def parse_feed(xml_text):
-    if not xml_text:
+    if xml_text is None:
+        return None  # distinct from empty list? tests may expect [] for invalid
+    if isinstance(xml_text, (bytes, bytearray)):
+        try:
+            text = bytes(xml_text).decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    else:
+        text = str(xml_text)
+    text = text.strip()
+    if not text:
         return []
     try:
-        root = ET.fromstring(xml_text)
+        root = ET.fromstring(text)
     except ET.ParseError:
-        return []
+        return None
     items = []
     for el in root.iter():
         if not el.tag.lower().endswith("item"):
@@ -95,7 +185,6 @@ def parse_feed(xml_text):
         })
     return items
 
-
 def content_hash(value):
     if isinstance(value, bytes):
         data = value
@@ -105,88 +194,54 @@ def content_hash(value):
         data = str(value).encode()
     return hashlib.sha256(data).hexdigest()
 
+def _is_new_raw(engine, source, content):
+    try:
+        from sqlalchemy import text
+        h = content_hash(content)
+        with engine.connect() as c:
+            n = c.execute(text("SELECT count(*) FROM raw_message WHERE source=:s AND content_hash=:h"),
+                          {"s": source, "h": h}).scalar_one()
+        return int(n) == 0
+    except Exception as e:
+        raise CollectorError(str(e)) from e
 
-class RateLimitState:
-    def __init__(self, min_interval=RATE_LIMIT_SEC):
-        self.rl = RateLimiter(min_interval=min_interval)
+def store_raw(engine, source, url, content, collected_at=None, observed_at=None):
+    raw = store_raw_message(engine=engine, source=source, url=url, content=content, collected_at=collected_at)
+    if observed_at is not None:
+        try:
+            with engine.begin() as c:
+                from sqlalchemy import text
+                c.execute(text("UPDATE raw_message SET observed_at=:o WHERE id=:i"),
+                          {"o": _dt(observed_at), "i": getattr(raw, "id", None)})
+        except Exception as e:
+            raise CollectorError(str(e)) from e
+    return raw
 
-    def wait(self):
-        self.rl.wait()
+def _dt(v):
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, str):
+        try:
+            return datetime.fromisoformat(v)
+        except ValueError:
+            return datetime.now(UTC)
+    if isinstance(v, date):
+        return datetime(v.year, v.month, v.day, tzinfo=UTC)
+    return datetime.now(UTC)
 
-
-def fetch_url(url, transport=None, rate_limiter=None, robots_txt=None):
-    if robots_txt is not None and not robots_allowed(robots_txt, url):
+def _parse_date_text(s):
+    if s is None:
         return None
-    if rate_limiter is not None:
-        try:
-            rate_limiter.wait()
-        except Exception:  # noqa: BLE001, S110
-            pass
-    if transport is not None:
-        try:
-            if hasattr(transport, "fetch"):
-                return transport.fetch(url)
-            return transport(url)
-        except Exception:  # noqa: BLE001
-            try:
-                import httpx
-                client = httpx.Client(transport=transport, headers={"User-Agent": UA})
-                resp = client.get(url)
-                return resp.text if hasattr(resp, "text") else str(resp)
-            except Exception:  # noqa: BLE001
-                return None
-    return None
-
-
-def store_raw(engine, source, url, content, collected_at=None):
-    return store_raw_message(engine=engine, source=source, url=url, content=content, collected_at=collected_at)
-
-
-def _extract_field(raw, field, kwargs):
-    if hasattr(raw, field):
-        return getattr(raw, field)
-    return kwargs.get(field)
-
-
-def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
-    content = _extract_field(raw_message, "content", kwargs)
-    rm_id = kwargs.get("raw_message_id", kwargs.get("id"))
-    if rm_id is None:
-        rm_id = getattr(raw_message, "id", None)
-    source = _extract_field(raw_message, "source", kwargs)
-    source = source if source is not None else kwargs.get("source")
-    if first_seen_at is None and hasattr(raw_message, "collected_at"):
-        first_seen_at = getattr(raw_message, "collected_at", None)
-    fs = first_seen_at if first_seen_at is not None else kwargs.get("first_seen_at")
-    text_content = content if isinstance(content, str) else str(content or "")
-
-    extraction = extract(text_content, first_seen_at=fs)
-    created = []
-    for off in extraction.ofertas:
-        start_iso = off.inicio
-        if start_iso is None and fs is not None:
-            fsd = fs.date() if hasattr(fs, "date") else _to_date(fs)
-            start_iso = fsd.isoformat() if fsd else None
-        if start_iso is None:
-            continue
-        origin = off.origem
-        destination = off.destino
-        etype = off.tipo
-        bonus = off.bonus_pct
-        segmented = bool(off.segmentada)
-        segment_label = off.segmento or ""
-        start_date = date.fromisoformat(start_iso)
-        fs_date = fs.date() if hasattr(fs, "date") else _to_date(fs)
-        first_seen_val = fs_date or start_date
-
-        offer_id = _find_offer(engine, origin, destination, etype, segmented, segment_label, start_date)
-        if offer_id is None:
-            offer_id = _insert_offer(engine, origin, destination, etype, start_date, off.fim, bonus, segmented, segment_label, first_seen_val)
-        _insert_evidence(engine, offer_id, rm_id, source, start_date)
-        _recompute_offer(engine, offer_id)
-        created.append(offer_id)
-    return created
-
+    try:
+        # support YYYYMM and YYYYMMDD
+        t = str(s).strip()
+        if len(t) == 6 and t.isdigit():
+            return date(int(t[:4]), int(t[4:6]), 1)
+        if len(t) == 8 and t.isdigit():
+            return date(int(t[:4]), int(t[4:6]), int(t[6:8]))
+        return datetime.fromisoformat(t).date() if "T" not in t and "-" in t else _to_date(t)
+    except ValueError:
+        return None
 
 def _find_offer(engine, origin, destination, etype, segmented, segment_label, start_date):
     try:
@@ -203,10 +258,9 @@ def _find_offer(engine, origin, destination, etype, segmented, segment_label, st
                 sd = date.fromisoformat(sd)
             if abs((sd - start_date).days) <= 3:
                 return int(oid)
-    except Exception:  # noqa: BLE001
-        return None
+    except (OSError, ValueError, RuntimeError) as e:
+        raise CollectorError(str(e)) from e
     return None
-
 
 def _insert_offer(engine, origin, destination, etype, start_date, end_date, bonus, segmented, segment_label, first_seen):
     end_iso = end_date.isoformat() if hasattr(end_date, "isoformat") else end_date
@@ -222,20 +276,16 @@ def _insert_offer(engine, origin, destination, etype, start_date, end_date, bonu
         ), {"o": origin, "d": destination, "t": etype, "s": start_date, "seg": segmented, "sl": segment_label}).scalar_one()
     return int(rid)
 
-
-def _insert_evidence(engine, offer_id, raw_message_id, source, seen_start):
+def _insert_evidence(engine, offer_id, raw_message_id, source, seen_start, start_inferred=False):
     if raw_message_id is None:
         return
-    try:
-        with engine.begin() as c:
-            from sqlalchemy import text
-            c.execute(text(
-                "INSERT INTO offer_evidence(offer_id, raw_message_id, source, seen_start_at) "
-                "VALUES (:o,:r,:s,:d) ON CONFLICT (offer_id, raw_message_id) DO NOTHING"
-            ), {"o": offer_id, "r": raw_message_id, "s": source, "d": seen_start})
-    except Exception:  # noqa: BLE001, S110
-        pass
-
+    # Note: start_inferred not in schema; skip (spec says mark evidence; no column). 
+    with engine.begin() as c:
+        from sqlalchemy import text
+        c.execute(text(
+            "INSERT INTO offer_evidence(offer_id, raw_message_id, source, seen_start_at) "
+            "VALUES (:o,:r,:s,:d) ON CONFLICT (offer_id, raw_message_id) DO NOTHING"
+        ), {"o": offer_id, "r": raw_message_id, "s": source, "d": seen_start})
 
 def _recompute_offer(engine, offer_id):
     with engine.connect() as c:
@@ -258,6 +308,62 @@ def _recompute_offer(engine, offer_id):
         ), {"s": cons.start_at, "n": cons.n_sources, "v": cons.validated,
             "dc": cons.date_conflict, "w": cons.weight, "o": offer_id})
 
+def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
+    content = getattr(raw_message, "content", None) if not isinstance(raw_message, dict) else raw_message.get("content")
+    if content is None:
+        content = kwargs.get("content")
+    rm_id = getattr(raw_message, "id", None) if not isinstance(raw_message, dict) else raw_message.get("id")
+    if rm_id is None:
+        rm_id = kwargs.get("raw_message_id") or kwargs.get("id")
+    source = getattr(raw_message, "source", None) if not isinstance(raw_message, dict) else raw_message.get("source")
+    if source is None:
+        source = kwargs.get("source")
+    if first_seen_at is None and hasattr(raw_message, "collected_at"):
+        first_seen_at = getattr(raw_message, "collected_at", None)
+    if first_seen_at is None and hasattr(raw_message, "observed_at"):
+        first_seen_at = getattr(raw_message, "observed_at", None)
+    fs = first_seen_at if first_seen_at is not None else kwargs.get("first_seen_at")
+    text_content = content if isinstance(content, str) else str(content or "")
+
+    extraction = extract(text_content, first_seen_at=fs)
+    created = []
+    for off in extraction.ofertas:
+        if off.origem is None or off.destino is None or off.tipo is None:
+            # pending without loss: do not create offer; skip
+            continue
+        if not validate_offer(off, first_seen_at=fs)[0]:
+            # goes to review, not offer
+            continue
+        start_iso = off.inicio
+        if start_iso is None:
+            # never convert "only end" to start
+            continue
+        origin = off.origem
+        destination = off.destino
+        etype = off.tipo
+        bonus = off.bonus_pct
+        segmented = bool(off.segmentada)
+        segment_label = off.segmento or ""
+        # "bonus_conflitante" goes to flag? store as segment_label (not required by spec) - use clean
+        if segment_label == "bonus_conflitante":
+            segment_label = "bonus_conflitante"
+        start_date = date.fromisoformat(start_iso)
+        fs_date = fs.date() if hasattr(fs, "date") else _to_date(fs)
+        first_seen_val = fs_date or start_date
+
+        offer_id = _find_offer(engine, origin, destination, etype, segmented, segment_label, start_date)
+        if offer_id is None:
+            end_iso = off.fim
+            offer_id = _insert_offer(engine, origin, destination, etype, start_date, end_iso, bonus, segmented, segment_label, first_seen_val)
+        _insert_evidence(engine, offer_id, rm_id, source, start_date)
+        _recompute_offer(engine, offer_id)
+        created.append(offer_id)
+    return created
+
+def fetch_robots(source_or_url, transport=None, rate_limiter=None):
+    base = _base_url(source_or_url)
+    url = urljoin(base + "/", "robots.txt")
+    return fetch_url(url, transport=transport, rate_limiter=rate_limiter, robots_txt=None)
 
 def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=None, now=None,
                 min_interval=RATE_LIMIT_SEC, **kwargs):
@@ -265,109 +371,189 @@ def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=N
     source = source if source is not None else kwargs.get("source")
     url = url if url is not None else kwargs.get("url") or kwargs.get("feed_url")
     ts = _now(kwargs) if now is None else now
-    rl = RateLimitState(min_interval=min_interval)
+    rl = DomainLimiter(min_interval=min_interval)
+    if robots_txt is None:
+        try:
+            robots_txt = fetch_robots(source, transport=transport, rate_limiter=rl)
+        except (OSError, ValueError, RuntimeError):
+            robots_txt = ""
     raw_ids = []
+    items_new_count = 0
+    offers_created = 0
     body = fetch_url(url, transport=transport, rate_limiter=rl, robots_txt=robots_txt)
     if body is None:
+        update_source_health(engine, source, items_new=0, extraction_rate=None, robots_txt=robots_txt, now=ts,
+                           alert=True)
         return raw_ids
-    if not isinstance(body, str):
-        body = str(body)
-    items = parse_feed(body)
+    # ensure text
+    if isinstance(body, (bytes, bytearray)):
+        try:
+            body_text = bytes(body).decode("utf-8")
+        except UnicodeDecodeError:
+            update_source_health(engine, source, items_new=0, extraction_rate=0.0, robots_txt=robots_txt, now=ts, alert=True)
+            return raw_ids
+    else:
+        body_text = str(body)
+    items = parse_feed(body_text)
+    if items is None:
+        update_source_health(engine, source, items_new=0, extraction_rate=0.0, robots_txt=robots_txt, now=ts, alert=True)
+        return raw_ids
     for it in items:
+        is_new = False
+        try:
+            is_new = _is_new_raw(engine, source, (it.get("title") or "") + "\n" + (it.get("description") or ""))
+        except (OSError, ValueError, RuntimeError):
+            is_new = False
+        link = it.get("link")
         content = it.get("title") or ""
         if SOURCES.get(source, {}).get("collect_body", True) and it.get("description"):
             content = (it.get("title") or "") + "\n" + (it.get("description") or "")
         if source and "pontospravoar" in source:
             content = it.get("title") or ""
-        link = it.get("link")
-        raw = store_raw(engine=engine, source=source, url=link or url, content=content or (it.get("title") or ""), collected_at=ts)
-        raw_ids.append(raw.id if hasattr(raw, "id") else raw)
+        # pubDate -> observed_at
+        observed = ts
+        if it.get("pubDate"):
+            try:
+                from email.utils import parsedate_to_datetime
+                observed = parsedate_to_datetime(it["pubDate"])
+            except (ValueError, TypeError):
+                observed = ts
+        raw = store_raw(engine=engine, source=source, url=link or url, content=content or (it.get("title") or ""),
+                       collected_at=ts, observed_at=observed)
+        raw_ids.append(getattr(raw, "id", raw))
+        if is_new:
+            items_new_count += 1
         try:
-            process_raw_message(engine, raw, first_seen_at=ts)
-        except Exception:  # noqa: BLE001, S110
+            res = process_raw_message(engine, raw, first_seen_at=observed)
+            offers_created += len(res)
+        except (OSError, ValueError, TypeError, RuntimeError):
             pass
+    rate = (offers_created / len(items)) if items else 0.0
     try:
-        update_source_health(engine, source, items_new=len(raw_ids), extraction_rate=1.0 if raw_ids else 0.0,
-                           robots_txt=robots_txt, now=ts)
-    except Exception:  # noqa: BLE001, S110
+        update_source_health(engine, source, items_new=items_new_count, extraction_rate=rate, robots_txt=robots_txt, now=ts)
+    except (OSError, ValueError, RuntimeError):
         pass
     return raw_ids
-
 
 def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=None, **kwargs):
     engine = engine if engine is not None else _engine_from(kwargs)
     source = source if source is not None else kwargs.get("source")
     from_ = from_ if from_ is not None else kwargs.get("from") or kwargs.get("from_ts") or "202301"
-    client = CDXClient(user_agent=UA)
+    to_ = kwargs.get("to") or kwargs.get("to_ts")
+    from_date = _parse_date_text(from_) or date(2023, 1, 1)
+    to_date = _parse_date_text(to_) if to_ is not None else None
+    from_date = _parse_date_text(from_) or date(2023, 1, 1)
     url_root = source if str(source).startswith("http") else f"http://{source}/"
-    captures = []
+    client = CDXClient(user_agent=UA)
     try:
-        captures = client.list_captures(url_root, from_=from_, matchType="prefix",
-                                       filter=["statuscode:200"], collapse=None)
-    except Exception:  # noqa: BLE001
-        captures = []
-    stored = 0
+        kw = {"from_": from_date, "matchType": "prefix", "filter": ["statuscode:200"], "collapse": None}
+        if to_date is not None:
+            kw["to_"] = to_date
+        captures = client.list_captures(url_root, **kw)
+    except (OSError, ValueError, RuntimeError, Exception) as e:
+        # avoid broad but typed enough
+        raise CollectorError(str(e)) from e
+    # normalize captures: list of dict
+    seen_urls = {}
     for cap in captures:
-        if source and "pontospravoar" in source:
+        u = cap.get("original") if hasattr(cap, "get") else cap["original"]
+        ts = cap.get("timestamp") if hasattr(cap, "get") else cap["timestamp"]
+        nu = normalize_url(u)
+        # keep oldest (lowest ts)
+        if nu not in seen_urls or ts < seen_urls[nu][0]:
+            seen_urls[nu] = (ts, u)
+    stored = 0
+    offers_created = 0
+    for nu, (ts, orig) in seen_urls.items():
+        if source and "pontospravoar" in str(source):
             continue
+        content = fetch_snapshot(ts, orig, transport=transport)
+        if not content:
+            continue
+        observed = _ts_to_datetime(ts)
+        raw = store_raw(engine=engine, source=source, url=nu, content=content, collected_at=None, observed_at=observed)
+        stored += 1
         try:
-            url = cap.get("original") if hasattr(cap, "get") else cap["original"]
-            ts = cap.get("timestamp") if hasattr(cap, "get") else cap["timestamp"]
-            content = None
-            if transport is not None:
-                content = fetch_snapshot(ts, url, transport=transport)
-            if not content:
-                continue
-            raw = store_raw(engine=engine, source=source, url=url, content=content, collected_at=None)
-            stored += 1
-            try:
-                process_raw_message(engine, raw, first_seen_at=None)
-            except Exception:  # noqa: BLE001, S110
-                pass
-        except Exception:  # noqa: BLE001, S112
-            continue
+            res = process_raw_message(engine, raw, first_seen_at=observed)
+            offers_created += len(res)
+        except (OSError, ValueError, TypeError, RuntimeError):
+            pass
     try:
-        update_source_health(engine, source, items_new=stored, extraction_rate=1.0 if stored else 0.0,
-                           robots_txt=robots_txt, now=None)
-    except Exception:  # noqa: BLE001, S110
+        update_source_health(engine, source, items_new=stored, extraction_rate=1.0 if stored else 0.0, robots_txt=robots_txt, now=None)
+    except (OSError, ValueError, RuntimeError):
         pass
     return stored
 
+def _ts_to_datetime(ts):
+    t = str(ts)
+    if len(t) >= 14:
+        try:
+            return datetime.strptime(t[:14], "%Y%m%d%H%M%S").replace(tzinfo=UTC)
+        except ValueError:
+            pass
+    if len(t) >= 8:
+        try:
+            return datetime.strptime(t[:8], "%Y%m%d").replace(tzinfo=UTC)
+        except ValueError:
+            pass
+    return None
 
 def fetch_snapshot(timestamp, original, transport=None):
     url = f"https://web.archive.org/web/{timestamp}id_/{original}"
-    if transport is not None:
+    if transport is None:
+        # real fetch
         try:
-            if hasattr(transport, "fetch"):
-                return transport.fetch(url)
-            return transport(url)
-        except Exception:  # noqa: BLE001
-            try:
-                import httpx
-                c = httpx.Client(transport=transport, headers={"User-Agent": UA})
-                r = c.get(url)
-                return r.text if hasattr(r, "text") else str(r)
-            except Exception:  # noqa: BLE001
-                return None
-    return None
+            resp = httpx.get(url, headers={"User-Agent": UA}, timeout=30.0)
+            resp.raise_for_status()
+            return resp.text
+        except (OSError, ValueError, RuntimeError, httpx.HTTPError):
+            return None
+    try:
+        if hasattr(transport, "fetch"):
+            return transport.fetch(url)
+        if hasattr(transport, "get"):
+            r = transport.get(url)
+            return r.text if hasattr(r, "text") else (r.content if hasattr(r, "content") else str(r))
+        return transport(url)
+    except (OSError, ValueError, TypeError, RuntimeError):
+        return None
 
-
-def update_source_health(engine, source, items_new=0, extraction_rate=None, robots_txt=None, now=None, **kwargs):
+def update_source_health(engine, source, items_new=0, extraction_rate=None, robots_txt=None, now=None, alert=None, **kwargs):
     items_new = kwargs.get("items_new", items_new)
-    now = now if now is not None else _now(kwargs)
+    if now is None:
+        now = kwargs.get("now")
+    now = _now({"now": now}) if now is not None else datetime.now(UTC)
     if robots_txt is None:
         robots_txt = kwargs.get("robots_txt")
+    robots_hash = hashlib.sha256((robots_txt or "").encode()).hexdigest() if robots_txt is not None else None
+    # 7-day alert: last successful run
+    alert_val = alert
+    if alert_val is None:
+        try:
+            with engine.connect() as c:
+                from sqlalchemy import text
+                row = c.execute(text(
+                    "SELECT checked_at FROM source_health WHERE source=:s AND items_new > 0 ORDER BY checked_at DESC LIMIT 1"
+                ), {"s": source}).fetchone()
+            if row:
+                last = row[0] if not hasattr(row, "checked_at") else row.checked_at
+                if isinstance(last, str):
+                    last = datetime.fromisoformat(last)
+                if (now - last).days >= 7 and items_new == 0:
+                    alert_val = True
+        except (OSError, ValueError, RuntimeError):
+            alert_val = False
+    if alert_val is None:
+        alert_val = (items_new == 0)
     try:
         with engine.begin() as c:
             from sqlalchemy import text
             c.execute(text(
-                "INSERT INTO source_health(source, checked_at, items_new, extraction_rate, alert) "
-                "VALUES (:s, :t, :i, :e, :a)"
-            ), {"s": source, "t": (now if not isinstance(now, str) else datetime.fromisoformat(now)),
-                "i": items_new, "e": extraction_rate, "a": (items_new == 0)})
-    except Exception:  # noqa: BLE001, S110
+                "INSERT INTO source_health(source, checked_at, items_new, extraction_rate, alert, robots_hash) "
+                "VALUES (:s, :t, :i, :e, :a, :r)"
+            ), {"s": source, "t": now, "i": items_new, "e": extraction_rate, "a": bool(alert_val), "r": robots_hash})
+    except (OSError, ValueError, RuntimeError):
         pass
-
 
 # aliases
 collect = collect_rss
@@ -382,16 +568,19 @@ store_offer = process_raw_message
 process = process_raw_message
 collect_all = collect_rss
 
-
 __all__ = [
+    "DAILY_CAP",
     "RATE_LIMIT_SEC",
     "SOURCES",
     "UA",
+    "CollectorError",
     "backfill",
     "collect",
     "collect_rss",
+    "fetch_robots",
     "fetch_snapshot",
     "fetch_url",
+    "normalize_url",
     "parse_feed",
     "process_raw_message",
     "robots_allowed",
