@@ -37,20 +37,23 @@ def test_V_validated_is_final_state():
 def test_F_late_first_seen():
     items = [mk(date(2025, m, 10), date(2025, m, 10)) for m in range(1, 7)]
     late = mk(date(2025, 2, 20), date(2025, 6, 25)); items.append(late)
-    for s in walk_forward_splits(items, train_months=3, test_months=1, step_months=1, purge_days=15):
+    for s in walk_forward_splits(items, train_months=3, test_months=1, step_months=1, purge_days=30):
         assert not any(x is late for x in s.train) or s.test_start > date(2025, 6, 25)
 def test_F2_first_seen_after_cutoff_before_test():
     a = mk(date(2025, 1, 5), date(2025, 2, 25))
-    s = walk_forward_splits([a, mk(date(2025, 3, 12), date(2025, 3, 12))], train_months=2, test_months=1, step_months=1, purge_days=15)[0]
-    assert not any(x is a for x in s.train)
+    sp = walk_forward_splits([a, mk(date(2025, 3, 12), date(2025, 3, 12))], train_months=2, test_months=1, step_months=1, purge_days=30)
+    assert not any(any(x is a for x in s.train) for s in sp)
 def test_G_purge_from_window_start():
-    s = walk_forward_splits([mk(date(2025, 1, 31), date(2025, 1, 31)), mk(date(2025, 2, 28), date(2025, 2, 28))],
-                            train_months=1, test_months=1, step_months=1, purge_days=15)[0]
-    assert (date(2025, 2, 1) - s.train_end).days >= 15
+    sp = walk_forward_splits([mk(date(2025, 1, 31), date(2025, 1, 31)), mk(date(2025, 2, 28), date(2025, 2, 28))],
+                            train_months=1, test_months=1, step_months=1, purge_days=30)
+    assert all((date(2025, 2, 1) - s.train_end).days >= 15 for s in sp)
 def test_X_expanding_true_keeps_old_months():
     items = [mk(date(2025, m, 10), date(2025, m, 10)) for m in range(1, 7)]
-    sp = walk_forward_splits(items, train_months=2, test_months=1, step_months=1, purge_days=15, expanding=True)
+    sp = walk_forward_splits(items, train_months=2, test_months=1, step_months=1, purge_days=30, expanding=True)
     assert any(x["start_at"].month == 1 for x in sp[-1].train)
 def test_H_horizon_vs_purge():
     with pytest.raises(ValueError):
-        walk_forward_splits(BASE, train_months=2, test_months=1, purge_days=15, horizons=[7, 15, 30])
+        walk_forward_splits(BASE, train_months=2, test_months=1, purge_days=5, horizons=[7, 15, 30])
+
+def test_R1_first_seen_as_date_same_day():
+    assert p(BASE + [mk(T, T)], as_of=T) == p(BASE, as_of=T)

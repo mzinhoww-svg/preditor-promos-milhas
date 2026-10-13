@@ -9,6 +9,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("America/Sao_Paulo")
+HORIZONS_DEFAULT = (7, 15, 30)
 
 
 def _normalize_datetime(value: Any) -> datetime:
@@ -34,23 +35,6 @@ def _normalize_datetime(value: Any) -> datetime:
 def _to_date(value: Any) -> date:
     return _normalize_datetime(value).date()
 
-
-def _normalize_datetime(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=TZ)
-        return value.astimezone(TZ)
-    if isinstance(value, date):
-        return datetime.combine(value, time.min, tzinfo=TZ)
-    if isinstance(value, str):
-        try:
-            dt = datetime.fromisoformat(value.strip())
-        except ValueError:
-            dt = datetime.combine(date.fromisoformat(value.strip()[:10]), time.min)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=TZ)
-        return dt.astimezone(TZ)
-    raise ValueError(f"data invalida: {value!r}")
 
 def _get(rec: Any, *names: str, default: Any = None) -> Any:
     if isinstance(rec, dict):
@@ -187,11 +171,14 @@ def walk_forward_splits(
     step_months = _validate_int(step_months, "step_months", 1)
     purge_days = _validate_purge(purge_days)
     horizons_list = list(horizons) if horizons is not None else None
-    if horizons_list is not None:
-        for h in horizons_list:
-            _validate_int(h, "horizon", 1)
-        if purge_days < max(horizons_list):
-            raise ValueError("purge_days deve ser >= max(horizons)")
+    if horizons_list is None:
+        effective_horizons = list(HORIZONS_DEFAULT)
+    else:
+        effective_horizons = horizons_list
+    for h in effective_horizons:
+        _validate_int(h, "horizon", 1)
+    if effective_horizons and purge_days < max(effective_horizons):
+        raise ValueError("purge_days deve ser >= max(horizons)")
 
     data = list(items) if items is not None else []
     # Validar no-op para horizons se fornecido: apenas confere >=1
@@ -275,6 +262,11 @@ def walk_forward_splits(
             if cutoff < d < test_min and it not in train_purged:
                 train_purged.append(it)
 
+        if not train_items:
+            i += step_months
+            if i > max_months:
+                break
+            continue
         train_end = max((_item_date(it, date_field) for it in train_items), default=cutoff)
         split = WalkSplit(
             train=list(train_items),

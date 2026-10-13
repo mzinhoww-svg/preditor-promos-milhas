@@ -17,7 +17,7 @@ HIST = [mk(date(2026, m, 15)) for m in range(1, 7)]
 
 
 def test_walk_forward_splits_basic():
-    splits = list(walk_forward_splits(HIST, purge_days=15, train_months=2, test_months=1, step_months=1))
+    splits = list(walk_forward_splits(HIST, purge_days=30, train_months=2, test_months=1, step_months=1))
     assert len(splits) >= 1
     for sp in splits:
         train, test = sp  # __iter__
@@ -28,7 +28,7 @@ def test_walk_forward_splits_basic():
 
 
 def test_walk_forward_no_overlap():
-    splits = list(walk_forward_splits(HIST, purge_days=15, train_months=2, test_months=1, step_months=1))
+    splits = list(walk_forward_splits(HIST, purge_days=30, train_months=2, test_months=1, step_months=1))
     for sp in splits:
         train, test = sp
         tr_ids = {id(x) for x in train}
@@ -38,8 +38,8 @@ def test_walk_forward_no_overlap():
 
 def test_purge_gap_respected_even_adjacent_months():
     # treino jan, teste fev: sem purge, adjacent; com purge remove todo fev
-    items = [mk(date(2026, 1, 10)), mk(date(2026, 2, 5)), mk(date(2026, 3, 20))]
-    splits = list(walk_forward_splits(items, purge_days=15, train_months=1, test_months=1, step_months=1))
+    items = [mk(date(2026, 1, 10), date(2025, 12, 20)), mk(date(2026, 2, 5)), mk(date(2026, 3, 20))]
+    splits = list(walk_forward_splits(items, purge_days=15, horizons=[], train_months=1, test_months=1, step_months=1))
     found = False
     for sp in splits:
         train, test = sp
@@ -65,7 +65,7 @@ def test_metric_perfect_prediction_low():
 
 
 def test_split_metadata_available():
-    splits = list(walk_forward_splits(HIST, purge_days=15, train_months=2, test_months=1, step_months=1))
+    splits = list(walk_forward_splits(HIST, purge_days=30, train_months=2, test_months=1, step_months=1))
     sp = splits[0]
     assert hasattr(sp, "train")
     assert hasattr(sp, "test")

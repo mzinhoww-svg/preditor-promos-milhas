@@ -91,10 +91,18 @@ def _first_seen_dt(rec: Any) -> datetime | None:
     if v is None:
         return None
     try:
-        return _to_datetime(v)
-    except ValueError:
+        if isinstance(v, datetime):
+            return _normalize_datetime(v)
+        if isinstance(v, date):
+            return datetime.combine(v, time.max, tzinfo=TZ)
+        if isinstance(v, str):
+            txt = v.strip()
+            if "T" not in txt and " " not in txt:
+                return datetime.combine(date.fromisoformat(txt[:10]), time.max, tzinfo=TZ)
+            return _normalize_datetime(txt)
+    except (ValueError, TypeError):
         return None
-
+    return None
 
 def _matches(
     rec: Any,
