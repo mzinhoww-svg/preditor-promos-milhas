@@ -10,7 +10,7 @@
 | T05a | Cliente Wayback CDX e ingest idempotente | Programador | em_correcao (ciclo 2) | PR #1: QA devolveu B1 (rate limit anulável) |
 | T07a | Extrator determinístico regex + pydantic | Programador 2 | em_revisao | PR #5: conflito com main resolvido, CI rodando (commit 82ec792) |
 | T08a | Baseline B0/B1 e walk-forward | Programador 3 | concluida | PR #3 mergeado; vazamento aprovado; T08 mantém grade diária e reconstrução point-in-time |
-| T09a | Dashboard v0 com dados de exemplo | Designer Frontend | em_revisao | PR #9: D1–D9, N1 e N2 corrigidos; main mesclada; reteste final pedido ao QA |
+| T09a | Dashboard v0 com dados de exemplo | Designer Frontend | concluida | Reteste final 357f841: N1/N2 corrigidos; lint/build ok; 207 paginas sem overflow; axe 0 violacoes; ressalvas F1-F3 (data impossivel 31/02 rola para 03/03; folds nao validado). Ver docs/qa/t09a/QA-RELATORIO.md |
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
 | T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
