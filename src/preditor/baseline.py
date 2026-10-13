@@ -1,27 +1,54 @@
-"""Baselines B0 (taxa-base) e B1 (hazard discreto sazonal) para ofertas de pontos."""
+"""Baselines B0 (taxa-base) e B1 (hazard discreto sazonal) para ofertas de pontos/milhas.
+
+API publica:
+- ``B0``/``B1``: classes com ``fit`` e ``predict(as_of=..., horizons=...)``.
+- ``predict_proba(..., method="b0"|"b1", as_of=..., horizon=...|horizons=...)``.
+"""
 from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 HORIZONS_DEFAULT = (7, 15, 30)
+WINDOW_DEDUP_DAYS = 3  # mesmo campanha: +/- 3 dias (glossario)
+SHRINKAGE_TAU = 30.0
 
 
-def _to_date(value: Any) -> date | None:
-    if value is None:
-        return None
+def _to_date(value: Any) -> date:
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
     if isinstance(value, str):
         try:
-            return date.fromisoformat(value.strip()[:10])
+            return datetime.fromisoformat(value.strip()).date()
         except ValueError:
-            return None
-    return None
+            try:
+                return date.fromisoformat(value.strip()[:10])
+            except ValueError as exc:
+                raise ValueError(f"as_of/data invalida: {value!r}") from exc
+    raise ValueError(f"as_of obrigatorio e deve ser data/datetime/ISO: {value!r}")
+
+
+def _to_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, time.max)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.strip())
+        except ValueError:
+            return datetime.combine(_to_date(value), time.max)
+    raise ValueError(f"as_of invalido: {value!r}")
+
+
+def _as_of_date(value: Any) -> date:
+    if value is None:
+        raise ValueError("as_of e obrigatorio")
+    return _to_date(value)
 
 
 def _get(rec: Any, *names: str, default: Any = None) -> Any:
@@ -37,31 +64,33 @@ def _get(rec: Any, *names: str, default: Any = None) -> Any:
 
 
 def _origin(rec: Any) -> Any:
-    return _get(rec, "origin", "origem", "src", default=None)
+    return _get(rec, "origin", "origem", default=None)
 
 
 def _destination(rec: Any) -> Any:
-    return _get(rec, "destination", "destino", "dst", default=None)
+    return _get(rec, "destination", "destino", default=None)
 
 
 def _event_type(rec: Any) -> Any:
-    return _get(rec, "event_type", "type", "tipo", "offer_type", default=None)
-
-
-def _segmented(rec: Any) -> Any:
-    return _get(rec, "segmented", default=None)
-
-
-def _segment_label(rec: Any) -> Any:
-    return _get(rec, "segment_label", "segment", default=None)
+    return _get(rec, "event_type", "type", "tipo", default=None)
 
 
 def _start(rec: Any) -> date | None:
-    return _to_date(_get(rec, "start_at", "start", "date", "event_date", default=None))
+    v = _get(rec, "start_at", "start", "date", "event_date", default=None)
+    try:
+        return _to_date(v) if v is not None else None
+    except ValueError:
+        return None
 
 
-def _first_seen(rec: Any) -> date | None:
-    return _to_date(_get(rec, "first_seen_at", "first_seen", default=None))
+def _first_seen_dt(rec: Any) -> datetime | None:
+    v = _get(rec, "first_seen_at", "first_seen", default=None)
+    if v is None:
+        return None
+    try:
+        return _to_datetime(v)
+    except ValueError:
+        return None
 
 
 def _matches(
@@ -78,18 +107,42 @@ def _matches(
         return False
     if event_type is not None and _event_type(rec) != event_type:
         return False
-    if segmented is not None and _segmented(rec) is not None and bool(_segmented(rec)) != bool(segmented):
+    seg = _get(rec, "segmented", default=False)
+    if segmented is None:
+        # Geral exclui segmentada por padrao (glossario).
+        if seg is True:
+            return False
+    elif seg is not None and bool(seg) != bool(segmented):
         return False
-    return not (segment_label is not None and _segment_label(rec) is not None
-               and str(_segment_label(rec)) != str(segment_label))
+    return not (segment_label is not None and str(_get(rec, "segment_label", "segment", default="")) != str(segment_label))
 
 
-def _available(rec: Any, cutoff: date) -> bool:
+def _record_weight(rec: Any) -> float:
+    w = _get(rec, "weight", default=None)
+    if w is not None:
+        try:
+            return max(0.0, min(1.0, float(w)))
+        except (TypeError, ValueError):
+            pass
+    validated = _get(rec, "validated", default=None)
+    n_sources = _get(rec, "n_sources", _get(rec, "source_count", default=None))
+    if validated is False:
+        return 0.5
+    if n_sources is not None:
+        try:
+            if int(n_sources) < 2:
+                return 0.5
+        except (TypeError, ValueError):
+            pass
+    return 1.0
+
+
+def _available(rec: Any, as_of: date, as_of_dt: datetime) -> bool:
     start = _start(rec)
-    if start is None or start > cutoff:
+    if start is None or start > as_of:
         return False
-    fs = _first_seen(rec)
-    return not (fs is not None and fs > cutoff)
+    fs = _first_seen_dt(rec)
+    return not (fs is not None and fs > as_of_dt)
 
 
 def _filter_history(
@@ -101,109 +154,51 @@ def _filter_history(
     segmented: Any = None,
     segment_label: Any = None,
 ) -> list[Any]:
-    cutoff = _to_date(as_of)
-    if cutoff is None:
-        # Sem cutoff, considera tudo (cauda aberta). Limita pelo maximo observado.
-        starts = [_start(r) for r in records if _matches(r, origin, destination, event_type, segmented, segment_label)]
-        starts = [d for d in starts if d is not None]
-        cutoff = max(starts) if starts else date.max
-    out = []
+    ao = _as_of_date(as_of)
+    ao_dt = _to_datetime(as_of)
+    out: list[Any] = []
     for r in records or []:
         if not _matches(r, origin, destination, event_type, segmented, segment_label):
             continue
-        if not _available(r, cutoff):
+        if not _available(r, ao, ao_dt):
             continue
         out.append(r)
     return out
 
 
-def _start_dates(records: Iterable[Any]) -> list[date]:
-    return sorted(d for d in (_start(r) for r in records) if d is not None)
-
-
-def _observed_days(window_start: date, window_end: date, month: int) -> int:
-    count = 0
-    cur = window_start
-    while cur <= window_end:
-        if cur.month == month:
-            count += 1
-        cur += timedelta(days=1)
-    return count
+def _effective_starts(records: Iterable[Any]) -> list[tuple[date, float]]:
+    """Agrupa campanhas dentro de +/-3 dias (dedup do glossario) e pondera por weight."""
+    ordered = sorted((r for r in records or [] if _start(r) is not None), key=_start)
+    clusters: list[tuple[date, float]] = []
+    for rec in ordered:
+        d = _start(rec)
+        assert d is not None
+        w = _record_weight(rec)
+        if clusters and (d - clusters[-1][0]).days <= WINDOW_DEDUP_DAYS:
+            prev_date, prev_w = clusters[-1]
+            clusters[-1] = (prev_date, min(1.0, prev_w + w))
+        else:
+            clusters.append((d, min(1.0, w)))
+    return clusters
 
 
 def _clamp01(x: float) -> float:
+    import math
+
+    if math.isnan(x) or math.isinf(x):
+        return 0.0
     return max(0.0, min(1.0, float(x)))
-
-
-def _resolve_as_of(value: Any, fallback_records: list[Any]) -> date:
-    d = _to_date(value)
-    if d is not None:
-        return d
-    starts = _start_dates(fallback_records)
-    if starts:
-        return starts[-1]
-    return date.today()
-
-
-def _resolve_param(kwargs: dict[str, Any], names: list[str], default: Any = None) -> Any:
-    for name in names:
-        if name in kwargs and kwargs[name] is not None:
-            return kwargs.pop(name)
-    # pop even if None? leave
-    for name in names:
-        if name in kwargs:
-            return kwargs.pop(name)
-    return default
-
-
-def _resolve_horizon_kwargs(kwargs: dict[str, Any]) -> tuple[int | None, Any]:
-    h = _resolve_param(
-        kwargs,
-        ["horizon", "h", "horizon_days", "horizon_day", "H", "days"],
-        None,
-    )
-    hs = _resolve_param(
-        kwargs,
-        ["horizons", "horizon_list", "horizons_days", "Hs"],
-        None,
-    )
-    if h is not None:
-        try:
-            h = int(h)
-        except (TypeError, ValueError):
-            h = None
-    if hs is not None and not isinstance(hs, (list, tuple)):
-        try:
-            hs = [int(hs)]
-        except (TypeError, ValueError):
-            hs = None
-    return h, hs
-
-
-def _normalize_records_arg(records: Any, kwargs: dict[str, Any]) -> list[Any]:
-    if records is not None:
-        if isinstance(records, (list, tuple, set)):
-            return list(records)
-        return [records]
-    for name in ("offers", "data", "dataset", "records", "items", "history"):
-        if name in kwargs and kwargs[name] is not None:
-            val = kwargs.pop(name)
-            if isinstance(val, (list, tuple, set)):
-                return list(val)
-            return [val]
-    return []
 
 
 @dataclass
 class B0:
-    """Taxa-base empirica por (par, tipo): probabilidade diaria constante."""
-
     records: list[Any] = field(default_factory=list)
     as_of: Any = None
 
-    def fit(self, records: Any = None, *, as_of: Any = None, **kwargs) -> B0:
-        kw_records = _normalize_records_arg(None, kwargs)
-        recs = records if records is not None else (kw_records if kw_records else self.records)
+    def fit(self, records: Any = None, *, as_of: Any = None, **kwargs: Any) -> B0:
+        recs = records if records is not None else kwargs.get("records", kwargs.get("offers", kwargs.get("data")))
+        if recs is None:
+            recs = self.records
         if isinstance(recs, (list, tuple, set)):
             self.records = list(recs)
         elif recs is None:
@@ -212,10 +207,6 @@ class B0:
             self.records = [recs]
         if as_of is not None:
             self.as_of = as_of
-        # captura records via kwargs nomeados mesmo se records=None
-        extra = _normalize_records_arg(None, kwargs)
-        if extra and not self.records:
-            self.records = extra
         return self
 
     def _daily_rate(
@@ -228,6 +219,10 @@ class B0:
         segment_label=None,
         records=None,
     ) -> float:
+        raw = as_of if as_of is not None else self.as_of
+        if raw is None:
+            raise ValueError("as_of e obrigatorio")
+        ao = _as_of_date(raw)
         recs_in = self.records if records is None else records
         if isinstance(records, (list, tuple, set)):
             recs_in = list(records)
@@ -236,22 +231,21 @@ class B0:
             origin=origin,
             destination=destination,
             event_type=event_type,
-            as_of=as_of if as_of is not None else self.as_of,
+            as_of=raw,
             segmented=segmented,
             segment_label=segment_label,
         )
-        starts = _start_dates(recs)
+        starts = _effective_starts(recs)
         if not starts:
             return 0.0
-        cutoff = _resolve_as_of(as_of if as_of is not None else self.as_of, recs)
-        window_start = starts[0]
-        window_end = cutoff if cutoff >= starts[0] else starts[-1]
+        window_start = starts[0][0]
+        window_end = ao if ao >= window_start else starts[-1][0]
         if window_end < window_start:
-            window_end = starts[-1]
+            window_end = starts[-1][0]
         days = (window_end - window_start).days + 1
         days = max(days, 1)
-        distinct_days = len(set(starts))
-        rate = distinct_days / days
+        total_w = sum(w for _, w in starts)
+        rate = total_w / days
         return _clamp01(rate)
 
     def _probabilities(
@@ -265,28 +259,26 @@ class B0:
         segment_label=None,
         records=None,
     ) -> dict[int, float]:
-        recs_in = self.records if records is None else records
-        if isinstance(records, (list, tuple, set)):
-            recs_in = list(records)
-        ao = _resolve_as_of(as_of if as_of is not None else self.as_of, recs_in or [])
+        raw = as_of if as_of is not None else self.as_of
+        _as_of_date(raw)
         rate = self._daily_rate(
             origin=origin,
             destination=destination,
             event_type=event_type,
-            as_of=ao,
+            as_of=raw,
             segmented=segmented,
             segment_label=segment_label,
-            records=recs_in,
+            records=records,
         )
         out: dict[int, float] = {}
         for h in horizons:
-            h = int(h)
-            prob_no = (1.0 - rate) ** h
-            out[h] = _clamp01(1.0 - prob_no)
+            h_i = int(h)
+            if h_i < 1:
+                raise ValueError("horizon deve ser >= 1")
+            out[h_i] = _clamp01(1.0 - (1.0 - rate) ** h_i)
         return out
 
     def predict(self, *args, **kwargs) -> Any:
-        # Posicionais: origin, destination, event_type
         origin = kwargs.pop("origin", None)
         destination = kwargs.pop("destination", None)
         event_type = kwargs.pop("event_type", None)
@@ -297,42 +289,54 @@ class B0:
                 destination = args[1]
             if event_type is None and len(args) > 2:
                 event_type = args[2]
-
         segmented = kwargs.pop("segmented", None)
         segment_label = kwargs.pop("segment_label", None)
-        records = None
-        rkw = _normalize_records_arg(None, kwargs)
-        if rkw:
-            records = rkw
-        as_of = _resolve_param(
-            kwargs,
-            ["as_of", "as_of_date", "cutoff", "cutoff_date", "reference_date", "current_date", "t", "now", "date"],
-            None,
-        )
-        h, hs = _resolve_horizon_kwargs(kwargs)
-
+        records = kwargs.pop("records", kwargs.pop("offers", kwargs.pop("data", None)))
+        as_of_raw = kwargs.pop("as_of", None)
+        if as_of_raw is None:
+            as_of_raw = kwargs.pop("as_of_date", None)
+        if as_of_raw is None and self.as_of is not None:
+            as_of_raw = self.as_of
+        if as_of_raw is None:
+            raise ValueError("as_of e obrigatorio")
+        raw_as_of = as_of_raw
+        if raw_as_of is None:
+            raise ValueError("as_of e obrigatorio")
+        horizon = kwargs.pop("horizon", kwargs.pop("h", None))
+        horizons = kwargs.pop("horizons", None)
+        if horizon is not None:
+            horizon = int(horizon)
+            if horizon < 1:
+                raise ValueError("horizon deve ser >= 1")
+        if horizons is not None and not isinstance(horizons, (list, tuple)):
+            horizons = [int(horizons)]
         recs = self.records if records is None else records
-        ao = as_of if as_of is not None else self.as_of
+        if isinstance(records, (list, tuple, set)):
+            recs = list(records)
 
-        if h is not None and hs is None:
+        if horizon is not None and horizons is None:
             probs = self._probabilities(
                 origin=origin,
                 destination=destination,
                 event_type=event_type,
-                as_of=ao,
-                horizons=(h,),
+                as_of=raw_as_of,
+                horizons=(horizon,),
                 segmented=segmented,
                 segment_label=segment_label,
                 records=recs,
             )
-            return float(probs[h])
-        horizons = hs if hs is not None else HORIZONS_DEFAULT
+            return float(probs[horizon])
+        hs = tuple(horizons) if horizons is not None else HORIZONS_DEFAULT
+        hs = tuple(int(h) for h in hs)
+        for h in hs:
+            if h < 1:
+                raise ValueError("horizon deve ser >= 1")
         probs = self._probabilities(
             origin=origin,
             destination=destination,
             event_type=event_type,
-            as_of=ao,
-            horizons=horizons,
+            as_of=raw_as_of,
+            horizons=hs,
             segmented=segmented,
             segment_label=segment_label,
             records=recs,
@@ -342,12 +346,11 @@ class B0:
     def predict_proba(self, *args, **kwargs) -> Any:
         return self.predict(*args, **kwargs)
 
-    # Alias de nomenclatura
     probabilities = predict
 
 
 class B1(B0):
-    """Hazard discreto em tempo por (par, tipo) com ajuste sazonal por mes."""
+    SHRINKAGE_TAU = SHRINKAGE_TAU
 
     def _month_rates(
         self,
@@ -362,6 +365,7 @@ class B1(B0):
         recs_in = self.records if records is None else records
         if isinstance(records, (list, tuple, set)):
             recs_in = list(records)
+        _as_of_date(as_of)
         recs = _filter_history(
             recs_in or [],
             origin=origin,
@@ -371,14 +375,14 @@ class B1(B0):
             segmented=segmented,
             segment_label=segment_label,
         )
-        starts = _start_dates(recs)
+        starts = _effective_starts(recs)
         if not starts:
             return {}, 0.0
-        ao = _resolve_as_of(as_of, recs)
-        window_start = starts[0]
-        window_end = ao if ao >= starts[0] else starts[-1]
+        ao = _as_of_date(as_of)
+        window_start = starts[0][0]
+        window_end = ao if ao >= window_start else starts[-1][0]
         if window_end < window_start:
-            window_end = starts[-1]
+            window_end = starts[-1][0]
         global_rate = self._daily_rate(
             origin=origin,
             destination=destination,
@@ -386,17 +390,23 @@ class B1(B0):
             as_of=window_end,
             segmented=segmented,
             segment_label=segment_label,
-            records=recs_in,
+            records=recs,
         )
+        tau = float(self.SHRINKAGE_TAU)
         rates: dict[int, float] = {}
         for month in range(1, 13):
-            month_starts = [d for d in starts if d.month == month]
-            obs_days = _observed_days(window_start, window_end, month)
+            month_w = sum(w for d, w in starts if d.month == month)
+            obs_days = 0
+            cur = window_start
+            while cur <= window_end:
+                if cur.month == month:
+                    obs_days += 1
+                cur += timedelta(days=1)
             if obs_days > 0:
-                distinct = len(set(month_starts))
-                rates[month] = _clamp01(distinct / obs_days)
+                rate = (month_w + tau * global_rate) / (obs_days + tau)
             else:
-                rates[month] = global_rate
+                rate = global_rate
+            rates[month] = _clamp01(rate)
         return rates, global_rate
 
     def _probabilities(
@@ -413,148 +423,41 @@ class B1(B0):
         recs_in = self.records if records is None else records
         if isinstance(records, (list, tuple, set)):
             recs_in = list(records)
-        ao = _resolve_as_of(as_of if as_of is not None else self.as_of, recs_in or [])
+        raw = as_of if as_of is not None else self.as_of
+        ao = _as_of_date(raw)
+        recs = _filter_history(
+            recs_in or [],
+            origin=origin,
+            destination=destination,
+            event_type=event_type,
+            as_of=raw,
+            segmented=segmented,
+            segment_label=segment_label,
+        )
+        starts = _effective_starts(recs)
+        if not starts:
+            return {int(h): 0.0 for h in horizons}
         rates, global_rate = self._month_rates(
             origin=origin,
             destination=destination,
             event_type=event_type,
-            as_of=ao,
+            as_of=raw,
             segmented=segmented,
             segment_label=segment_label,
             records=recs_in,
         )
-        if not rates:
-            # sem historico: probabilidade zero
-            return {int(h): 0.0 for h in horizons}
         out: dict[int, float] = {}
         for h in horizons:
-            h = int(h)
+            h_i = int(h)
+            if h_i < 1:
+                raise ValueError("horizon deve ser >= 1")
             prob_no = 1.0
-            for i in range(1, h + 1):
+            for i in range(1, h_i + 1):
                 d = ao + timedelta(days=i)
-                hr = rates.get(d.month, global_rate)
-                hr = _clamp01(hr)
+                hr = _clamp01(rates.get(d.month, global_rate))
                 prob_no *= (1.0 - hr)
-            out[h] = _clamp01(1.0 - prob_no)
+            out[h_i] = _clamp01(1.0 - prob_no)
         return out
-
-
-# ---------- Funções de módulo ----------
-
-
-def _split_horizon_args(
-    horizon: Any = None,
-    horizons: Any = None,
-    **kwargs: Any,
-) -> tuple[int | None, Any]:
-    return _resolve_horizon_kwargs({"horizon": horizon, "horizons": horizons, **kwargs})
-
-
-def base_rate(
-    records: Any = None,
-    origin: Any = None,
-    destination: Any = None,
-    event_type: Any = None,
-    *,
-    as_of: Any = None,
-    horizon: Any = None,
-    horizons: Any = None,
-    **kwargs: Any,
-) -> Any:
-    recs = _normalize_records_arg(records, kwargs)
-    ao = as_of
-    # records pode ter sido passado por kwargs e removido de kwargs
-    m = B0()
-    m.fit(recs, as_of=ao)
-    h, hs = _resolve_horizon_kwargs({"horizon": horizon, "horizons": horizons, **kwargs})
-    if h is not None and hs is None:
-        return m.predict(origin, destination, event_type, as_of=ao, horizon=h)
-    if hs is not None:
-        return m.predict(origin, destination, event_type, as_of=ao, horizons=hs)
-    if horizon is None and horizons is None:
-        # default: um float se horizon inferido? mantém dict completo
-        return m.predict(origin, destination, event_type, as_of=ao, horizons=HORIZONS_DEFAULT)
-    return m.predict(origin, destination, event_type, as_of=ao, horizons=HORIZONS_DEFAULT)
-
-
-def b0(*args: Any, **kwargs: Any) -> Any:
-    # Aceita assinatura posicional flexível: (records, origin, dest, type, ...)
-    records = kwargs.pop("records", None)
-    origin = kwargs.pop("origin", None)
-    destination = kwargs.pop("destination", None)
-    event_type = kwargs.pop("event_type", None)
-    if args:
-        # Se primeiro arg é lista/iterável de records
-        first = args[0]
-        if isinstance(first, (list, tuple, set)) or not isinstance(first, str) and hasattr(first, "__iter__") and not isinstance(first, (str, bytes, dict)):
-            records = first
-            rest = list(args[1:])
-        else:
-            rest = list(args)
-        if len(rest) > 0 and origin is None:
-            origin = rest[0]
-        if len(rest) > 1 and destination is None:
-            destination = rest[1]
-        if len(rest) > 2 and event_type is None:
-            event_type = rest[2]
-    # as_of
-    as_of = kwargs.pop("as_of", None)
-    if as_of is None:
-        as_of = _resolve_param(kwargs, ["as_of_date", "cutoff", "cutoff_date", "reference_date", "current_date", "t", "now", "date"], None)
-    horizon = kwargs.pop("horizon", None)
-    if horizon is None:
-        horizon = kwargs.pop("h", None)
-    horizons = kwargs.pop("horizons", None)
-    return base_rate(
-        records,
-        origin,
-        destination,
-        event_type,
-        as_of=as_of,
-        horizon=horizon,
-        horizons=horizons,
-        **kwargs,
-    )
-
-
-def b1_hazard(*args: Any, **kwargs: Any) -> Any:
-    records = kwargs.pop("records", None)
-    origin = kwargs.pop("origin", None)
-    destination = kwargs.pop("destination", None)
-    event_type = kwargs.pop("event_type", None)
-    if args:
-        first = args[0]
-        if isinstance(first, (list, tuple, set)) or (hasattr(first, "__iter__") and not isinstance(first, (str, bytes, dict))):
-            records = first
-            rest = list(args[1:])
-        else:
-            rest = list(args)
-        if len(rest) > 0 and origin is None:
-            origin = rest[0]
-        if len(rest) > 1 and destination is None:
-            destination = rest[1]
-        if len(rest) > 2 and event_type is None:
-            event_type = rest[2]
-    as_of = kwargs.pop("as_of", None)
-    if as_of is None:
-        as_of = _resolve_param(kwargs, ["as_of_date", "cutoff", "cutoff_date", "reference_date", "current_date", "t", "now", "date"], None)
-    horizon = kwargs.pop("horizon", kwargs.pop("h", None))
-    horizons = kwargs.pop("horizons", None)
-    recs = _normalize_records_arg(records, kwargs) if records is None else ([records] if not isinstance(records, (list, tuple, set)) else list(records))
-    # incluir records passados por kwargs
-    extra = _normalize_records_arg(None, kwargs)
-    if extra:
-        recs = recs + extra
-    m = B1()
-    m.fit(recs, as_of=as_of)
-    if horizon is not None and horizons is None:
-        return m.predict(origin, destination, event_type, as_of=as_of, horizon=horizon)
-    if horizons is not None:
-        return m.predict(origin, destination, event_type, as_of=as_of, horizons=horizons)
-    if horizon is None and horizons is None:
-        # default: se chamado com horizon implícito? retorna dict completo
-        return m.predict(origin, destination, event_type, as_of=as_of, horizons=HORIZONS_DEFAULT)
-    return m.predict(origin, destination, event_type, as_of=as_of, horizons=HORIZONS_DEFAULT)
 
 
 def predict_proba(
@@ -563,86 +466,82 @@ def predict_proba(
     destination: Any = None,
     event_type: Any = None,
     *,
+    method: str = "b1",
+    model: str | None = None,
     as_of: Any = None,
     horizon: Any = None,
     horizons: Any = None,
-    method: str = "b1",
-    model: str | None = None,
     **kwargs: Any,
 ) -> Any:
-    # Aceita records na primeira posição posicional via args? Esta assinatura posicional records.
-    recs = _normalize_records_arg(records, kwargs)
-    extra = _normalize_records_arg(None, kwargs)
-    if extra:
-        recs = recs + extra
-    as_of_resolved = as_of
-    if as_of_resolved is None:
-        as_of_resolved = _resolve_param(kwargs, ["as_of_date", "cutoff", "cutoff_date", "reference_date", "current_date", "t", "now", "date"], None)
-
+    # compatibilidade: permite records como positional unico
+    recs_input = records
+    if isinstance(records, str) and records in ("b0", "b1"):
+        method = records
+        recs_input = kwargs.pop("records", kwargs.pop("offers", kwargs.pop("data", None)))
+    # kwargs extras de registros
+    extra_recs = kwargs.pop("records", kwargs.pop("offers", kwargs.pop("data", None)))
+    recs = []
+    if recs_input is not None:
+        recs.extend(recs_input if isinstance(recs_input, (list, tuple, set)) else [recs_input])
+    if extra_recs is not None:
+        recs.extend(extra_recs if isinstance(extra_recs, (list, tuple, set)) else [extra_recs])
+    # as_of com aliases
+    as_of_raw = as_of
+    if as_of_raw is None:
+        as_of_raw = kwargs.pop("as_of_date", kwargs.pop("cutoff", kwargs.pop("cutoff_date", kwargs.pop("reference_date", kwargs.pop("current_date", None)))))
+    if as_of_raw is None:
+        raise ValueError("as_of e obrigatorio")
+    _as_of_date(as_of_raw)
     name = (model or method or "b1").lower()
-    if name in {"b0", "base", "base_rate", "taxa", "taxa_base", "0"}:
-        cls = B0
-    else:
-        cls = B1
+    cls = B0 if name in {"b0", "base", "base_rate", "taxa", "taxa_base", "0"} else B1
     m = cls()
-    m.fit(recs, as_of=as_of_resolved)
-    if horizon is not None and horizons is None:
-        return m.predict(origin, destination, event_type, as_of=as_of_resolved, horizon=horizon, **kwargs)
-    if horizons is not None:
-        return m.predict(origin, destination, event_type, as_of=as_of_resolved, horizons=horizons, **kwargs)
-    # default completo
-    return m.predict(origin, destination, event_type, as_of=as_of_resolved, horizons=HORIZONS_DEFAULT, **kwargs)
+    m.fit(recs, as_of=as_of_raw)
+    horizon_i = None
+    if horizon is not None:
+        horizon_i = int(horizon)
+        if horizon_i < 1:
+            raise ValueError("horizon deve ser >= 1")
+    horizons_list = horizons
+    if horizons_list is not None and not isinstance(horizons_list, (list, tuple)):
+        horizons_list = [int(horizons_list)]
+    if horizon_i is not None and horizons_list is None:
+        return m.predict(origin, destination, event_type, as_of=as_of_raw, horizon=horizon_i)
+    if horizons_list is not None:
+        return m.predict(origin, destination, event_type, as_of=as_of_raw, horizons=horizons_list)
+    return m.predict(origin, destination, event_type, as_of=as_of_raw, horizons=HORIZONS_DEFAULT)
 
 
-# Aliases solicitados/possíveis
+# Aliases minimos
+
+def base_rate(*args, **kwargs):
+    kwargs.setdefault("method", "b0")
+    return predict_proba(*args, **kwargs)
+
+
+def b1_hazard(*args, **kwargs):
+    kwargs.setdefault("method", "b1")
+    return predict_proba(*args, **kwargs)
+
+b0 = base_rate
 b0_rate = base_rate
 taxa_base = base_rate
-b1 = b1_hazard
-hazard = b1_hazard
-hazard_proba = b1_hazard
-predict = predict_proba
-predict_probability = predict_proba
-probability = predict_proba
 
+
+# Aliases de classe
 B0Model = B0
 B1Model = B1
 BaselineB0 = B0
 BaselineB1 = B1
-BaseRate = B0
-BaseRateModel = B0
-Hazard = B1
-HazardModel = B1
-DiscreteHazard = B1
-SeasonalHazard = B1
-TaxaBaseModel = B0
 
-# Permitir chamada estilo b0(records, origin, ...) posicional já coberta acima.
-# Exportar tudo
 __all__ = [
     "B0",
     "B1",
     "HORIZONS_DEFAULT",
     "B0Model",
     "B1Model",
-    "BaseRate",
-    "BaseRateModel",
     "BaselineB0",
     "BaselineB1",
-    "DiscreteHazard",
-    "Hazard",
-    "HazardModel",
-    "SeasonalHazard",
-    "TaxaBaseModel",
-    "b0",
-    "b0_rate",
-    "b1",
     "b1_hazard",
     "base_rate",
-    "hazard",
-    "hazard_proba",
-    "predict",
     "predict_proba",
-    "predict_probability",
-    "probability",
-    "taxa_base",
 ]

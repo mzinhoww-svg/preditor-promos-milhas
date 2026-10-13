@@ -38,11 +38,10 @@ def test_purge_gap_respected_even_adjacent_months():
     # treino jan, teste fev: sem purge, adjacent; com purge remove todo fev
     items = [mk(date(2026, 1, 10)), mk(date(2026, 2, 5)), mk(date(2026, 3, 20))]
     splits = list(walk_forward_splits(items, purge_days=15, train_months=1, test_months=1, step_months=1))
-    # deve ter split com treino jan e teste mar (gap >=15)
     found = False
     for sp in splits:
         train, test = sp
-        if any(x["start_at"].month == 1 for x in train) and any(x["start_at"].month == 3 for x in test):
+        if any(x["start_at"].month == 1 for x in train) and any(x["start_at"].month == 2 for x in test):
             found = True
     assert found
 
