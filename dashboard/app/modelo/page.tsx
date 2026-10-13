@@ -44,7 +44,7 @@ export default async function ModelPage() {
           {
             label: "Campeão × desafiante",
             value: DECISION_LABEL[m.comparison.decision],
-            hint: `Δ Brier ${signed(m.comparison.delta_brier)} · IC ${num(m.comparison.ci_delta_brier[0])} a ${num(m.comparison.ci_delta_brier[1])}`,
+            hint: `Δ Brier ${signed(m.comparison.delta_brier)}${m.comparison.ci_delta_brier ? ` · IC ${num(m.comparison.ci_delta_brier[0])} a ${num(m.comparison.ci_delta_brier[1])}` : " · IC indisponível"}`,
           },
         ]}
       />
@@ -60,7 +60,7 @@ export default async function ModelPage() {
               const v = c.validation.by_horizon[h];
               return {
                 horizon: h,
-                cells: [num(v.brier), `${num(v.ci_brier[0])}–${num(v.ci_brier[1])}`, num(v.log_loss), num(v.auc, 2)],
+                cells: [num(v.brier), v.ci_brier ? `${num(v.ci_brier[0])}–${num(v.ci_brier[1])}` : "—", num(v.log_loss), num(v.auc, 2)],
               };
             })}
             headers={["Brier", "IC Brier", "Log-loss", "AUC"]}
@@ -85,7 +85,7 @@ export default async function ModelPage() {
                 return {
                   horizon: h,
                   cells: [num(p.brier), signed(delta), num(p.log_loss), pct(p.hit_rate), int(p.n)],
-                  flag: delta > v.ci_brier[1] - v.brier,
+                  flag: v.ci_brier ? delta > v.ci_brier[1] - v.brier : false,
                 };
               })}
               headers={["Brier", "Δ vs. validação", "Log-loss", "Acerto", "n"]}
@@ -131,7 +131,9 @@ export default async function ModelPage() {
             <div>
               <dt className="text-xs text-ink-3">IC do Δ Brier</dt>
               <dd className="tnum mt-0.5 font-medium text-ink">
-                {num(m.comparison.ci_delta_brier[0])} a {num(m.comparison.ci_delta_brier[1])}
+                {m.comparison.ci_delta_brier
+                  ? `${num(m.comparison.ci_delta_brier[0])} a ${num(m.comparison.ci_delta_brier[1])}`
+                  : "—"}
               </dd>
             </div>
             <div>

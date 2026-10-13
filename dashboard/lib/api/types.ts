@@ -52,7 +52,8 @@ export interface ValidationMetrics {
   brier: number;
   log_loss: number;
   auc: number;
-  ci_brier: [number, number];
+  /** Pode vir ausente na API; a tela mostra "—". */
+  ci_brier: [number, number] | null;
 }
 
 export interface ProductionMetrics {
@@ -91,7 +92,7 @@ export interface ModelMetricsResponse {
     horizon: number;
     delta_brier: number;
     delta_log_loss: number;
-    ci_delta_brier: [number, number];
+    ci_delta_brier: [number, number] | null;
     decision: ComparisonDecision;
     note: string;
   };
