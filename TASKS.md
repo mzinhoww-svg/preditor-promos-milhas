@@ -14,4 +14,4 @@
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
 | T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
-| TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |
+| TP1 | Painel de progresso visual ao vivo | Programador (Painel) | concluida | Reteste2 835a764: node --check ok, 42% com dados reais, XSS inerte, Infinity/nao-dict tratados, sem pytest/DB. Ressalvas: descartes silenciosos. Ver docs/qa/painel/RELATORIO.md |
