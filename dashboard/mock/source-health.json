@@ -1,0 +1,89 @@
+{
+  "generated_at": "2026-10-13T06:00:00Z",
+  "sources": [
+    {
+      "source": "passageirodeprimeira.com",
+      "kind": "rss",
+      "status": "ok",
+      "last_success_at": "2026-10-13T05:40:00Z",
+      "last_item_at": "2026-10-12T22:10:00Z",
+      "items_new_24h": 6,
+      "items_new_7d": 41,
+      "extraction_rate_7d": 0.93,
+      "error_rate_24h": 0.0,
+      "robots_hash": "sha256:614429327410",
+      "robots_changed": false,
+      "message": null
+    },
+    {
+      "source": "melhorescartoes.com.br",
+      "kind": "rss",
+      "status": "ok",
+      "last_success_at": "2026-10-13T05:41:00Z",
+      "last_item_at": "2026-10-13T01:25:00Z",
+      "items_new_24h": 4,
+      "items_new_7d": 27,
+      "extraction_rate_7d": 0.89,
+      "error_rate_24h": 0.0,
+      "robots_hash": "sha256:747943317239",
+      "robots_changed": false,
+      "message": null
+    },
+    {
+      "source": "pontospravoar.com",
+      "kind": "rss",
+      "status": "degraded",
+      "last_success_at": "2026-10-13T05:41:00Z",
+      "last_item_at": "2026-10-11T14:05:00Z",
+      "items_new_24h": 1,
+      "items_new_7d": 9,
+      "extraction_rate_7d": 0.71,
+      "error_rate_24h": 0.08,
+      "robots_hash": "sha256:22524016527",
+      "robots_changed": false,
+      "message": "Taxa de extração abaixo de 0,80 nos últimos 7 dias."
+    },
+    {
+      "source": "web.archive.org (CDX)",
+      "kind": "wayback",
+      "status": "stale",
+      "last_success_at": "2026-10-05T03:00:00Z",
+      "last_item_at": "2026-10-04T19:30:00Z",
+      "items_new_24h": 0,
+      "items_new_7d": 0,
+      "extraction_rate_7d": 0.0,
+      "error_rate_24h": 0.0,
+      "robots_hash": "sha256:878571234954",
+      "robots_changed": false,
+      "message": "Backfill concluído em 2026-10-04; sem coleta recorrente prevista."
+    },
+    {
+      "source": "www.livelo.com.br",
+      "kind": "official",
+      "status": "blocked",
+      "last_success_at": "2026-10-12T05:40:00Z",
+      "last_item_at": "2026-10-09T10:00:00Z",
+      "items_new_24h": 0,
+      "items_new_7d": 3,
+      "extraction_rate_7d": 0.0,
+      "error_rate_24h": 1.0,
+      "robots_hash": "sha256:165656782715",
+      "robots_changed": true,
+      "message": "robots.txt mudou em 2026-10-12; coleta suspensa até revisão."
+    },
+    {
+      "source": "www.smiles.com.br",
+      "kind": "official",
+      "status": "error",
+      "last_success_at": "2026-10-11T05:40:00Z",
+      "last_item_at": "2026-10-08T16:20:00Z",
+      "items_new_24h": 0,
+      "items_new_7d": 2,
+      "extraction_rate_7d": 0.5,
+      "error_rate_24h": 0.62,
+      "robots_hash": "sha256:996410690961",
+      "robots_changed": false,
+      "message": "HTTP 503 em 62% das tentativas nas últimas 24 h."
+    }
+  ]
+}
