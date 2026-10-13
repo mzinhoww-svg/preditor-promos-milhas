@@ -5,7 +5,7 @@ revision = "0002"
 down_revision = "0001"
 
 UP = """
-ALTER TABLE raw_message ADD COLUMN observed_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE raw_message ADD COLUMN observed_at TIMESTAMPTZ;
 ALTER TABLE source_health ADD COLUMN robots_hash TEXT;
 """
 DOWN = """

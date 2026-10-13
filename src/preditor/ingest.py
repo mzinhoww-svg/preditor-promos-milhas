@@ -86,6 +86,7 @@ class RawMessage:
     content: str
     content_hash: str
     collected_at: Any = None
+    observed_at: Any = None
 
     def __int__(self) -> int:
         return int(self.id)
@@ -132,6 +133,9 @@ def _resolve_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, s
         collected_at = kwargs.pop("collected", None)
     if collected_at is None:
         collected_at = kwargs.pop("timestamp", None)
+    observed_at = kwargs.pop("observed_at", None)
+    if observed_at is None:
+        observed_at = kwargs.pop("observed", None)
 
     # positional restantes: source, url, content, collected_at
     if source is None and positional:
@@ -142,13 +146,15 @@ def _resolve_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, s
         content = positional.pop(0)
     if collected_at is None and positional:
         collected_at = positional.pop(0)
+    if observed_at is None and positional:
+        observed_at = positional.pop(0)
 
     if engine is None:
         raise ValueError("engine/conexão não informada")
     if source is None or url is None or content is None:
         raise ValueError("source, url e content são obrigatórios")
 
-    return engine, str(source), str(url), content, collected_at
+    return engine, str(source), str(url), content, collected_at, observed_at
 
 
 def _validate_url(url: Any) -> None:
@@ -159,7 +165,7 @@ def _validate_url(url: Any) -> None:
         raise InvalidURLError(f"URL invalida ou sem esquema http(s): {url!r}")
 
 
-def _store(engine, source, url, content, collected_at=None) -> RawMessage:
+def _store(engine, source, url, content, collected_at=None, observed_at=None) -> RawMessage:
     if not isinstance(source, str) or not source.strip():
         raise EmptySourceError("source nao pode ser vazio")
     _validate_url(url)
@@ -172,26 +178,34 @@ def _store(engine, source, url, content, collected_at=None) -> RawMessage:
     h = content_hash(text_content)
 
     dt = _normalize_collected_at(collected_at)
+    od = _normalize_collected_at(observed_at)
 
     with engine.begin() as conn:
         if dt is None:
-            result = conn.execute(
-                text(
-                    "INSERT INTO raw_message (source, url, content, content_hash, collected_at) "
-                    "VALUES (:source, :url, :content, :hash, now()) "
-                    "ON CONFLICT (source, content_hash) DO NOTHING RETURNING id"
-                ),
-                {"source": source, "url": url, "content": text_content, "hash": h},
-            )
+            collected_sql = "now()"
+            collected_params = {}
         else:
-            result = conn.execute(
-                text(
-                    "INSERT INTO raw_message (source, url, content, content_hash, collected_at) "
-                    "VALUES (:source, :url, :content, :hash, :collected_at) "
-                    "ON CONFLICT (source, content_hash) DO NOTHING RETURNING id"
-                ),
-                {"source": source, "url": url, "content": text_content, "hash": h, "collected_at": dt},
-            )
+            collected_sql = ":collected_at"
+            collected_params = {"collected_at": dt}
+        if od is None:
+            observed_sql = "NULL"
+            observed_params = {}
+        else:
+            observed_sql = ":observed_at"
+            observed_params = {"observed_at": od}
+
+        params = {"source": source, "url": url, "content": text_content, "hash": h}
+        params.update(collected_params)
+        params.update(observed_params)
+
+        result = conn.execute(
+            text(
+                f"INSERT INTO raw_message (source, url, content, content_hash, collected_at, observed_at) "
+                f"VALUES (:source, :url, :content, :hash, {collected_sql}, {observed_sql}) "
+                f"ON CONFLICT (source, content_hash) DO NOTHING RETURNING id"
+            ),
+            params,
+        )
         new_id = result.scalar() if hasattr(result, "scalar") else None
         if new_id is None:
             new_id = conn.execute(
@@ -199,12 +213,22 @@ def _store(engine, source, url, content, collected_at=None) -> RawMessage:
                 {"source": source, "hash": h},
             ).scalar_one()
 
+        if od is not None:
+            conn.execute(
+                text(
+                    "UPDATE raw_message SET observed_at = COALESCE(LEAST(observed_at, :o), :o) "
+                    "WHERE id=:id AND (:o IS NOT NULL)"
+                ),
+                {"o": od, "id": new_id},
+            )
+
         row = conn.execute(
-            text("SELECT id, source, url, content, content_hash, collected_at FROM raw_message WHERE id=:id"),
+            text("SELECT id, source, url, content, content_hash, collected_at, observed_at FROM raw_message WHERE id=:id"),
             {"id": new_id},
         ).fetchone()
 
     collected_value = row.collected_at if hasattr(row, "collected_at") else row[5]
+    observed_value = row.observed_at if hasattr(row, "observed_at") else row[6]
     return RawMessage(
         id=int(row.id if hasattr(row, "id") else row[0]),
         source=row.source if hasattr(row, "source") else row[1],
@@ -212,12 +236,13 @@ def _store(engine, source, url, content, collected_at=None) -> RawMessage:
         content=row.content if hasattr(row, "content") else row[3],
         content_hash=row.content_hash if hasattr(row, "content_hash") else row[4],
         collected_at=collected_value,
+        observed_at=observed_value,
     )
 
 
 def store_raw_message(*args, **kwargs) -> RawMessage:
-    engine, source, url, content, collected_at = _resolve_args(args, kwargs)
-    return _store(engine, source, url, content, collected_at)
+    engine, source, url, content, collected_at, observed_at = _resolve_args(args, kwargs)
+    return _store(engine, source, url, content, collected_at, observed_at)
 
 
 # aliases comuns

@@ -98,11 +98,11 @@ def robots_allowed(robots_txt, url):
     try:
         rp.parse((robots_txt or "").splitlines())
     except (ValueError, OSError):
-        return True
+        return False
     try:
-        return rp.can_fetch(UA, url)
+        return bool(rp.can_fetch(UA, url))
     except (ValueError, OSError):
-        return True
+        return False
 
 def _base_url(source_or_url):
     s = str(source_or_url or "").strip()
@@ -206,15 +206,9 @@ def _is_new_raw(engine, source, content):
         raise CollectorError(str(e)) from e
 
 def store_raw(engine, source, url, content, collected_at=None, observed_at=None):
-    raw = store_raw_message(engine=engine, source=source, url=url, content=content, collected_at=collected_at)
     if observed_at is not None:
-        try:
-            with engine.begin() as c:
-                from sqlalchemy import text
-                c.execute(text("UPDATE raw_message SET observed_at=:o WHERE id=:i"),
-                          {"o": _dt(observed_at), "i": getattr(raw, "id", None)})
-        except Exception as e:
-            raise CollectorError(str(e)) from e
+        observed_at = _dt(observed_at)
+    raw = store_raw_message(engine=engine, source=source, url=url, content=content, collected_at=collected_at, observed_at=observed_at)
     return raw
 
 def _dt(v):
@@ -264,13 +258,16 @@ def _find_offer(engine, origin, destination, etype, segmented, segment_label, st
 
 def _insert_offer(engine, origin, destination, etype, start_date, end_date, bonus, segmented, segment_label, first_seen):
     end_iso = end_date.isoformat() if hasattr(end_date, "isoformat") else end_date
+    fs_val = first_seen if isinstance(first_seen, datetime) else _dt(first_seen)
     with engine.begin() as c:
         from sqlalchemy import text
         c.execute(text(
             "INSERT INTO offer(origin,destination,event_type,start_at,end_at,bonus_pct,segmented,segment_label,first_seen_at) "
-            "VALUES (:o,:d,:t,:s,:e,:b,:seg,:sl,:fs) ON CONFLICT DO NOTHING"
+            "VALUES (:o,:d,:t,:s,:e,:b,:seg,:sl,:fs) "
+            "ON CONFLICT (origin,destination,event_type,start_at,segmented,segment_label) "
+            "DO UPDATE SET first_seen_at = LEAST(offer.first_seen_at, EXCLUDED.first_seen_at)"
         ), {"o": origin, "d": destination, "t": etype, "s": start_date, "e": end_iso,
-            "b": bonus, "seg": segmented, "sl": segment_label, "fs": first_seen})
+            "b": bonus, "seg": segmented, "sl": segment_label, "fs": fs_val})
         rid = c.execute(text(
             "SELECT id FROM offer WHERE origin=:o AND destination=:d AND event_type=:t AND start_at=:s AND segmented=:seg AND segment_label=:sl"
         ), {"o": origin, "d": destination, "t": etype, "s": start_date, "seg": segmented, "sl": segment_label}).scalar_one()
@@ -291,6 +288,9 @@ def _recompute_offer(engine, offer_id):
     with engine.connect() as c:
         from sqlalchemy import text
         rows = c.execute(text("SELECT source, seen_start_at FROM offer_evidence WHERE offer_id=:o"), {"o": offer_id}).fetchall()
+        obs_rows = c.execute(text(
+            "SELECT rm.observed_at FROM offer_evidence oe JOIN raw_message rm ON rm.id=oe.raw_message_id WHERE oe.offer_id=:o"
+        ), {"o": offer_id}).fetchall()
     evids = []
     for r in rows:
         src = r[0] if not hasattr(r, "source") else r.source
@@ -301,12 +301,19 @@ def _recompute_offer(engine, offer_id):
     if not evids:
         return
     cons = consolidate(evids)
+    fs_vals = [r[0] if not hasattr(r, "observed_at") else r.observed_at for r in obs_rows]
+    fs_vals = [x for x in fs_vals if x is not None]
+    first_seen_val = min(fs_vals) if fs_vals else None
+    params = {"s": cons.start_at, "n": cons.n_sources, "v": cons.validated,
+              "dc": cons.date_conflict, "w": cons.weight, "o": offer_id}
+    if first_seen_val is not None:
+        params["fs"] = first_seen_val if isinstance(first_seen_val, datetime) else _dt(first_seen_val)
+        sql = "UPDATE offer SET start_at=:s, n_sources=:n, validated=:v, date_conflict=:dc, weight=:w, first_seen_at=:fs WHERE id=:o"
+    else:
+        sql = "UPDATE offer SET start_at=:s, n_sources=:n, validated=:v, date_conflict=:dc, weight=:w WHERE id=:o"
     with engine.begin() as c:
         from sqlalchemy import text
-        c.execute(text(
-            "UPDATE offer SET start_at=:s, n_sources=:n, validated=:v, date_conflict=:dc, weight=:w WHERE id=:o"
-        ), {"s": cons.start_at, "n": cons.n_sources, "v": cons.validated,
-            "dc": cons.date_conflict, "w": cons.weight, "o": offer_id})
+        c.execute(text(sql), params)
 
 def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
     content = getattr(raw_message, "content", None) if not isinstance(raw_message, dict) else raw_message.get("content")
@@ -318,11 +325,17 @@ def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
     source = getattr(raw_message, "source", None) if not isinstance(raw_message, dict) else raw_message.get("source")
     if source is None:
         source = kwargs.get("source")
-    if first_seen_at is None and hasattr(raw_message, "collected_at"):
-        first_seen_at = getattr(raw_message, "collected_at", None)
-    if first_seen_at is None and hasattr(raw_message, "observed_at"):
-        first_seen_at = getattr(raw_message, "observed_at", None)
+    if first_seen_at is None:
+        if hasattr(raw_message, "observed_at"):
+            first_seen_at = getattr(raw_message, "observed_at", None)
+        if first_seen_at is None and "observed_at" in kwargs:
+            first_seen_at = kwargs.get("observed_at")
     fs = first_seen_at if first_seen_at is not None else kwargs.get("first_seen_at")
+    if fs is None:
+        # fail closed: no observed_at -> no processing
+        raise CollectorError("observed_at ausente; reprocessamento falha fechado")
+    if "observed_at" in kwargs:
+        pass
     text_content = content if isinstance(content, str) else str(content or "")
 
     extraction = extract(text_content, first_seen_at=fs)
@@ -348,8 +361,7 @@ def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
         if segment_label == "bonus_conflitante":
             segment_label = "bonus_conflitante"
         start_date = date.fromisoformat(start_iso)
-        fs_date = fs.date() if hasattr(fs, "date") else _to_date(fs)
-        first_seen_val = fs_date or start_date
+        first_seen_val = fs if isinstance(fs, datetime) else _dt(fs)
 
         offer_id = _find_offer(engine, origin, destination, etype, segmented, segment_label, start_date)
         if offer_id is None:
@@ -415,8 +427,15 @@ def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=N
         if it.get("pubDate"):
             try:
                 from email.utils import parsedate_to_datetime
-                observed = parsedate_to_datetime(it["pubDate"])
-            except (ValueError, TypeError):
+                pd = parsedate_to_datetime(it["pubDate"])
+                if pd.tzinfo is None:
+                    pd = pd.replace(tzinfo=UTC)
+                # observed = min(pubDate, now)
+                if pd > ts:
+                    observed = ts
+                else:
+                    observed = pd
+            except (ValueError, TypeError, OverflowError):
                 observed = ts
         raw = store_raw(engine=engine, source=source, url=link or url, content=content or (it.get("title") or ""),
                        collected_at=ts, observed_at=observed)
@@ -440,28 +459,49 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
     source = source if source is not None else kwargs.get("source")
     from_ = from_ if from_ is not None else kwargs.get("from") or kwargs.get("from_ts") or "202301"
     to_ = kwargs.get("to") or kwargs.get("to_ts")
-    from_date = _parse_date_text(from_) or date(2023, 1, 1)
+    from_date = _parse_date_text(from_)
+    if from_date is None:
+        raise CollectorError(f"data invalida: from_={from_!r}")
     to_date = _parse_date_text(to_) if to_ is not None else None
-    from_date = _parse_date_text(from_) or date(2023, 1, 1)
+    from_date = from_date or date(2023, 1, 1)
     url_root = source if str(source).startswith("http") else f"http://{source}/"
-    client = CDXClient(user_agent=UA)
+    client = CDXClient(user_agent=UA, rate_limit=0.5, min_interval=2.0)
+    captures = None
     try:
-        kw = {"from_": from_date, "matchType": "prefix", "filter": ["statuscode:200"], "collapse": None}
+        kw = {
+            "from_": from_date,
+            "matchType": "prefix",
+            "filter": ["statuscode:200", "mimetype:text/html",
+                       "original:.*(livelo.*smiles|smiles.*livelo).*"],
+            "collapse": None,
+            "limit": 100000,
+        }
         if to_date is not None:
             kw["to_"] = to_date
         captures = client.list_captures(url_root, **kw)
     except (OSError, ValueError, RuntimeError, Exception) as e:
-        # avoid broad but typed enough
         raise CollectorError(str(e)) from e
-    # normalize captures: list of dict
+    if captures is None:
+        captures = []
+
+    # normalize: keep oldest capture per normalized URL; discard embed/feed/amp
     seen_urls = {}
     for cap in captures:
         u = cap.get("original") if hasattr(cap, "get") else cap["original"]
         ts = cap.get("timestamp") if hasattr(cap, "get") else cap["timestamp"]
         nu = normalize_url(u)
-        # keep oldest (lowest ts)
-        if nu not in seen_urls or ts < seen_urls[nu][0]:
+        if nu is None:
+            continue
+        low = str(nu).lower()
+        if any(seg in low for seg in ("/embed/", "/feed/", "/amp/")):
+            continue
+        if "?" in str(nu):
+            nu = str(nu).split("?")[0]
+        if nu is None:
+            continue
+        if nu not in seen_urls or (ts is not None and (seen_urls[nu][0] is None or str(ts) < str(seen_urls[nu][0]))):
             seen_urls[nu] = (ts, u)
+
     stored = 0
     offers_created = 0
     for nu, (ts, orig) in seen_urls.items():
@@ -470,18 +510,20 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
         content = fetch_snapshot(ts, orig, transport=transport)
         if not content:
             continue
-        observed = _ts_to_datetime(ts)
+        # determine published_time from html
+        pub_dt = _extract_published_time(content)
+        capture_dt = _ts_to_datetime(ts)
+        observed_candidates = [x for x in (pub_dt, capture_dt) if x is not None]
+        observed = min(observed_candidates) if observed_candidates else capture_dt
+        if observed is None:
+            observed = capture_dt
         raw = store_raw(engine=engine, source=source, url=nu, content=content, collected_at=None, observed_at=observed)
         stored += 1
         try:
             res = process_raw_message(engine, raw, first_seen_at=observed)
             offers_created += len(res)
-        except (OSError, ValueError, TypeError, RuntimeError):
+        except (OSError, ValueError, TypeError, RuntimeError, CollectorError):
             pass
-    try:
-        update_source_health(engine, source, items_new=stored, extraction_rate=1.0 if stored else 0.0, robots_txt=robots_txt, now=None)
-    except (OSError, ValueError, RuntimeError):
-        pass
     return stored
 
 def _ts_to_datetime(ts):
@@ -497,6 +539,39 @@ def _ts_to_datetime(ts):
         except ValueError:
             pass
     return None
+
+def _extract_published_time(html):
+    if html is None:
+        return None
+    text = str(html)
+    m = None
+    import re
+    pats = [
+        r'article:published_time["\']\s*content=["\']([^"\']+)["\']',
+        r'property=["\']article:published_time["\']\s*content=["\']([^"\']+)["\']',
+        r'datePublished["\']\s*[:=]\s*["\']([^"\']+)["\']',
+    ]
+    for pat in pats:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            break
+    # fallback: meta property then content
+    if m is None:
+        m = re.search(r'property=["\']article:published_time["\'][^>]*content=["\']([^"\']+)["\']', text, re.IGNORECASE)
+    if m is None:
+        m = re.search(r'content=["\']([^"\']+)["\'][^>]*property=["\']article:published_time["\']', text, re.IGNORECASE)
+    if not m:
+        return None
+    v = m.group(1).strip()
+    try:
+        if v.endswith("Z"):
+            v = v[:-1] + "+00:00"
+        dt = datetime.fromisoformat(v)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt
+    except ValueError:
+        return None
 
 def fetch_snapshot(timestamp, original, transport=None):
     url = f"https://web.archive.org/web/{timestamp}id_/{original}"
