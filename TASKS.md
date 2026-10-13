@@ -9,6 +9,7 @@
 | T05 | Coletor Livelo → Smiles (Wayback + fontes públicas) | pendente | | pendente | fixture + contrato |
 | T06 | Conjunto de ouro (50 campanhas) | pendente | | pendente | data/gold |
 | T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
+| T07a | Camada determinística regex + pydantic (extrator) | prog2 | Claude Code | em_revisao | src/preditor/extract.py + 15 fixtures |
 | T08 | Baseline B0/B1 e walk-forward | pendente | | pendente | relatório |
 | T09 | API, job diário, dashboard Vercel | pendente | | pendente | MVP |
 
