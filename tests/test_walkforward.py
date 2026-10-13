@@ -7,8 +7,10 @@ from preditor.walkforward import (
 )
 
 
-def mk(d):
-    return {"origin": "livelo", "destination": "smiles", "event_type": "transfer_bonus", "start_at": d}
+def mk(d, fs=None):
+    r = {"origin": "livelo", "destination": "smiles", "event_type": "transfer_bonus", "start_at": d}
+    r["first_seen_at"] = fs if fs is not None else d
+    return r
 
 
 HIST = [mk(date(2026, m, 15)) for m in range(1, 7)]

@@ -6,23 +6,51 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from math import log
 from typing import Any
+from zoneinfo import ZoneInfo
+
+TZ = ZoneInfo("America/Sao_Paulo")
 
 
-def _to_date(value: Any) -> date:
+def _normalize_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
-        return value.date()
+        if value.tzinfo is None:
+            return value.replace(tzinfo=TZ)
+        return value.astimezone(TZ)
     if isinstance(value, date):
-        return value
+        return datetime.combine(value, time.min, tzinfo=TZ)
     if isinstance(value, str):
         try:
-            return datetime.fromisoformat(value.strip()).date()
+            dt = datetime.fromisoformat(value.strip())
         except ValueError:
             try:
-                return date.fromisoformat(value.strip()[:10])
+                dt = datetime.combine(date.fromisoformat(value.strip()[:10]), time.min)
             except ValueError as exc:
                 raise ValueError(f"data invalida: {value!r}") from exc
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TZ)
+        return dt.astimezone(TZ)
     raise ValueError(f"data invalida: {value!r}")
 
+def _to_date(value: Any) -> date:
+    return _normalize_datetime(value).date()
+
+
+def _normalize_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=TZ)
+        return value.astimezone(TZ)
+    if isinstance(value, date):
+        return datetime.combine(value, time.min, tzinfo=TZ)
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.strip())
+        except ValueError:
+            dt = datetime.combine(date.fromisoformat(value.strip()[:10]), time.min)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TZ)
+        return dt.astimezone(TZ)
+    raise ValueError(f"data invalida: {value!r}")
 
 def _get(rec: Any, *names: str, default: Any = None) -> Any:
     if isinstance(rec, dict):
@@ -36,42 +64,21 @@ def _get(rec: Any, *names: str, default: Any = None) -> Any:
     return default
 
 
-def _item_date(item: Any, date_field: str) -> date | None:
-    candidates = [date_field, "start_at", "start", "date", "event_date", "first_seen_at"]
-    seen = set()
-    ordered = []
-    for c in candidates:
-        if c not in seen:
-            seen.add(c)
-            ordered.append(c)
-    for name in ordered:
-        v = _get(item, name)
-        if v is None:
-            continue
-        try:
-            return _to_date(v)
-        except ValueError:
-            return None
-    return None
+def _item_date(item: Any, date_field: str) -> date:
+    v = _get(item, date_field)
+    if v is None:
+        raise ValueError(f"campo de data ausente: {date_field}")
+    return _to_date(v)
 
 
 def _first_seen_dt(item: Any) -> datetime | None:
     v = _get(item, "first_seen_at", "first_seen", default=None)
     if v is None:
         return None
-    if isinstance(v, datetime):
-        return v
-    if isinstance(v, date):
-        return datetime.combine(v, time.max)
-    if isinstance(v, str):
-        try:
-            return datetime.fromisoformat(v.strip())
-        except ValueError:
-            try:
-                return datetime.combine(_to_date(v), time.max)
-            except ValueError:
-                return None
-    return None
+    try:
+        return _normalize_datetime(v)
+    except (ValueError, TypeError):
+        return None
 
 
 def _validate_int(value: Any, name: str, min_value: int = 1) -> int:
@@ -179,6 +186,12 @@ def walk_forward_splits(
     test_months = _validate_int(test_months, "test_months", 1)
     step_months = _validate_int(step_months, "step_months", 1)
     purge_days = _validate_purge(purge_days)
+    horizons_list = list(horizons) if horizons is not None else None
+    if horizons_list is not None:
+        for h in horizons_list:
+            _validate_int(h, "horizon", 1)
+        if purge_days < max(horizons_list):
+            raise ValueError("purge_days deve ser >= max(horizons)")
 
     data = list(items) if items is not None else []
     # Validar no-op para horizons se fornecido: apenas confere >=1
@@ -189,11 +202,12 @@ def walk_forward_splits(
     dated: list[tuple[Any, date]] = []
     dropped: list[Any] = []
     for it in data:
-        d = _item_date(it, date_field)
-        if d is None:
+        try:
+            d = _item_date(it, date_field)
+        except (ValueError, TypeError):
             dropped.append(it)
-        else:
-            dated.append((it, d))
+            continue
+        dated.append((it, d))
 
     if not dated:
         return []
@@ -209,11 +223,17 @@ def walk_forward_splits(
     i = 0
     # suficiente para cobrir toda a janela de calendario
     max_months = (global_max.year - base_month.year) * 12 + (global_max.month - base_month.month) + 12
+    i = train_months
     while True:
-        train_start = _add_months(base_month, i)
-        test_start_month = _add_months(base_month, i + train_months)
+        if expanding:
+            train_start = base_month
+        else:
+            train_start = _add_months(base_month, i - train_months)
+        test_start_month = _add_months(base_month, i)
 
-        if train_start > global_max:
+        if test_start_month > global_max and i > 0:
+            break
+        if test_start_month > global_max and not dated:
             break
 
         # itens do treino cujo mes de calendario cai na janela
@@ -226,41 +246,45 @@ def walk_forward_splits(
             ym = _add_months(test_start_month, k)
             test_candidates.extend(buckets.get((ym.year, ym.month), []))
 
-        if train_candidates and test_candidates:
-            test_min = min(_item_date(it, date_field) for it in test_candidates)
-            cutoff = test_min - timedelta(days=purge_days)
+        if not test_candidates:
+            i += step_months
+            continue
+        test_min = min(_item_date(it, date_field) for it in test_candidates)
+        test_window_start = test_start_month
+        cutoff = test_window_start - timedelta(days=purge_days)
 
-            train_items = []
-            train_purged: list[Any] = []
-            train_id_set = set()
-            for it in train_candidates:
-                fs = _first_seen_dt(it)
-                d = _item_date(it, date_field)
-                if d is not None and d <= cutoff and (fs is None or fs < datetime.combine(test_min, time.min)):
-                    train_items.append(it)
-                    train_id_set.add(id(it))
-                else:
-                    train_purged.append(it)
+        train_items = []
+        train_purged: list[Any] = []
+        train_id_set = set()
+        for it in train_candidates:
+            fs = _first_seen_dt(it)
+            d = _item_date(it, date_field)
+            if fs is None:
+                train_purged.append(it)
+                continue
+            if d <= cutoff and fs <= _normalize_datetime(cutoff):
+                train_items.append(it)
+                train_id_set.add(id(it))
+            else:
+                train_purged.append(it)
 
-            test_id_set = {id(it) for it in test_candidates}
-            for it, d in dated:
-                if id(it) in train_id_set or id(it) in test_id_set:
-                    continue
-                if cutoff < d < test_min and it not in train_purged:
-                    train_purged.append(it)
+        test_id_set = {id(it) for it in test_candidates}
+        for it, d in dated:
+            if id(it) in train_id_set or id(it) in test_id_set:
+                continue
+            if cutoff < d < test_min and it not in train_purged:
+                train_purged.append(it)
 
-            # incluir invalidos como dropped/purged? manter em dropped; nao incluir em purged por janela
-            if train_items and test_candidates:
-                train_end = max(_item_date(it, date_field) for it in train_items)
-                split = WalkSplit(
-                    train=list(train_items),
-                    test=list(test_candidates),
-                    train_end=train_end,
-                    test_start=min(_item_date(it, date_field) for it in test_candidates),
-                    purged=list(train_purged),
-                    dropped=list(dropped),
-                )
-                splits.append(split)
+        train_end = max((_item_date(it, date_field) for it in train_items), default=cutoff)
+        split = WalkSplit(
+            train=list(train_items),
+            test=list(test_candidates),
+            train_end=train_end,
+            test_start=min(_item_date(it, date_field) for it in test_candidates),
+            purged=list(train_purged),
+            dropped=list(dropped),
+        )
+        splits.append(split)
 
         i += step_months
         if i > max_months:

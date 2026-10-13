@@ -10,40 +10,43 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 HORIZONS_DEFAULT = (7, 15, 30)
+TZ = ZoneInfo("America/Sao_Paulo")
 WINDOW_DEDUP_DAYS = 3  # mesmo campanha: +/- 3 dias (glossario)
 SHRINKAGE_TAU = 30.0
 
 
-def _to_date(value: Any) -> date:
+def _normalize_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
-        return value.date()
+        if value.tzinfo is None:
+            return value.replace(tzinfo=TZ)
+        return value.astimezone(TZ)
     if isinstance(value, date):
-        return value
+        return datetime.combine(value, time.min, tzinfo=TZ)
     if isinstance(value, str):
         try:
-            return datetime.fromisoformat(value.strip()).date()
+            dt = datetime.fromisoformat(value.strip())
         except ValueError:
             try:
-                return date.fromisoformat(value.strip()[:10])
+                d = date.fromisoformat(value.strip()[:10])
+                dt = datetime.combine(d, time.min)
             except ValueError as exc:
                 raise ValueError(f"as_of/data invalida: {value!r}") from exc
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=TZ)
+        return dt.astimezone(TZ)
     raise ValueError(f"as_of obrigatorio e deve ser data/datetime/ISO: {value!r}")
 
+def _to_date(value: Any) -> date:
+    return _normalize_datetime(value).date()
 
 def _to_datetime(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, date):
-        return datetime.combine(value, time.max)
-    if isinstance(value, str):
-        try:
-            return datetime.fromisoformat(value.strip())
-        except ValueError:
-            return datetime.combine(_to_date(value), time.max)
-    raise ValueError(f"as_of invalido: {value!r}")
-
+    try:
+        return _normalize_datetime(value)
+    except ValueError:
+        return None
 
 def _as_of_date(value: Any) -> date:
     if value is None:
@@ -118,22 +121,6 @@ def _matches(
 
 
 def _record_weight(rec: Any) -> float:
-    w = _get(rec, "weight", default=None)
-    if w is not None:
-        try:
-            return max(0.0, min(1.0, float(w)))
-        except (TypeError, ValueError):
-            pass
-    validated = _get(rec, "validated", default=None)
-    n_sources = _get(rec, "n_sources", _get(rec, "source_count", default=None))
-    if validated is False:
-        return 0.5
-    if n_sources is not None:
-        try:
-            if int(n_sources) < 2:
-                return 0.5
-        except (TypeError, ValueError):
-            pass
     return 1.0
 
 
@@ -142,7 +129,9 @@ def _available(rec: Any, as_of: date, as_of_dt: datetime) -> bool:
     if start is None or start > as_of:
         return False
     fs = _first_seen_dt(rec)
-    return not (fs is not None and fs > as_of_dt)
+    if fs is None:
+        return False
+    return fs <= as_of_dt
 
 
 def _filter_history(
@@ -313,6 +302,8 @@ class B0:
         recs = self.records if records is None else records
         if isinstance(records, (list, tuple, set)):
             recs = list(records)
+        if kwargs:
+            raise TypeError(f"argumentos desconhecidos: {sorted(kwargs)}")
 
         if horizon is not None and horizons is None:
             probs = self._probabilities(
@@ -491,6 +482,8 @@ def predict_proba(
         as_of_raw = kwargs.pop("as_of_date", kwargs.pop("cutoff", kwargs.pop("cutoff_date", kwargs.pop("reference_date", kwargs.pop("current_date", None)))))
     if as_of_raw is None:
         raise ValueError("as_of e obrigatorio")
+    if kwargs:
+        raise TypeError(f"argumentos desconhecidos: {sorted(kwargs)}")
     _as_of_date(as_of_raw)
     name = (model or method or "b1").lower()
     cls = B0 if name in {"b0", "base", "base_rate", "taxa", "taxa_base", "0"} else B1
