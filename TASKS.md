@@ -14,3 +14,4 @@
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
 | T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
+| TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |
