@@ -1,32 +1,37 @@
 from __future__ import annotations
 
-"""Camada determinística de extração (regex + pydantic)."""
+"""Camada determinística de extração (regex + pydantic).
+
+Texto é sempre DADO; instruções eventualmente presentes são descartadas.
+"""
 import re
 import unicodedata
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 PROGRAMS: tuple[str, ...] = ("livelo", "esfera", "latam_pass", "smiles", "azul_fidelidade")
+_PROGRAM_LITERALS = Literal["livelo", "esfera", "latam_pass", "smiles", "azul_fidelidade"]
+_EVENT_TYPES: tuple[str, ...] = ("transfer_bonus", "purchase_discount", "boosted_accrual")
+_TYPE_LITERAL = Literal["transfer_bonus", "purchase_discount", "boosted_accrual"]
 
-_PROGRAM_ALIASES: dict[str, re.Pattern[str]] = {
-    "livelo": re.compile(r"livelo", re.IGNORECASE),
-    "esfera": re.compile(r"esfera", re.IGNORECASE),
-    "latam_pass": re.compile(r"latam\s*pass|latam_pass|latampass", re.IGNORECASE),
-    "smiles": re.compile(r"smiles", re.IGNORECASE),
-    "azul_fidelidade": re.compile(r"azul\s*fidelidade|azul_fidelidade", re.IGNORECASE),
+_PROGRAM_ALIASES: dict[str, str] = {
+    "livelo": "livelo",
+    "esfera": "esfera",
+    "latam_pass": "latam(?:\\s*pass|_pass|pass)",
+    "smiles": "smiles",
+    "azul_fidelidade": "azul(?:\\s*fidelidade|_fidelidade)",
 }
 
-_EVENT_TYPES: tuple[str, ...] = ("transfer_bonus", "purchase_discount", "boosted_accrual")
-
+# regex públicos (spec)
 PAR = r"\blivelo\b.{0,120}\bsmiles\b|\bsmiles\b.{0,120}\blivelo\b"
 PAR_RE = re.compile(PAR, re.IGNORECASE | re.DOTALL)
 
 BONUS_CTX = r"b[ôo]nus|bonificad[ao]|transfer[êe]ncia"
 BONUS_CTX_RE = re.compile(BONUS_CTX, re.IGNORECASE)
 
-BONUS_PCT = r"(?:at[ée]\s+)?(?<!\d)(\d{2,3})\s?%(?=\s*(?:de\s+)?(?:b[ôo]nus|bonifica|na\s+transfer))|b[ôo]nus\s+de\s+(?:at[ée]\s+)?(\d{2,3})\s?%"
+BONUS_PCT = r"(?:at[ée]\s+)?(?<!\d)(\d{1,3}(?:,\d+)?)\s?%(?=\s*(?:de\s+)?(?:b[ôo]nus|bonifica|na\s+transfer))|b[ôo]nus\s+de\s+(?:at[ée]\s+)?(\d{1,3}(?:,\d+)?)\s?%"
 BONUS_PCT_RE = re.compile(BONUS_PCT, re.IGNORECASE)
 
 DATA_NUM = r"(?<!\d)([0-3]?\d)/([01]?\d)(?:/(20\d{2}|\d{2}))?(?!\d)"
@@ -41,7 +46,7 @@ MONTHS_PT = {
 DATA_EXT = r"(?<!\d)([0-3]?\d)\s+de\s+(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de\s+(20\d{2}))?"
 DATA_EXT_RE = re.compile(DATA_EXT, re.IGNORECASE)
 
-SEGMENTO = r"clube\s+(?:livelo|smiles|latam|azul|esfera)|exclusiv[oa]\s+para|somente\s+para\s+(?:clientes|assinantes|membros)|cart[ãa]o\s+\w+|diamante|ouro|prata|p[úu]blico"
+SEGMENTO = r"exclusiv[oa]\s+(?:para|do|da|de)|clube(?:\s+(?:livelo|smiles|latam|azul|esfera))?|cart[ãa]o\s+\w+|diamante"
 SEGMENTO_RE = re.compile(SEGMENTO, re.IGNORECASE)
 
 
@@ -56,315 +61,76 @@ def normalize(text: Any) -> str:
     else:
         s = str(text)
     s = unicodedata.normalize("NFKC", s)
+    # remove zero-width / BOM que podem burlar gatilhos
+    for ch in ("\u200b", "\u200c", "\u200d", "\u200e", "\u200f", "\ufeff"):
+        s = s.replace(ch, "")
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
-def _current_year() -> int:
-    return date.today().year
+# --- helpers ----------------------------------------------------------------
+_INJECTION_MARKERS = ("ignore", "disregard", "override", "jailbreak", "system:")
+_NEGATION_MARKERS = ("não", "nao", "cancelad", "encerrad", "sem bônus", "sem bonus", "não terá", "nao tera")
+_HISTORY_MARKERS = ("antes", "anterior", "antigamente")
 
 
-def _fix_year(y: str | None) -> int:
-    if y is None:
-        return _current_year()
-    y = y.strip()
-    if len(y) == 2:
-        return 2000 + int(y)
-    return int(y)
-
-
-def _make_date(day, month, year) -> str | None:
-    try:
-        d = int(day)
-        if isinstance(month, str) and not month.isdigit():
-            key = month.lower().strip()
-            if key not in MONTHS_PT:
-                alt = key.replace("c", "ç")
-                if alt in MONTHS_PT:
-                    key = alt
-            m = MONTHS_PT.get(key, 0)
-        else:
-            m = int(month)
-        y = _fix_year(None if year is None else str(year))
-        dt = date(y, int(m), int(d))
-        return dt.isoformat()
-    except (ValueError, TypeError):
-        return None
-
-
-def _collect_dates(text_norm: str) -> list[str]:
-    candidates = []
-    for m in DATA_NUM_RE.finditer(text_norm):
-        candidates.append({"pos": m.start(), "day": m.group(1), "month": m.group(2),
-                          "year": m.group(3)})
-    for m in DATA_EXT_RE.finditer(text_norm):
-        candidates.append({"pos": m.start(), "day": m.group(1), "month": m.group(2),
-                          "year": m.group(3)})
-    candidates.sort(key=lambda c: c["pos"])
-    explicit_years = [(c["pos"], c["year"]) for c in candidates if c["year"]]
-    normalized = []
-    for c in candidates:
-        year = c["year"]
-        if not year and explicit_years:
-            nearest = min(explicit_years, key=lambda y: abs(y[0] - c["pos"]))
-            year = nearest[1]
-        iso = _make_date(c["day"], c["month"], year)
-        if iso:
-            normalized.append((c["pos"], iso))
-    out = []
-    for _pos, iso in sorted(normalized, key=lambda x: x[0]):
-        if not out or out[-1] != iso:
-            out.append(iso)
-    return out
-
-
-def _near_promo_context(text_norm: str, pos: int, window: int = 90) -> bool:
-    seg = text_norm[max(0, pos - window): pos + window].lower()
-    keys = ("bônus", "bonus", "bonifica", "transfer", "compra", "desconto",
-            "acúmulo", "acumulo", "turbinado", "ponto", "milha", "%", "/",
-            " de ", " a ", "até", "ate")
-    return any(k in seg for k in keys)
-
-
-def _programs_in(text_norm: str) -> list[str]:
-    found: list[tuple[int, str]] = []
-    for prog, rx in _PROGRAM_ALIASES.items():
-        for m in rx.finditer(text_norm):
-            if _near_promo_context(text_norm, m.start()):
-                found.append((m.start(), prog))
-    found.sort()
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for _pos, prog in found:
-        if prog not in seen:
-            seen.add(prog)
-            ordered.append(prog)
-    return ordered
-
-
-def _detect_pair(text_norm: str) -> tuple[str | None, str | None]:
-    progs = _programs_in(text_norm)
-    if len(progs) >= 2:
-        for origin in progs:
-            for dest in progs:
-                if origin == dest:
-                    continue
-                origin_rx = _PROGRAM_ALIASES[origin].pattern
-                dest_rx = _PROGRAM_ALIASES[dest].pattern
-                pat = re.compile(rf"{origin_rx}.{{0,120}}?(?:para|->|→|a\b|em\b).{{0,40}}?{dest_rx}", re.IGNORECASE | re.DOTALL)
-                if pat.search(text_norm):
-                    return origin, dest
-        return progs[0], progs[1]
-    if len(progs) == 1:
-        return None, None
-    return None, None
-
-
-def _detect_type(text_norm: str) -> str | None:
-    low = text_norm.lower()
-    if any(k in low for k in ("compra", "desconto", "comprar")):
-        return "purchase_discount"
-    if any(k in low for k in ("acúmulo", "acumulo", "turbinado", "acumule", "turbinad")):
-        return "boosted_accrual"
-    if any(k in low for k in ("bônus", "bonus", "bonifica", "transferência", "transferencia", "transfira")):
-        return "transfer_bonus"
-    progs = _programs_in(text_norm)
-    if len(progs) >= 2:
-        return "transfer_bonus"
-    return None
-
-
-def _extract_bonus(text_norm: str) -> tuple[int | None, bool]:
-    segmented = False
-    tn = text_norm
-    if SEGMENTO_RE.search(tn):
-        segmented = True
-    plus_total = None
-    for a, b in re.findall(r"(\d{2,3})\s*%\s*\+\s*(\d{1,3})\s*%", tn, flags=re.IGNORECASE):
-        plus_total = int(a) + int(b)
-    nums: list[int] = []
-    for m in BONUS_PCT_RE.finditer(tn):
-        val = m.group(1) or m.group(2)
-        if val:
-            nums.append(int(val))
-    if not nums:
-        for m in re.finditer(r"(\d{2,3})\s?%", tn):
-            nums.append(int(m.group(1)))
-    base: int | None = max(nums) if nums else None
-    if plus_total is not None:
-        if base is None or plus_total > base:
-            base = plus_total
-        segmented = True
-    if base is not None:
-        base = max(base, 1)
-        if base > 300:
-            base = None
-    return base, segmented
-
-
-def _detect_segmented(text_norm: str, segmented_flag: bool) -> bool:
-    if segmented_flag:
+def _promo_signal(sentence: str) -> bool:
+    low = sentence.lower()
+    if "%" in sentence or BONUS_PCT_RE.search(sentence):
         return True
-    return bool(SEGMENTO_RE.search(text_norm))
+    if _PROGRAM_ALIASES and any(re.search(p, low, re.IGNORECASE) for p in ("livelo", "esfera", "smiles", "azul", "latam")):
+        return True
+    m = re.search(r"\d{1,2}/\d{1,2}", sentence)
+    if not m:
+        return False
+    low = sentence.lower()
+    return bool(any(k in low for k in (" de ", " a ", "até", "ate", "valid", "vig", "período", "periodo")))
 
 
-def _segment_label(text_norm: str, segmented: bool) -> str | None:
-    if not segmented:
+def _sanitize_sentence(sentence: str) -> str | None:
+    """Remove gatilhos de injeção e histórico; retorna None se sentença descartada."""
+    low = sentence.lower()
+    if any(m in low for m in _NEGATION_MARKERS):
         return None
-    low = text_norm.lower()
-    if "clube" in low:
-        return "clube"
-    if "público" in low or "publico" in low:
-        return "publico"
-    if SEGMENTO_RE.search(text_norm):
-        return "segmentado"
-    return None
-
-
-def _all_dates_valid(text_norm: str) -> bool:
-    for m in DATA_NUM_RE.finditer(text_norm):
-        if _make_date(m.group(1), m.group(2), m.group(3)) is None:
-            return False
-    for m in DATA_EXT_RE.finditer(text_norm):
-        if _make_date(m.group(1), m.group(2), m.group(3)) is None:
-            return False
-    return True
-
-
-def _parse_date_field(text_norm: str, dates: list[str]) -> tuple[str | None, str | None]:
-    inicio: str | None = None
-    fim: str | None = None
-    low = text_norm.lower()
-    if len(dates) >= 2:
-        inicio = dates[0]
-        fim = dates[1]
-    elif len(dates) == 1:
-        d0 = dates[0]
-        if any(k in low for k in ("até", "ate", "válido até", "valido ate", "termina", "encerra")):
-            fim = d0
-        elif any(k in low for k in ("a partir de", "desde", "início", "inicio", "começa", "comeca")):
-            inicio = d0
+    if any(m in low for m in _HISTORY_MARKERS) and not _promo_signal(sentence):
+        return None
+    # trunca em marcador de injeção
+    for marker in _INJECTION_MARKERS:
+        idx = low.find(marker)
+        if idx != -1:
+            pre = sentence[:idx].strip(" .,;:-")
+            low_pre = pre.lower()
+            if _promo_signal(pre):
+                sentence = pre
+                low = low_pre
+            else:
+                return None
+    # remove sufixos com system:
+    if "system:" in low:
+        idx = low.find("system:")
+        pre = sentence[:idx].strip(" .,;:-")
+        if _promo_signal(pre):
+            sentence = pre
         else:
-            inicio = d0
-    return inicio, fim
+            return None
+    if any(m in low for m in _NEGATION_MARKERS):
+        return None
+    return sentence.strip()
 
 
-class Offer(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True, str_strip_whitespace=True)
-
-    origem: str | None = Field(default=None, alias="origin")
-    destino: str | None = Field(default=None, alias="destination")
-    tipo: str | None = Field(default=None, alias="type")
-    bonus_pct: int | None = None
-    inicio: str | None = Field(default=None, alias="start")
-    fim: str | None = Field(default=None, alias="end")
-    segmentada: bool = Field(default=False, alias="segmented")
-    segmento: str | None = Field(default=None, alias="segment_label")
-
-    def __init__(self, /, **data: Any) -> None:
-        mapping = {
-            "origem": "origem", "origin": "origem",
-            "destino": "destino", "destination": "destino",
-            "tipo": "tipo", "type": "tipo", "event_type": "tipo",
-            "bonus_pct": "bonus_pct", "bonus": "bonus_pct",
-            "inicio": "inicio", "start": "inicio", "start_at": "inicio",
-            "start_date": "inicio",
-            "fim": "fim", "end": "fim", "end_at": "fim", "end_date": "fim",
-            "segmentada": "segmentada", "segmented": "segmentada",
-            "is_segmented": "segmentada",
-            "segmento": "segmento", "segment_label": "segmento", "segment": "segmento",
-        }
-        translated: dict[str, Any] = {}
-        for k, v in data.items():
-            key = mapping.get(k, k)
-            translated[key] = v
-        super().__init__(**translated)
-
-    @property
-    def origin(self) -> str | None:
-        return self.origem
-
-    @origin.setter
-    def origin(self, v: Any) -> None:
-        self.origem = v
-
-    @property
-    def destination(self) -> str | None:
-        return self.destino
-
-    @destination.setter
-    def destination(self, v: Any) -> None:
-        self.destino = v
-
-    @property
-    def type(self) -> str | None:
-        return self.tipo
-
-    @type.setter
-    def type(self, v: Any) -> None:
-        self.tipo = v
-
-    @property
-    def event_type(self) -> str | None:
-        return self.tipo
-
-    @event_type.setter
-    def event_type(self, v: Any) -> None:
-        self.tipo = v
-
-    @property
-    def start(self) -> str | None:
-        return self.inicio
-
-    @property
-    def start_at(self):
-        v = self.inicio
-        return _to_date(v) if v is not None else None
-
-    @property
-    def start_date(self):
-        return self.start_at
-
-    @property
-    def end(self) -> str | None:
-        return self.fim
-
-    @property
-    def end_at(self):
-        v = self.fim
-        return _to_date(v) if v is not None else None
-
-    @property
-    def end_date(self):
-        return self.end_at
-
-    @property
-    def segmented(self) -> bool:
-        return self.segmentada
-
-    @segmented.setter
-    def segmented(self, v: Any) -> None:
-        self.segmentada = bool(v)
-
-    @property
-    def segment_label(self) -> str | None:
-        return self.segmento
-
-    def is_valid(self, first_seen_at: Any = None, reference_date: Any = None) -> bool:
-        ok, _ = validate_offer(self, first_seen_at=first_seen_at, reference_date=reference_date)
-        return ok
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "origem": self.origem,
-            "destino": self.destino,
-            "tipo": self.tipo,
-            "bonus_pct": self.bonus_pct,
-            "inicio": self.inicio,
-            "fim": self.fim,
-            "segmentada": self.segmentada,
-            "segmento": self.segmento,
-        }
+def _sanitize(text_norm: str) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text_norm)
+    kept = []
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        out = _sanitize_sentence(s)
+        if out:
+            kept.append(out)
+    if not kept:
+        return ""
+    return " ".join(kept)
 
 
 def _to_date(value: Any):
@@ -378,18 +144,366 @@ def _to_date(value: Any):
         return None
 
 
+def _current_year(first_seen_at: Any = None) -> int | None:
+    if first_seen_at is not None:
+        d = first_seen_at
+        if isinstance(first_seen_at, datetime):
+            d = first_seen_at.date()
+        if isinstance(first_seen_at, str):
+            d = _to_date(first_seen_at)
+        if d is not None:
+            return d.year
+    return date.today().year
+
+
+def _make_date(day, month, year, first_seen_year: int | None) -> str | None:
+    try:
+        d = int(day)
+        if isinstance(month, str) and not month.isdigit():
+            key = month.lower().strip()
+            if key not in MONTHS_PT:
+                alt = key.replace("c", "ç")
+                if alt in MONTHS_PT:
+                    key = alt
+            m = MONTHS_PT.get(key, 0)
+        else:
+            m = int(month)
+        if year is None or str(year).strip() == "":
+            y = first_seen_year
+            if y is None:
+                return None
+        else:
+            y_raw = str(year).strip()
+            if len(y_raw) == 2:
+                y = 2000 + int(y_raw)
+            else:
+                y = int(y_raw)
+        dt = date(int(y), int(m), int(d))
+        return dt.isoformat()
+    except (ValueError, TypeError):
+        return None
+
+
+def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
+    """Coleta datas ISO de um trecho, com inferência de ano e rollover de virada."""
+    fs_year = _current_year(first_seen_at)
+    candidates = []
+    for m in DATA_NUM_RE.finditer(text_norm):
+        candidates.append((m.start(), m.group(1), m.group(2), m.group(3)))
+    for m in DATA_EXT_RE.finditer(text_norm):
+        candidates.append((m.start(), m.group(1), m.group(2), m.group(3)))
+    candidates.sort(key=lambda c: c[0])
+
+    # contexto promocional: dd/mm sem ano só se houver palavra-chave perto
+    promoted = []
+    for pos, day, month, year in candidates:
+        if (year is None or str(year).strip() == ""):
+            left = text_norm[max(0, pos - 40):pos].lower()
+            right = text_norm[pos:pos + 20].lower()
+            ctx = left + right
+            if not any(k in ctx for k in ("de ", " a ", "até", "ate", "valid", "vig", "período", "periodo", "até")):
+                continue
+        iso = _make_date(day, month, year, fs_year)
+        if iso:
+            promoted.append((pos, iso, year is not None and str(year).strip() != ""))
+
+    # infer year from nearest explicit year in the segment
+    explicit_years = []
+    for pos, day, month, year in candidates:
+        if year is not None and str(year).strip() != "":
+            iso = _make_date(day, month, year, fs_year)
+            if iso:
+                explicit_years.append((pos, iso))
+
+    for pos, day, month, year in candidates:
+        y = year
+        if y is None or str(y).strip() == "":
+            if explicit_years:
+                nearest = min(explicit_years, key=lambda e: abs(e[0] - pos))
+                # derive year from nearest iso
+                y = nearest[1][:4]
+            else:
+                y = None
+        iso = _make_date(day, month, y, fs_year)
+        if iso:
+            pass
+    # fallback: just rebuild from promoted list already computed; redo cleanly:
+    out = []
+    # Recompute with nearest explicit
+    results = []
+    for pos, day, month, year in candidates:
+        if year is None or str(year).strip() == "":
+            # require context to accept yearless
+            left = text_norm[max(0, pos - 40):pos].lower()
+            right = text_norm[pos:pos + 20].lower()
+            ctx = left + right
+            if not any(k in ctx for k in ("de ", " a ", "até", "ate", "valid", "vig", "período", "periodo")):
+                continue
+        y = year
+        if y is None or str(y).strip() == "":
+            if explicit_years:
+                nearest = min(explicit_years, key=lambda e: abs(e[0] - pos))
+                y = nearest[1][:4]
+            else:
+                y = fs_year
+        iso = _make_date(day, month, y, fs_year)
+        if not iso:
+            continue
+        results.append((pos, iso, (year is not None and str(year).strip() != "")))
+    # dedup preserving order
+    for pos, iso, hasy in sorted(results, key=lambda x: x[0]):
+        if not out or out[-1] != iso:
+            out.append(iso)
+    # rollover: if two dates and second < first and first year not both explicit
+    if len(out) >= 2:
+        try:
+            d0 = date.fromisoformat(out[0])
+            d1 = date.fromisoformat(out[1])
+            if d1 < d0:
+                # if second lacks explicit year (best effort: infer) add 1 year
+                nd1 = d1.replace(year=d1.year + 1)
+                out[1] = nd1.isoformat()
+        except ValueError:
+            pass
+    return out
+
+
+def _programs_in(text_norm: str) -> list[str]:
+    found = []
+    for prog, rx_pat in [("livelo", r"livelo"), ("esfera", r"esfera"), ("latam_pass", r"latam\s*pass|latam_pass|latampass"),
+                        ("smiles", r"smiles"), ("azul_fidelidade", r"azul\s*fidelidade|azul_fidelidade")]:
+        for m in re.finditer(rx_pat, text_norm, re.IGNORECASE):
+            found.append((m.start(), prog))
+    found.sort()
+    seen = set()
+    ordered = []
+    for _pos, prog in found:
+        if prog not in seen:
+            seen.add(prog)
+            ordered.append(prog)
+    return ordered
+
+
+def _directional_pair(sentence: str) -> tuple[str | None, str | None]:
+    aliases = {
+        "livelo": r"livelo", "esfera": r"esfera",
+        "latam_pass": r"latam\s*pass|latam_pass|latampass",
+        "smiles": r"smiles",
+        "azul_fidelidade": r"azul\s*fidelidade|azul_fidelidade",
+    }
+    progs = _programs_in(sentence)
+    if len(progs) < 2:
+        return (progs[0] if len(progs) == 1 else None), None
+    # "X para Y" / "X -> Y" / "X a Y"
+    for origin in progs:
+        for dest in progs:
+            if origin == dest:
+                continue
+            origin_rx = aliases[origin]
+            dest_rx = aliases[dest]
+            pat = re.compile(rf"{origin_rx}.{{0,80}}?(?:para|->|→|\ba\b).{{0,40}}?{dest_rx}", re.IGNORECASE | re.DOTALL)
+            if pat.search(sentence):
+                return origin, dest
+    # conjunção " e " => sem direção
+    if re.search(r"\be\b", sentence.lower()):
+        return None, None
+    return None, None
+
+
+def _detect_type(sentence: str) -> str | None:
+    low = sentence.lower()
+    if any(k in low for k in ("bônus", "bonus", "bonifica")):
+        return "transfer_bonus"
+    if any(k in low for k in ("desconto", "compra")) and "bôn" not in low and "bonus" not in low:
+        return "purchase_discount"
+    if any(k in low for k in ("desconto",)):
+        return "purchase_discount"
+    if any(k in low for k in ("acúmulo", "acumulo", "turbinado", "acumule", "turbinad")):
+        return "boosted_accrual"
+    progs = _programs_in(sentence)
+    if len(progs) >= 2:
+        return "transfer_bonus"
+    return None
+
+
+def _extract_bonus(sentence: str, segmented_flag: list[bool]) -> int | float | None:
+    segmented_flag[0] = False
+    plus_total = None
+    for a, b in re.findall(r"(\d{1,3}(?:,\d+)?)\s*%[^.]*?\+\s*(\d{1,3}(?:,\d+)?)\s*%", sentence, flags=re.IGNORECASE):
+        try:
+            plus_total = float(a.replace(",", ".")) + float(b.replace(",", "."))
+        except ValueError:
+            plus_total = None
+        segmented_flag[0] = True
+        break
+    nums = []
+    for m in BONUS_PCT_RE.finditer(sentence):
+        val = m.group(1) or m.group(2)
+        if val:
+            try:
+                nums.append(float(val.replace(",", ".")))
+            except ValueError:
+                pass
+    base = max(nums) if nums else None
+    if plus_total is not None:
+        if base is None or plus_total > base:
+            base = plus_total
+        segmented_flag[0] = True
+    if base is not None:
+        # int when integral
+        if float(base).is_integer():
+            base = int(base)
+        if base < 1 or base > 300:
+            base = None
+    return base
+
+
+def _detect_segmented(sentence: str) -> bool:
+    low = sentence.lower()
+    if "clube" in low:
+        return True
+    if re.search(r"exclusiv[oa]\s+(?:para|do|da|de)", low):
+        return True
+    if re.search(r"cart[ãa]o\s+\w+", low):
+        return True
+    return bool("diamante" in low and "exclus" in low)
+
+
+def _segment_label(sentence: str, segmented: bool) -> str | None:
+    if not segmented:
+        return None
+    low = sentence.lower()
+    if "clube" in low:
+        return "clube"
+    if "cartão" in low or "cartao" in low:
+        return "cartao"
+    return "segmentado"
+
+
+# --- pydantic models --------------------------------------------------------
+class Offer(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, str_strip_whitespace=True)
+
+    origem: _PROGRAM_LITERALS | None = Field(default=None, alias="origin")
+    destino: _PROGRAM_LITERALS | None = Field(default=None, alias="destination")
+    tipo: _TYPE_LITERAL | None = Field(default=None, alias="type")
+    bonus_pct: float | None = Field(default=None, ge=1, le=300)
+    inicio: str | None = Field(default=None, alias="start", pattern=r"^20[2-3][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
+    fim: str | None = Field(default=None, alias="end", pattern=r"^20[2-3][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
+    segmentada: bool = Field(default=False, alias="segmented")
+    segmento: str | None = Field(default=None, alias="segment_label")
+
+    def __init__(self, /, **data: Any) -> None:
+        mapping = {
+            "origem": "origem", "origin": "origem",
+            "destino": "destino", "destination": "destino",
+            "tipo": "tipo", "type": "tipo", "event_type": "tipo",
+            "bonus_pct": "bonus_pct", "bonus": "bonus_pct",
+            "inicio": "inicio", "start": "inicio", "start_at": "inicio",
+            "start_date": "inicio", "fim": "fim", "end": "fim",
+            "end_at": "fim", "end_date": "fim", "segmentada": "segmentada",
+            "segmented": "segmentada", "is_segmented": "segmentada",
+            "segmento": "segmento", "segment_label": "segmento", "segment": "segmento",
+        }
+        translated = {}
+        for k, v in data.items():
+            key = mapping.get(k, k)
+            translated[key] = v
+        super().__init__(**translated)
+
+    # alias properties EN
+    @property
+    def origin(self):
+        return self.origem
+
+    @origin.setter
+    def origin(self, v):
+        self.origem = v
+
+    @property
+    def destination(self):
+        return self.destino
+
+    @destination.setter
+    def destination(self, v):
+        self.destino = v
+
+    @property
+    def type(self):
+        return self.tipo
+
+    @type.setter
+    def type(self, v):
+        self.tipo = v
+
+    @property
+    def event_type(self):
+        return self.tipo
+
+    @event_type.setter
+    def event_type(self, v):
+        self.tipo = v
+
+    @property
+    def start(self):
+        return self.inicio
+
+    @property
+    def start_at(self):
+        return self.inicio
+
+    @property
+    def start_date(self):
+        return self.inicio
+
+    @property
+    def end(self):
+        return self.fim
+
+    @property
+    def end_at(self):
+        return self.fim
+
+    @property
+    def end_date(self):
+        return self.fim
+
+    @property
+    def segmented(self):
+        return self.segmentada
+
+    @segmented.setter
+    def segmented(self, v):
+        self.segmentada = bool(v)
+
+    @property
+    def segment_label(self):
+        return self.segmento
+
+    def is_valid(self, first_seen_at=None, reference_date=None, mode="live"):
+        ok, _ = validate_offer(self, first_seen_at=first_seen_at, mode=mode)
+        return ok
+
+    def to_dict(self):
+        return {
+            "origem": self.origem, "destino": self.destino, "tipo": self.tipo,
+            "bonus_pct": self.bonus_pct, "inicio": self.inicio, "fim": self.fim,
+            "segmentada": self.segmentada, "segmento": self.segmento,
+        }
+
+
 class Extraction(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     ofertas: list[Offer] = Field(default_factory=list, alias="offers")
 
-    def __init__(self, /, **data: Any) -> None:
+    def __init__(self, /, **data):
         mapping = {
             "ofertas": "ofertas", "offers": "ofertas", "items": "ofertas",
             "results": "ofertas", "promotions": "ofertas", "promoções": "ofertas",
             "oferta": "ofertas",
         }
-        translated: dict[str, Any] = {}
+        translated = {}
         for k, v in data.items():
             key = mapping.get(k, k)
             if key == "ofertas" and isinstance(v, (Offer, dict)) and not isinstance(v, list):
@@ -402,32 +516,33 @@ class Extraction(BaseModel):
         super().__init__(**translated)
 
     @property
-    def offers(self) -> list[Offer]:
+    def offers(self):
         return self.ofertas
 
     @offers.setter
-    def offers(self, v: Any) -> None:
+    def offers(self, v):
         if isinstance(v, (Offer, dict)):
             self.ofertas = [v if isinstance(v, Offer) else Offer(**v)]
         else:
             self.ofertas = list(v or [])
 
     @property
-    def items(self) -> list[Offer]:
+    def items(self):
         return self.ofertas
 
     @property
-    def promotions(self) -> list[Offer]:
+    def promotions(self):
         return self.ofertas
 
     @property
-    def results(self) -> list[Offer]:
+    def results(self):
         return self.ofertas
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self):
         return {"ofertas": [o.to_dict() for o in self.ofertas]}
 
 
+# aliases classes
 OfferExtraction = Extraction
 ExtractionResult = Extraction
 PromoExtraction = Extraction
@@ -439,109 +554,135 @@ PromoOffer = Offer
 PromotionOffer = Offer
 
 
-def _sanitize(text_norm: str) -> str:
-    """Trata instruções embutidas como dado: descarta sentenças com gatilhos
-    típicos de prompt injection, preservando o trecho factual."""
-    triggers = ("ignore", "ignorar", "disregard", "override", "jailbreak",
-                "instruç", "instruc", "system prompt", "voce e", "você é",
-                "you are", "act as", "finja", "pretend")
-    parts = re.split(r"(?<=[.!?])\s+", text_norm)
-    kept = [p for p in parts if not any(t in p.lower() for t in triggers)]
-    out = " ".join(kept).strip()
-    return out if out else text_norm
+def _has_invalid_date(sentence: str, first_seen_at: Any = None) -> bool:
+    fs_year = _current_year(first_seen_at)
+    for m in DATA_NUM_RE.finditer(sentence):
+        if _make_date(m.group(1), m.group(2), m.group(3), fs_year) is None:
+            return True
+    for m in DATA_EXT_RE.finditer(sentence):
+        if _make_date(m.group(1), m.group(2), m.group(3), fs_year) is None:
+            return True
+    return False
 
 
-def _build_offer(text_norm: str) -> Offer | None:
-    text_norm = _sanitize(text_norm)
-    origin, dest = _detect_pair(text_norm)
-    tipo = _detect_type(text_norm)
-    bonus_pct, segmented_plus = _extract_bonus(text_norm)
-    segmented = _detect_segmented(text_norm, segmented_plus)
-    if not _all_dates_valid(text_norm):
+def _build_offer(sentence: str, first_seen_at: Any = None) -> Offer | None:
+    sentence = sentence.strip()
+    if not sentence:
         return None
-    dates = _collect_dates(text_norm)
-    inicio, fim = _parse_date_field(text_norm, dates)
-    segmento = _segment_label(text_norm, segmented)
-    if origin is None and dest is None and tipo is None and bonus_pct is None and not dates:
+    norm = normalize(sentence)
+    cleaned = _sanitize_sentence(norm)
+    if not cleaned:
         return None
-    if tipo is None and bonus_pct is None and not dates and origin is None and dest is None:
+    if _has_invalid_date(cleaned, first_seen_at):
         return None
-    if origin is not None and origin == dest:
-        dest = None
-    if origin is not None and origin not in PROGRAMS:
-        origin = None
-    if dest is not None and dest not in PROGRAMS:
-        dest = None
-    if tipo is not None and tipo not in _EVENT_TYPES:
-        tipo = None
-    if inicio is not None and _to_date(inicio) is None:
-        inicio = None
-    if fim is not None and _to_date(fim) is None:
+    if not _promo_signal(cleaned):
+        return None
+    origin, dest = _directional_pair(cleaned)
+    tipo = _detect_type(cleaned)
+    segmented_flag = [False]
+    bonus = _extract_bonus(cleaned, segmented_flag)
+    segmented = _detect_segmented(cleaned) or segmented_flag[0]
+    segmento = _segment_label(cleaned, segmented)
+    dates = _collect_dates(cleaned, first_seen_at)
+    inicio = dates[0] if len(dates) >= 1 else None
+    fim = dates[1] if len(dates) >= 2 else (dates[0] if len(dates) == 1 and any(k in cleaned.lower() for k in ("até", "ate", "válido", "valido", "validade", "termina", "encerra")) else None)
+    # if only one date and no explicit end marker, treat as inicio
+    if len(dates) == 1 and fim is None and inicio is None:
+        inicio = dates[0]
+    if len(dates) == 1 and fim is None and not any(k in cleaned.lower() for k in ("até", "ate", "termina", "encerra")):
+        inicio = dates[0]
         fim = None
-    return Offer(
-        origem=origin,
-        destino=dest,
-        tipo=tipo,
-        bonus_pct=bonus_pct,
-        inicio=inicio,
-        fim=fim,
-        segmentada=segmented,
-        segmento=segmento,
-    )
+
+    # require some promotion signal
+    if bonus is None and not dates and origin is None and dest is None and tipo is None:
+        return None
+    if bonus is None and not dates and tipo is None:
+        return None
+    # drop if negation (already handled)
+    try:
+        return Offer(
+            origem=origin,
+            destino=dest,
+            tipo=tipo,
+            bonus_pct=bonus,
+            inicio=inicio,
+            fim=fim,
+            segmentada=segmented,
+            segmento=segmento,
+        )
+    except (ValueError, TypeError):
+        return None
 
 
 def extract(text: Any, first_seen_at: Any = None, **kwargs: Any) -> Extraction:
+    if "first_seen" in kwargs and first_seen_at is None:
+        first_seen_at = kwargs.pop("first_seen")
+    if "reference_date" in kwargs and first_seen_at is None:
+        first_seen_at = kwargs.pop("reference_date")
+    if "first_seen_at" in kwargs and first_seen_at is None:
+        first_seen_at = kwargs.pop("first_seen_at")
     tn = _sanitize(normalize(text))
-    offers: list[Offer] = []
+    offers = []
     if tn:
-        offer = _build_offer(tn)
-        if offer is not None and not (offer.origem is None and offer.destino is None and offer.tipo is None
-                                      and offer.bonus_pct is None and offer.inicio is None and offer.fim is None):
-            offers.append(offer)
-    return Extraction(ofertas=offers)
+        # split into sentences and process each
+        for sent in re.split(r"(?<=[.!?])\s+", tn):
+            sent = sent.strip()
+            if not sent:
+                continue
+            off = _build_offer(sent, first_seen_at=first_seen_at)
+            if off is not None and not (off.origem is None and off.destino is None and off.tipo is None
+                                            and off.bonus_pct is None and off.inicio is None and off.fim is None):
+                offers.append(off)
+    # dedup
+    uniq = []
+    seen_keys = set()
+    for o in offers:
+        key = (o.origem, o.destino, o.tipo, o.bonus_pct, o.inicio, o.fim)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        uniq.append(o)
+    return Extraction(ofertas=uniq)
 
 
-def extract_text(*a: Any, **k: Any) -> Extraction:
+# aliases
+def extract_text(*a, **k):
     return extract(*a, **k)
 
-
-def extract_promo(*a: Any, **k: Any) -> Offer | None:
+def extract_promo(*a, **k):
     ex = extract(*a, **k)
     return ex.ofertas[0] if ex.ofertas else None
 
-
-def extract_promotion(*a: Any, **k: Any) -> Offer | None:
+def extract_promotion(*a, **k):
     return extract_promo(*a, **k)
 
-
-def extract_promotions(*a: Any, **k: Any) -> list[Offer]:
+def extract_promotions(*a, **k):
     return extract(*a, **k).ofertas
 
-
-def extract_offers(*a: Any, **k: Any) -> list[Offer]:
+def extract_offers(*a, **k):
     return extract(*a, **k).ofertas
 
-
-def parse(*a: Any, **k: Any) -> Extraction:
+def parse(*a, **k):
     return extract(*a, **k)
 
-
-def parse_promotion(*a: Any, **k: Any) -> Offer | None:
+def parse_promotion(*a, **k):
     return extract_promo(*a, **k)
 
-
-def regex_extract(text: Any) -> dict[str, Any]:
+def regex_extract(text: Any, first_seen_at: Any = None, **kwargs: Any) -> dict[str, Any]:
+    first_seen_at = first_seen_at or kwargs.get("first_seen_at") or kwargs.get("first_seen")
     tn = _sanitize(normalize(text))
-    origin, dest = _detect_pair(tn)
-    dates = _collect_dates(tn)
-    inicio, fim = _parse_date_field(tn, dates)
-    bonus_pct, seg_plus = _extract_bonus(tn)
-    segmented = _detect_segmented(tn, seg_plus)
+    origin, dest = _directional_pair(tn)
+    dates = _collect_dates(tn, first_seen_at)
+    inicio = dates[0] if dates else None
+    fim = dates[1] if len(dates) >= 2 else None
+    seg_flag = [False]
+    bonus = _extract_bonus(tn, seg_flag)
+    segmented = _detect_segmented(tn) or seg_flag[0]
     return {
         "origem": origin,
         "destino": dest,
         "tipo": _detect_type(tn),
-        "bonus_pct": bonus_pct,
+        "bonus_pct": bonus,
         "inicio": inicio,
         "fim": fim,
         "segmentada": segmented,
@@ -552,8 +693,13 @@ def regex_extract(text: Any) -> dict[str, Any]:
     }
 
 
-def validate_offer(offer, first_seen_at=None, reference_date=None) -> tuple[bool, list[str]]:
-    reasons: list[str] = []
+def validate_offer(offer, first_seen_at=None, reference_date=None, mode="live",
+                  **kwargs) -> tuple[bool, list[str]]:
+    if first_seen_at is None:
+        first_seen_at = kwargs.get("first_seen_at", kwargs.get("first_seen"))
+    if reference_date is not None:
+        first_seen_at = reference_date
+    reasons = []
     o = offer if isinstance(offer, Offer) else Offer(**(offer or {}))
     start_date = _to_date(o.inicio)
     end_date = _to_date(o.fim)
@@ -566,6 +712,11 @@ def validate_offer(offer, first_seen_at=None, reference_date=None) -> tuple[bool
             reasons.append("fim_antes_inicio")
         if (end_date - start_date).days > 90:
             reasons.append("janela_maior_90")
+    # campos ausentes
+    if o.origem is None or o.destino is None or o.tipo is None:
+        reasons.append("campos_ausentes")
+    if o.inicio is None and o.fim is None and o.bonus_pct is None:
+        reasons.append("oferta_vazia")
     if first_seen_at is not None:
         fs = first_seen_at
         if isinstance(fs, str):
@@ -575,29 +726,30 @@ def validate_offer(offer, first_seen_at=None, reference_date=None) -> tuple[bool
                 fs = None
         if isinstance(fs, datetime):
             fs = fs.date()
-        if isinstance(fs, date) and start_date:
-            if start_date > fs + timedelta(days=30):
+        if isinstance(fs, date) and start_date is not None:
+            tol = 365 if mode == "backfill" else 90
+            if start_date > fs + timedelta(days=tol):
                 reasons.append("inicio_muito_futuro")
-            if start_date < fs - timedelta(days=7):
+            if start_date < fs - timedelta(days=tol):
                 reasons.append("inicio_muito_passado")
-    if o.origem == "livelo" and o.destino == "smiles" and o.tipo == "transfer_bonus" and o.bonus_pct is not None and (o.bonus_pct < 10 or o.bonus_pct > 150):
-        reasons.append("bonus_pct_fora_faixa")
     if o.bonus_pct is not None and (o.bonus_pct < 1 or o.bonus_pct > 300):
         reasons.append("bonus_pct_invalido")
-    return (len(reasons) == 0, reasons)
+    if o.tipo == "transfer_bonus" and o.origem == "livelo" and o.destino == "smiles" and o.bonus_pct is not None and (o.bonus_pct < 10 or o.bonus_pct > 150):
+        reasons.append("bonus_pct_fora_faixa")
+    return len(reasons) == 0, reasons
 
 
-def validate_business_rules(*a, **k) -> tuple[bool, list[str]]:
+def validate_business_rules(*a, **k):
     if a and isinstance(a[0], (Offer, dict)):
         offer = a[0]
         first_seen = k.get("first_seen_at", k.get("first_seen", None))
         if len(a) > 1:
             first_seen = a[1]
-        return validate_offer(offer, first_seen_at=first_seen)
-    text = k.get("text") or (a[0] if a and isinstance(a[0], str) else None)
-    if text is not None:
-        off = extract_promo(text)
-        return validate_offer(off) if off is not None else (True, [])
+        return validate_offer(offer, first_seen_at=first_seen, **{kk: vv for kk, vv in k.items() if kk not in ("first_seen_at", "first_seen")})
+    textv = k.get("text") or (a[0] if a and isinstance(a[0], str) else None)
+    if textv is not None:
+        off = extract_promo(textv, first_seen_at=k.get("first_seen_at"))
+        return validate_offer(off) if off is not None else (False, ["sem_oferta"])
     return (True, [])
 
 
@@ -607,23 +759,29 @@ def has_bonus_pct_in_text(text: Any, bonus: Any) -> bool:
     for m in BONUS_PCT_RE.finditer(tn):
         val = m.group(1) or m.group(2)
         if val:
-            nums.append(int(val))
-    for a, b in re.findall(r"(\d{2,3})\s*%\s*\+\s*(\d{1,3})\s*%", tn):
-        nums.append(int(a) + int(b))
+            try:
+                nums.append(float(val.replace(",", ".")))
+            except ValueError:
+                pass
+    for a, b in re.findall(r"(\d{1,3}(?:,\d+)?)\s*%\s*\+\s*(\d{1,3}(?:,\d+)?)\s*%", tn):
+        try:
+            nums.append(float(a.replace(",", ".")) + float(b.replace(",", ".")))
+        except ValueError:
+            pass
     try:
-        b = int(bonus)
+        b = float(str(bonus).replace(",", "."))
     except (TypeError, ValueError):
         return False
-    return b in nums
+    return any(abs(n - b) < 1e-9 for n in nums)
 
 
 def cross_check(text: Any, offer=None) -> bool:
     if isinstance(offer, dict):
-        offer = Offer(**offer)
-    # allow positional text only?
-    if offer is None:
-        return True
-    if offer.bonus_pct is None:
+        try:
+            offer = Offer(**offer)
+        except (ValueError, TypeError):
+            return False
+    if offer is None or offer.bonus_pct is None:
         return True
     if not re.search(r"\d+\s*%", normalize(text)):
         return False

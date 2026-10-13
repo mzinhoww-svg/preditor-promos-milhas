@@ -30,8 +30,9 @@ def test_bonus_regex_at_100_and_90():
 
 def test_extract_simple_bonus():
     off = extract(read("promo_simples.txt")).ofertas[0]
-    assert off.origem == "livelo"
-    assert off.destino == "smiles"
+    # 'Livelo e Smiles' não afirma direção (QA S3)
+    assert off.origem is None
+    assert off.destino is None
     assert off.tipo == "transfer_bonus"
     assert off.bonus_pct == 90
     assert off.inicio == "2025-03-10"
@@ -62,8 +63,6 @@ def test_extract_no_promo_empty():
 
 def test_prompt_injection_ignored():
     off = extract(read("promo_prompt_injection.txt")).ofertas[0]
-    assert off.origem == "livelo"
-    assert off.destino == "smiles"
     assert off.bonus_pct == 85
 
 
