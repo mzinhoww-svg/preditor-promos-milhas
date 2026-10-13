@@ -11,5 +11,6 @@
 | T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
 | T08 | Baseline B0/B1 e walk-forward | pendente | | pendente | relatório |
 | T09 | API, job diário, dashboard Vercel | pendente | | pendente | MVP |
+| T09a | Dashboard v0 (Next.js, mock + contrato da API, 4 telas) | Designer Frontend | Claude Code | em_revisao | docs/api-contract.md; build e lint verdes; QA visual desktop e 390x844 em docs/qa/t09a |
 
 Teste cruzado (outro agente roda e tenta quebrar) ainda não executado em T01 a T03.

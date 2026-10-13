@@ -1,0 +1,151 @@
+{
+  "generated_at": "2026-10-13T06:00:00Z",
+  "period": {
+    "from": "2026-09-01",
+    "to": "2026-10-12"
+  },
+  "by_horizon": {
+    "7": {
+      "n": 280,
+      "hit_rate": 0.71,
+      "brier": 0.151,
+      "log_loss": 0.46
+    },
+    "15": {
+      "n": 280,
+      "hit_rate": 0.77,
+      "brier": 0.139,
+      "log_loss": 0.43
+    },
+    "30": {
+      "n": 280,
+      "hit_rate": 0.84,
+      "brier": 0.118,
+      "log_loss": 0.39
+    }
+  },
+  "weekly": [
+    {
+      "week": "2026-09-01",
+      "horizon": 30,
+      "n": 60,
+      "hit_rate": 0.83,
+      "brier": 0.12
+    },
+    {
+      "week": "2026-09-08",
+      "horizon": 30,
+      "n": 60,
+      "hit_rate": 0.85,
+      "brier": 0.11
+    },
+    {
+      "week": "2026-09-15",
+      "horizon": 30,
+      "n": 60,
+      "hit_rate": 0.84,
+      "brier": 0.12
+    },
+    {
+      "week": "2026-09-22",
+      "horizon": 30,
+      "n": 60,
+      "hit_rate": 0.86,
+      "brier": 0.11
+    },
+    {
+      "week": "2026-09-29",
+      "horizon": 30,
+      "n": 60,
+      "hit_rate": 0.82,
+      "brier": 0.13
+    },
+    {
+      "week": "2026-10-06",
+      "horizon": 30,
+      "n": 60,
+      "hit_rate": 0.8,
+      "brier": 0.13
+    }
+  ],
+  "alerts": [
+    {
+      "id": "al_000131",
+      "severity": "critical",
+      "kind": "source",
+      "title": "Livelo oficial bloqueada: robots.txt mudou",
+      "detail": "O hash do robots.txt de www.livelo.com.br mudou em 12/10. A coleta ficou suspensa até alguém revisar os termos.",
+      "since": "2026-10-12T05:40:00Z",
+      "related": {
+        "horizon": null,
+        "source": "www.livelo.com.br",
+        "pair": null
+      }
+    },
+    {
+      "id": "al_000123",
+      "severity": "warning",
+      "kind": "drift",
+      "title": "Brier de 7 dias piorou 0,02 em duas semanas",
+      "detail": "0,151 em produção contra 0,142 na validação; fora do intervalo de confiança.",
+      "since": "2026-10-10T06:00:00Z",
+      "related": {
+        "horizon": 7,
+        "source": null,
+        "pair": null
+      }
+    },
+    {
+      "id": "al_000128",
+      "severity": "warning",
+      "kind": "source",
+      "title": "Smiles oficial com 62% de erro HTTP",
+      "detail": "Respostas 503 em 62% das tentativas nas últimas 24 h. Retry com backoff ativo.",
+      "since": "2026-10-12T14:00:00Z",
+      "related": {
+        "horizon": null,
+        "source": "www.smiles.com.br",
+        "pair": null
+      }
+    },
+    {
+      "id": "al_000119",
+      "severity": "info",
+      "kind": "budget",
+      "title": "OpenRouter: R$ 14,20 de R$ 100 usados",
+      "detail": "14% do teto mensal; ritmo compatível com o orçamento.",
+      "since": "2026-10-13T06:00:00Z",
+      "related": {
+        "horizon": null,
+        "source": null,
+        "pair": null
+      }
+    },
+    {
+      "id": "al_000115",
+      "severity": "info",
+      "kind": "model",
+      "title": "Desafiante C1 retreinado em 06/10",
+      "detail": "Comparação com B1 no horizonte de 30 dias: delta Brier -0,004 (IC inclui zero). Campeão mantido.",
+      "since": "2026-10-06T03:40:00Z",
+      "related": {
+        "horizon": 30,
+        "source": null,
+        "pair": null
+      }
+    },
+    {
+      "id": "al_000110",
+      "severity": "info",
+      "kind": "pipeline",
+      "title": "Job diário concluído em 4 min 12 s",
+      "detail": "Coleta, extração e predição sem erros. 1 260 predições registradas em prediction_log.",
+      "since": "2026-10-13T06:04:00Z",
+      "related": {
+        "horizon": null,
+        "source": null,
+        "pair": null
+      }
+    }
+  ]
+}

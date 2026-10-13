@@ -1,0 +1,549 @@
+{
+  "generated_at": "2026-10-13T06:00:00Z",
+  "model": {
+    "run_id": "mr_2026-10-13",
+    "name": "B1",
+    "version": "1.3.0",
+    "role": "champion"
+  },
+  "items": [
+    {
+      "rank": 1,
+      "pair": {
+        "origin": "Livelo",
+        "destination": "Smiles"
+      },
+      "type": "transfer_bonus",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.62,
+          "ci_low": 0.56,
+          "ci_high": 0.67
+        },
+        "15": {
+          "probability": 0.81,
+          "ci_low": 0.75,
+          "ci_high": 0.86
+        },
+        "30": {
+          "probability": 0.94,
+          "ci_low": 0.88,
+          "ci_high": 0.99
+        }
+      },
+      "bonus_pct": {
+        "p25": 70,
+        "p50": 80,
+        "p75": 100
+      },
+      "last_offer": {
+        "start_at": "2026-09-12",
+        "end_at": "2026-09-18",
+        "bonus_pct": 80,
+        "days_since": 31
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "31 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 27 dias",
+          "weight": 0.42
+        },
+        {
+          "kind": "month",
+          "label": "Outubro concentra 11% das ofertas do par",
+          "detail": "3º mês mais ativo em 36 meses",
+          "weight": 0.21
+        },
+        {
+          "kind": "sibling_pairs",
+          "label": "Livelo → LATAM Pass ativo desde 10/10",
+          "detail": "pares irmãos costumam abrir em até 5 dias",
+          "weight": 0.18
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "pair": {
+        "origin": "Esfera",
+        "destination": "Smiles"
+      },
+      "type": "transfer_bonus",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.48,
+          "ci_low": 0.42,
+          "ci_high": 0.53
+        },
+        "15": {
+          "probability": 0.7,
+          "ci_low": 0.64,
+          "ci_high": 0.75
+        },
+        "30": {
+          "probability": 0.88,
+          "ci_low": 0.82,
+          "ci_high": 0.93
+        }
+      },
+      "bonus_pct": {
+        "p25": 60,
+        "p50": 80,
+        "p75": 90
+      },
+      "last_offer": {
+        "start_at": "2026-09-05",
+        "end_at": "2026-09-11",
+        "bonus_pct": 80,
+        "days_since": 38
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "38 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 35 dias",
+          "weight": 0.47
+        },
+        {
+          "kind": "sibling_pairs",
+          "label": "Livelo → Smiles previsto para a mesma janela",
+          "detail": "Esfera acompanha a Livelo em 64% dos casos",
+          "weight": 0.22
+        },
+        {
+          "kind": "month",
+          "label": "Outubro concentra 9% das ofertas do par",
+          "detail": "mediana mensal: 8%",
+          "weight": 0.1
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "pair": {
+        "origin": "Livelo",
+        "destination": "LATAM Pass"
+      },
+      "type": "transfer_bonus",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.21,
+          "ci_low": 0.15,
+          "ci_high": 0.26
+        },
+        "15": {
+          "probability": 0.44,
+          "ci_low": 0.38,
+          "ci_high": 0.49
+        },
+        "30": {
+          "probability": 0.72,
+          "ci_low": 0.66,
+          "ci_high": 0.77
+        }
+      },
+      "bonus_pct": {
+        "p25": 50,
+        "p50": 70,
+        "p75": 80
+      },
+      "last_offer": {
+        "start_at": "2026-10-10",
+        "end_at": null,
+        "bonus_pct": 70,
+        "days_since": 3
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "Oferta em curso há 3 dias",
+          "detail": "renovação rápida acontece em 18% dos casos",
+          "weight": 0.31
+        },
+        {
+          "kind": "month",
+          "label": "Outubro concentra 10% das ofertas do par",
+          "detail": "2º mês mais ativo",
+          "weight": 0.24
+        },
+        {
+          "kind": "source_signal",
+          "label": "2 fontes mencionam prorrogação",
+          "detail": "Passageiro de Primeira e Melhores Cartões",
+          "weight": 0.15
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "pair": {
+        "origin": "Livelo",
+        "destination": "Azul Fidelidade"
+      },
+      "type": "transfer_bonus",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.19,
+          "ci_low": 0.13,
+          "ci_high": 0.24
+        },
+        "15": {
+          "probability": 0.41,
+          "ci_low": 0.35,
+          "ci_high": 0.46
+        },
+        "30": {
+          "probability": 0.69,
+          "ci_low": 0.63,
+          "ci_high": 0.74
+        }
+      },
+      "bonus_pct": {
+        "p25": 50,
+        "p50": 60,
+        "p75": 80
+      },
+      "last_offer": {
+        "start_at": "2026-08-28",
+        "end_at": "2026-09-03",
+        "bonus_pct": 60,
+        "days_since": 46
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "46 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 41 dias",
+          "weight": 0.5
+        },
+        {
+          "kind": "month",
+          "label": "Outubro concentra 6% das ofertas do par",
+          "detail": "abaixo da mediana mensal",
+          "weight": 0.08
+        },
+        {
+          "kind": "sibling_pairs",
+          "label": "Esfera → Azul sem oferta há 52 dias",
+          "detail": "par irmão também atrasado",
+          "weight": 0.19
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "pair": {
+        "origin": "Livelo",
+        "destination": "Smiles"
+      },
+      "type": "transfer_bonus",
+      "segmented": true,
+      "segment_label": "Clube Smiles",
+      "windows": {
+        "7": {
+          "probability": 0.33,
+          "ci_low": 0.27,
+          "ci_high": 0.38
+        },
+        "15": {
+          "probability": 0.52,
+          "ci_low": 0.46,
+          "ci_high": 0.57
+        },
+        "30": {
+          "probability": 0.66,
+          "ci_low": 0.6,
+          "ci_high": 0.71
+        }
+      },
+      "bonus_pct": {
+        "p25": 90,
+        "p50": 100,
+        "p75": 110
+      },
+      "last_offer": {
+        "start_at": "2026-09-12",
+        "end_at": "2026-09-18",
+        "bonus_pct": 100,
+        "days_since": 31
+      },
+      "reasons": [
+        {
+          "kind": "sibling_pairs",
+          "label": "Oferta geral Livelo → Smiles prevista em 7 dias",
+          "detail": "a segmentada acompanha a geral em 81% dos casos",
+          "weight": 0.44
+        },
+        {
+          "kind": "days_since_last",
+          "label": "31 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 27 dias",
+          "weight": 0.3
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "pair": {
+        "origin": "Esfera",
+        "destination": "LATAM Pass"
+      },
+      "type": "transfer_bonus",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.14,
+          "ci_low": 0.08,
+          "ci_high": 0.19
+        },
+        "15": {
+          "probability": 0.3,
+          "ci_low": 0.24,
+          "ci_high": 0.35
+        },
+        "30": {
+          "probability": 0.58,
+          "ci_low": 0.52,
+          "ci_high": 0.63
+        }
+      },
+      "bonus_pct": {
+        "p25": 40,
+        "p50": 60,
+        "p75": 70
+      },
+      "last_offer": {
+        "start_at": "2026-09-20",
+        "end_at": "2026-09-26",
+        "bonus_pct": 60,
+        "days_since": 23
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "23 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 33 dias",
+          "weight": 0.28
+        },
+        {
+          "kind": "month",
+          "label": "Outubro concentra 7% das ofertas do par",
+          "detail": "mediana mensal: 8%",
+          "weight": 0.12
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "pair": {
+        "origin": "Livelo",
+        "destination": "Livelo"
+      },
+      "type": "purchase_discount",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.12,
+          "ci_low": 0.06,
+          "ci_high": 0.17
+        },
+        "15": {
+          "probability": 0.27,
+          "ci_low": 0.21,
+          "ci_high": 0.32
+        },
+        "30": {
+          "probability": 0.55,
+          "ci_low": 0.49,
+          "ci_high": 0.6
+        }
+      },
+      "bonus_pct": {
+        "p25": 30,
+        "p50": 40,
+        "p75": 50
+      },
+      "last_offer": {
+        "start_at": "2026-09-24",
+        "end_at": "2026-09-28",
+        "bonus_pct": 40,
+        "days_since": 19
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "19 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 29 dias",
+          "weight": 0.26
+        },
+        {
+          "kind": "month",
+          "label": "Outubro concentra 8% das ofertas",
+          "detail": "mediana mensal: 8%",
+          "weight": 0.12
+        }
+      ]
+    },
+    {
+      "rank": 8,
+      "pair": {
+        "origin": "Esfera",
+        "destination": "Azul Fidelidade"
+      },
+      "type": "transfer_bonus",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.11,
+          "ci_low": 0.05,
+          "ci_high": 0.16
+        },
+        "15": {
+          "probability": 0.25,
+          "ci_low": 0.19,
+          "ci_high": 0.3
+        },
+        "30": {
+          "probability": 0.52,
+          "ci_low": 0.46,
+          "ci_high": 0.57
+        }
+      },
+      "bonus_pct": {
+        "p25": 40,
+        "p50": 60,
+        "p75": 70
+      },
+      "last_offer": {
+        "start_at": "2026-08-22",
+        "end_at": "2026-08-27",
+        "bonus_pct": 60,
+        "days_since": 52
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "52 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 44 dias",
+          "weight": 0.39
+        },
+        {
+          "kind": "sibling_pairs",
+          "label": "Livelo → Azul previsto em 30 dias",
+          "detail": "par irmão com atraso parecido",
+          "weight": 0.17
+        }
+      ]
+    },
+    {
+      "rank": 9,
+      "pair": {
+        "origin": "Smiles",
+        "destination": "Smiles"
+      },
+      "type": "boosted_accrual",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.08,
+          "ci_low": 0.02,
+          "ci_high": 0.13
+        },
+        "15": {
+          "probability": 0.18,
+          "ci_low": 0.12,
+          "ci_high": 0.23
+        },
+        "30": {
+          "probability": 0.37,
+          "ci_low": 0.31,
+          "ci_high": 0.42
+        }
+      },
+      "bonus_pct": {
+        "p25": 20,
+        "p50": 30,
+        "p75": 50
+      },
+      "last_offer": {
+        "start_at": "2026-09-02",
+        "end_at": "2026-09-30",
+        "bonus_pct": 30,
+        "days_since": 13
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "13 dias desde o fim da última campanha",
+          "detail": "intervalo mediano histórico: 40 dias",
+          "weight": 0.2
+        },
+        {
+          "kind": "month",
+          "label": "Outubro concentra 5% das campanhas",
+          "detail": "abaixo da mediana",
+          "weight": 0.06
+        }
+      ]
+    },
+    {
+      "rank": 10,
+      "pair": {
+        "origin": "LATAM Pass",
+        "destination": "LATAM Pass"
+      },
+      "type": "purchase_discount",
+      "segmented": false,
+      "segment_label": null,
+      "windows": {
+        "7": {
+          "probability": 0.06,
+          "ci_low": 0,
+          "ci_high": 0.11
+        },
+        "15": {
+          "probability": 0.15,
+          "ci_low": 0.09,
+          "ci_high": 0.2
+        },
+        "30": {
+          "probability": 0.31,
+          "ci_low": 0.25,
+          "ci_high": 0.36
+        }
+      },
+      "bonus_pct": {
+        "p25": 20,
+        "p50": 30,
+        "p75": 40
+      },
+      "last_offer": {
+        "start_at": "2026-10-01",
+        "end_at": "2026-10-05",
+        "bonus_pct": 30,
+        "days_since": 12
+      },
+      "reasons": [
+        {
+          "kind": "days_since_last",
+          "label": "12 dias desde a última oferta",
+          "detail": "intervalo mediano histórico: 36 dias",
+          "weight": 0.18
+        }
+      ]
+    }
+  ]
+}
