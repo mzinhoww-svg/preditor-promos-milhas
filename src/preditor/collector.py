@@ -212,16 +212,18 @@ def store_raw(engine, source, url, content, collected_at=None, observed_at=None)
     return raw
 
 def _dt(v):
+    if v is None:
+        return None
     if isinstance(v, datetime):
         return v
     if isinstance(v, str):
         try:
             return datetime.fromisoformat(v)
         except ValueError:
-            return datetime.now(UTC)
+            return None
     if isinstance(v, date):
         return datetime(v.year, v.month, v.day, tzinfo=UTC)
-    return datetime.now(UTC)
+    return None
 
 def _parse_date_text(s):
     if s is None:
@@ -388,7 +390,11 @@ def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=N
         try:
             robots_txt = fetch_robots(source, transport=transport, rate_limiter=rl)
         except (OSError, ValueError, RuntimeError):
-            robots_txt = ""
+            robots_txt = None
+        if robots_txt is None:
+            # fail closed: do not fetch feed if robots cannot be read
+            update_source_health(engine, source, items_new=0, extraction_rate=None, robots_txt=None, now=ts, alert=True)
+            return []
     raw_ids = []
     items_new_count = 0
     offers_created = 0

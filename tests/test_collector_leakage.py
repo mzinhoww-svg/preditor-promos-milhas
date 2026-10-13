@@ -159,18 +159,22 @@ def test_K11_pubdate_future_uses_min(eng):
     assert fs <= datetime(2025, 3, 9, 12, tzinfo=UTC)
 
 
-def test_K12_robots_fetched_when_absent(eng):
+feed = ('<rss><channel><item><title>Livelo para Smiles com 90% de bônus na transferência de 10/03 a 15/03</title>'
+            '<link>https://passageirodeprimeira.com/a/</link></item></channel></rss>')
+
+
+def test_K12_robots_fetch_failure_fails_closed(eng):
     calls = []
 
-    def transport(u):
+    def tr(u):
         calls.append(u)
-        if "robots" in u:
-            return "User-agent: *\nAllow: /\n"
-        return "<rss/>"
+        if u.endswith("robots.txt"):
+            raise OSError("down")
+        return feed
 
     C.collect_rss(engine=eng, source="passageirodeprimeira.com", url="https://passageirodeprimeira.com/feed/",
-                  transport=transport, now=datetime(2025, 1, 1, tzinfo=UTC), min_interval=0)
-    assert any("robots.txt" in c for c in calls)
+                  transport=tr, now=datetime(2025, 3, 9, tzinfo=UTC), min_interval=0)
+    assert not any(u.endswith("/feed/") for u in calls)
 
 
 def test_K13_same_content_observed_min_leasts(eng):
@@ -244,3 +248,10 @@ def test_P4_recompute_first_seen_min_over_evidences_instant(eng):
     with eng.connect() as c:
         fs = c.execute(text("SELECT min(first_seen_at) FROM offer")).scalar()
     assert fs.date() == date(2025, 3, 5)
+
+
+def test_P7_invalid_observed_string_not_now(eng):
+    C.store_raw(eng, "passageirodeprimeira.com", "https://p/c", "Livelo para Smiles 90% de 10/03 a 15/03",
+               observed_at="lixo")
+    with eng.connect() as c:
+        assert c.execute(text("SELECT observed_at FROM raw_message")).scalar() is None

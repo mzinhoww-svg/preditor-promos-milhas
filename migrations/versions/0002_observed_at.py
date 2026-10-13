@@ -5,8 +5,8 @@ revision = "0002"
 down_revision = "0001"
 
 UP = """
-ALTER TABLE raw_message ADD COLUMN observed_at TIMESTAMPTZ;
-ALTER TABLE source_health ADD COLUMN robots_hash TEXT;
+ALTER TABLE raw_message ADD COLUMN IF NOT EXISTS observed_at TIMESTAMPTZ;
+ALTER TABLE source_health ADD COLUMN IF NOT EXISTS robots_hash TEXT;
 """
 DOWN = """
 ALTER TABLE raw_message DROP COLUMN IF EXISTS observed_at;
