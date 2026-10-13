@@ -6,10 +6,18 @@ import json
 from preditor.painel import calc_progress
 
 
-def test_empty_checklist_is_zero():
+def test_empty_checklist_exposes_error():
     r = calc_progress([])
-    assert r["overall"] == 0.0
-    assert r["n_items"] == 0
+    assert r["checklist_error"]
+    assert r["overall"] is None
+
+
+def test_invalid_checklist_exposes_error():
+    r = calc_progress("not json")
+    assert r["checklist_error"]
+    r2 = calc_progress({})
+    assert r2["checklist_error"]
+
 
 
 def test_all_done_is_one():
@@ -29,6 +37,14 @@ def test_factors_weighted():
     ]
     r = calc_progress(items)
     assert abs(r["overall"] - (2.15 / 5)) < 1e-9
+
+
+def test_nonfinite_weight_does_not_create_nan():
+    import math
+    items = [{"estado": "Feito", "peso": float("inf"), "fase": "Setup"}]
+    r = calc_progress(items)
+    assert r["overall"] is not None
+    assert math.isfinite(r["overall"])
 
 
 def test_blocked_and_pending_zero():

@@ -5,6 +5,7 @@ com campos id/fase/peso/estado (ou equivalente em inglês).
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -41,6 +42,11 @@ STATE_ALIASES = {
     "done": "Feito",
     "concluido": "Feito",
     "concluído": "Feito",
+    "concluida": "Feito",
+    "concluída": "Feito",
+    "devolvida": "Em revisao",
+    "devolvido": "Em revisao",
+    "returned": "Em revisao",
     "em revisao": "Em revisao",
     "em revisão": "Em revisao",
     "em_revisao": "Em revisao",
@@ -202,6 +208,46 @@ def calc_progress(data: Any = None, *, items: Any = None, checklist: Any = None,
             if source is None:
                 source = next(iter(kwargs.values())) if kwargs else []
     raw_items = _extract_items(source)
+    # Se source era string, ja foi tentado parse dentro de _extract_items.
+    # Detecta ausencia de itens (vazio/invalido/ausente) como erro, nao 0% silencioso.
+    source_was_text = isinstance(source, str)
+    parsed_ok = True
+    if source_was_text:
+        try:
+            import json as _json
+            _json.loads(source)
+        except Exception:  # noqa: BLE001
+            parsed_ok = False
+    if not raw_items:
+        err = "checklist ausente ou invalido"
+        if source_was_text and not parsed_ok:
+            err = "checklist JSON invalido"
+        elif source_was_text:
+            err = "checklist sem itens"
+        result = {
+            "overall": None,
+            "overall_percent": None,
+            "overall_pct": None,
+            "percent": None,
+            "percentage": None,
+            "geral": None,
+            "geral_pct": None,
+            "geral_ratio": None,
+            "by_phase": {},
+            "by_phase_pct": {},
+            "por_fase": {},
+            "por_fase_ratio": {},
+            "fases": {},
+            "total_weight": 0.0,
+            "done_weight": 0.0,
+            "n_items": 0,
+            "state_counts": {st: 0 for st in CANONICAL_STATES},
+            "counts": {st: 0 for st in CANONICAL_STATES},
+            "items": [],
+            "checklist_error": err,
+            "error": err,
+        }
+        return result
     norm = [_normalize_item(x) for x in raw_items]
 
     total_weight = 0.0
@@ -214,7 +260,7 @@ def calc_progress(data: Any = None, *, items: Any = None, checklist: Any = None,
             w = float(it["peso"])
         except (TypeError, ValueError):
             w = 1.0
-        if w < 0:
+        if not math.isfinite(w) or w < 0:
             w = 0.0
         f = factor_for(it["raw_state"])
         phase = _phase_name(it["fase"])
@@ -264,6 +310,8 @@ def calc_progress(data: Any = None, *, items: Any = None, checklist: Any = None,
         "counts": state_counts,
         "state_counts_total": state_counts,
         "items": norm,
+        "checklist_error": None,
+        "error": None,
     }
     return result
 

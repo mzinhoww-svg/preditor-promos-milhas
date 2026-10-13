@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import os
 import re
 import subprocess
 import threading
@@ -27,16 +28,17 @@ STATE: dict = {"data": None, "updated": 0.0}
 
 
 def run_cmd(cmd: list[str], timeout: int = 20) -> tuple[str | None, str | None]:
+    env = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=str(ROOT), check=False)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=str(ROOT), check=False, env=env)
     except FileNotFoundError:
-        return None, "comando nao encontrado"
+        return None, "comando indisponivel"
     except subprocess.TimeoutExpired:
         return None, "timeout"
-    except Exception as e:  # noqa: BLE001  # pragma: no cover
-        return None, str(e)
+    except Exception:  # noqa: BLE001  # pragma: no cover
+        return None, "erro"
     if p.returncode != 0:
-        return None, (p.stderr or "").strip()[:300]
+        return None, "falha"
     return p.stdout, None
 
 
@@ -61,8 +63,8 @@ def parse_md_table(path: Path) -> list[dict]:
         s = line.strip()
         if not s.startswith("|") or set(s.replace("|", "").strip()) <= set("-: "):
             continue
-        cells = [c.strip() for c in s.strip().strip("|").split("|")]
-        if len(cells) < 4:
+        cells = [c.strip() for c in re.split(r"(?<!\\)\|", s.strip().strip("|"))]
+        if len(cells) < 4 or all(not c for c in cells):
             continue
         if cells[0].lower() in ("id", "tarefa", ""):
             continue
@@ -109,7 +111,7 @@ def read_status() -> dict:
     if not blocks or not nxt:
         # fallback: include whole text
         pass
-    return {"raw": text, "blocks": blocks, "next_steps": nxt}
+    return {"blocks": blocks, "next_steps": nxt}
 
 
 def collect_prs() -> dict:
@@ -183,39 +185,51 @@ def collect_agents() -> dict:
             mr = re.search(r'role:\s*"([^"]*)"', s)
             if mr:
                 current["role"] = mr.group(1)
-    return {"available": True, "error": None, "raw": out, "agents": agents}
+    return {"available": True, "error": None, "agents": agents}
+
+
+def collect_ci_main() -> tuple[dict | None, str | None]:
+    out, err = run_cmd(
+        ["gh", "run", "list", "--branch", "main", "--limit", "1",
+         "--json", "databaseId,status,conclusion,name,updatedAt,headSha,workflowName"],
+        timeout=30,
+    )
+    if out is None:
+        return None, err or "indisponivel"
+    try:
+        arr = json.loads(out)
+    except Exception:  # noqa: BLE001
+        return None, "json invalido"
+    if not isinstance(arr, list) or not arr:
+        return None, "sem runs"
+    run = arr[0]
+    run_id = run.get("databaseId")
+    passed = None
+    failed = None
+    if run_id is not None:
+        log_out, _ = run_cmd(["gh", "run", "view", str(run_id), "--log"], timeout=45)
+        if log_out:
+            matches = list(re.finditer(r"(\d+)\s+passed", log_out))
+            if matches:
+                passed = int(matches[-1].group(1))
+            matches_f = list(re.finditer(r"(\d+)\s+failed", log_out))
+            if matches_f:
+                failed = int(matches_f[-1].group(1))
+    run = dict(run)
+    run["passed"] = passed
+    run["failed"] = failed
+    return run, None
 
 
 def collect_tests() -> dict:
-    # pytest (best-effort, timeout)
-    cmd = ["uv", "run", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"]
-    out, err = run_cmd(cmd, timeout=120)
-    passed = None
-    failed = None
-    tail = ""
-    if out is not None:
-        tail = "\n".join((out or "").splitlines()[-8:])
-        m = re.search(r"(\d+)\s+passed", out or "")
-        if m:
-            passed = int(m.group(1))
-        m2 = re.search(r"(\d+)\s+failed", out or "")
-        if m2:
-            failed = int(m2.group(1))
-    # last CI on main
-    ci_out, _ = run_cmd(["gh", "run", "list", "--branch", "main", "--limit", "1",
-                              "--json", "status,conclusion,name,updatedAt,headSha"], timeout=20)
-    last_ci = None
-    if ci_out is not None:
-        try:
-            arr = json.loads(ci_out)
-            if arr:
-                last_ci = arr[0]
-        except Exception:  # noqa: BLE001
-            last_ci = None
+    run, err = collect_ci_main()
+    passed = run.get("passed") if isinstance(run, dict) else None
+    failed = run.get("failed") if isinstance(run, dict) else None
     return {
-        "pytest": {"available": out is not None, "passed": passed, "failed": failed,
-                   "error": None if out is not None else (err or "pytest indisponivel"), "tail": tail},
-        "last_ci_main": last_ci,
+        "passed": passed,
+        "failed": failed,
+        "error": err,
+        "last_ci_main": run,
     }
 
 
@@ -256,6 +270,7 @@ def build_data() -> dict:
     prog = load_json(PROGRESS)
 
     calc = calc_progress(ck)
+    checklist_error = calc.get("checklist_error") or calc.get("error")
     # attach checklist meta
     if isinstance(ck, dict):
         calc["updated_at"] = ck.get("updated_at")
@@ -298,8 +313,8 @@ def build_data() -> dict:
         "checklist": {
             "items": calc.get("items", []),
             "progress": calc,
-            "raw": ck,
         },
+        "checklist_error": checklist_error,
         "tasks": tasks,
         "task_counts": task_counts,
         "prs": prs,
@@ -329,7 +344,7 @@ HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Painel de Progresso - MVP</title>
 <style>
-:root{--bg:#ffffff;--fg:#111;--muted:#555;--card:#f4f4f5;--dark:#1a1a1a;--accent:#0b5ed7;--done:#16803d;--rev:#b45309;--prog:#2563eb;--pend:#6b7280;--block:#dc2626;}
+:root{--bg:#ffffff;--fg:#111;--muted:#555;--card:#f4f4f5;--dark:#1a1a1a;--accent:#0b5ed7;--done:#16803d;--rev:#b45309;--prog:#2563eb;--pend:#6b7280;--block:#dc2626;--err:#991b1b;--errbg:#fee2e2}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:18px;line-height:1.3}
 .wrap{max-width:1500px;margin:0 auto;padding:24px}
@@ -342,7 +357,6 @@ h2{font-size:24px;margin:22px 0 10px}
 .span-12{grid-column:span 12}
 .span-6{grid-column:span 6}
 .span-4{grid-column:span 4}
-.span-3{grid-column:span 3}
 .num{font-size:72px;font-weight:800;line-height:1}
 .bar{height:28px;background:#e5e7eb;border-radius:14px;overflow:hidden}
 .bar>div{height:100%;background:var(--accent);transition:width .5s}
@@ -353,8 +367,8 @@ h2{font-size:24px;margin:22px 0 10px}
 .item:last-child{border-bottom:none}
 .badge{display:inline-block;padding:4px 10px;border-radius:999px;color:#fff;font-size:14px;font-weight:700;white-space:nowrap}
 .b-Feito{background:var(--done)}
-.b-Em\ revisao{background:var(--rev)}
-.b-Em\ andamento{background:var(--prog)}
+.b-Em-revisao{background:var(--rev)}
+.b-Em-andamento{background:var(--prog)}
 .b-Pendente{background:var(--pend)}
 .b-Bloqueado{background:var(--block)}
 .b-Desconhecido{background:var(--pend)}
@@ -368,11 +382,13 @@ ul{margin:8px 0;padding-left:20px}
 li{margin:4px 0}
 table{width:100%;border-collapse:collapse}
 td,th{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:left}
-@media (max-width:1100px){.span-6,.span-4,.span-3{grid-column:span 12}.item{grid-template-columns:1fr}}
+.banner{display:none;background:var(--errbg);color:var(--err);padding:12px 16px;border-radius:10px;margin:0 0 16px;font-weight:700}
+@media (max-width:1100px){.span-6,.span-4{grid-column:span 12}.item{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="wrap">
+<div id="errorBanner" class="banner"></div>
 <h1>Painel de progresso - MVP</h1>
 <div class="sub">Atualiza a cada 5s (dados recalculados a cada 15s). Fonte: docs/mvp-checklist.json + TASKS.md + GitHub. Gasto: OpenRouter teto R$ 100.</div>
 
@@ -386,13 +402,13 @@ td,th{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:
     <div id="overallNote" style="margin-top:6px;font-size:14px;color:#bbb">o percentual mede itens do MVP, nao tempo</div>
   </div>
   <div class="card span-4">
-    <div style="font-size:20px;font-weight:700;margin-bottom:6px">Testes</div>
+    <div style="font-size:20px;font-weight:700;margin-bottom:6px">Testes / CI da main</div>
     <div style="font-size:46px;font-weight:800" id="testsNum">--</div>
-    <div style="font-size:16px;color:var(--muted)">passando</div>
+    <div style="font-size:16px;color:var(--muted)">ultimo CI</div>
     <div style="margin-top:8px;font-size:15px" id="testsDetail"></div>
   </div>
   <div class="card span-4">
-    <div style="font-size:20px;font-weight:700;margin-bottom:6px">Orçamento</div>
+    <div style="font-size:20px;font-weight:700;margin-bottom:6px">Orcamento</div>
     <div style="font-size:46px;font-weight:800" id="budgetNum">--</div>
     <div style="font-size:16px;color:var(--muted)">gasto de R$ 100</div>
     <div class="bar" style="margin-top:10px"><div id="budgetBar"></div></div>
@@ -406,10 +422,10 @@ td,th{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:
     <div id="phases"></div>
   </div>
   <div class="card span-6">
-    <h2 style="margin-top:0">Bloqueios e próximos passos</h2>
+    <h2 style="margin-top:0">Bloqueios e proximos passos</h2>
     <div style="font-weight:700;margin-bottom:4px">Bloqueios</div>
     <ul id="blocks"></ul>
-    <div style="font-weight:700;margin:10px 0 4px">Próximos passos</div>
+    <div style="font-weight:700;margin:10px 0 4px">Proximos passos</div>
     <ul id="nexts"></ul>
   </div>
 </div>
@@ -436,103 +452,183 @@ td,th{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:
 </div>
 
 <div class="card span-12" style="margin-top:16px">
-  <h2 style="margin-top:0">Último CI da main</h2>
+  <h2 style="margin-top:0">Ultimo CI da main</h2>
   <div id="lastCi"></div>
 </div>
 
 </div>
 <script>
-const STATE_COLOR={"Feito":"done","Em revisao":"rev","Em andamento":"prog","Pendente":"pend","Bloqueado":"block","Desconhecido":"pend"};
-const STATE_TEXT={"Feito":"Feito","Em revisao":"Em revisao","Em andamento":"Em andamento","Pendente":"Pendente","Bloqueado":"Bloqueado","Desconhecido":"Desconhecido"};
 const PHASES=["Setup","Portao de viabilidade/coleta","Estruturacao/extrator","Modelo","Produto/dashboard/API/deploy","Seguranca e custo"];
+function showError(msg){
+  const b=document.getElementById('errorBanner');
+  b.style.display='block';
+  b.textContent=msg;
+}
+function mk(tag, cls){const e=document.createElement(tag); if(cls) e.className=cls; return e;}
+function txt(parent, value){ parent.textContent = (value===null||value===undefined)?'':String(value); return parent; }
+function append(parent, child){ parent.appendChild(child); return parent; }
 
 async function load(){
+  let d=null;
   try{
     const r=await fetch('/data.json',{cache:'no-store'});
-    const d=await r.json();
-    render(d);
-  }catch(e){console.error(e);}
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    d=await r.json();
+  }catch(e){
+    showError('data.json invalido ou inacessivel: '+e.message);
+    return;
+  }
+  const banner=document.getElementById('errorBanner');
+  banner.style.display='none';
+  if(d && (d.error || d.checklist_error)){
+    showError('Erro: '+(d.error||d.checklist_error));
+  }
+  render(d||{});
 }
 function render(d){
-  const op=d.overall_percent||0;
-  document.getElementById('overallNum').textContent=Math.round(op)+'%';
-  document.getElementById('overallBar').style.width=op+'%';
-  const sc=d.checklist?.progress?.state_counts||{};
+  const op = (typeof d.overall_percent === 'number' && isFinite(d.overall_percent)) ? d.overall_percent : null;
+  document.getElementById('overallNum').textContent = (op===null?'--':Math.round(op)+'%');
+  document.getElementById('overallBar').style.width = (op===null?0:op)+'%';
+  const sc=d.checklist?.progress?.state_counts||d.checklist?.progress?.counts||{};
   document.getElementById('overallCounts').textContent='Feito: '+(sc.Feito||0)+' · Em revisao: '+(sc['Em revisao']||0)+' · Em andamento: '+(sc['Em andamento']||0)+' · Pendente: '+(sc.Pendente||0)+' · Bloqueado: '+(sc.Bloqueado||0);
-  document.getElementById('overallMeta').textContent='Itens: '+(d.checklist?.progress?.n_items||0)+' | peso: '+((d.checklist?.progress?.total_weight||0).toFixed(1));
+  document.getElementById('overallMeta').textContent='Itens: '+(d.checklist?.progress?.n_items||0)+' | peso: '+((d.checklist?.progress?.total_weight||0).toFixed?((d.checklist.progress.total_weight||0).toFixed(1)):(d.checklist?.progress?.total_weight||0));
   // tests
-  const t=d.tests?.pytest||{};
-  const passed=t.passed;
-  document.getElementById('testsNum').textContent=(passed===null?'--':passed);
-  document.getElementById('testsDetail').innerHTML='falhando: '+(t.failed??'?')+'<br>'+ (d.tests?.last_ci_main?('ultimo CI main: '+ (d.tests.last_ci_main.conclusion||d.tests.last_ci_main.status)):'');
+  const t=d.tests||{};
+  const lastCi=d.tests?.last_ci_main||t.last_ci_main||null;
+  const passed=(typeof t.passed==='number')?t.passed:(t.ci?.passed);
+  const testsNumEl=document.getElementById('testsNum');
+  if(lastCi && lastCi.conclusion && lastCi.conclusion!=='success'){
+    testsNumEl.textContent='FAIL';
+    testsNumEl.style.color='var(--block)';
+  } else {
+    testsNumEl.style.color='';
+    testsNumEl.textContent=(passed===undefined||passed===null?'--':passed);
+  }
+  const detail=document.getElementById('testsDetail');
+  detail.textContent='';
+  const ci=d.tests?.last_ci_main||t.last_ci_main||null;
+  if(ci){
+    const line=mk('div'); line.textContent='ultimo CI main: '+(ci.conclusion||ci.status||'--')+' · '+(ci.name||'')+' · '+(ci.updatedAt||'');
+    detail.appendChild(line);
+  }
+  if(t.error){ const e=mk('div'); e.textContent=t.error; detail.appendChild(e); }
   // budget
   const b=d.budget||{};
-  document.getElementById('budgetNum').textContent='R$ '+ (b.spent_brl||0).toFixed(2);
-  const bp=(b.percent||0);
+  document.getElementById('budgetNum').textContent='R$ '+((b.spent_brl||0).toFixed? (b.spent_brl||0).toFixed(2): (b.spent_brl||0));
+  const bp=(typeof b.percent==='number' && isFinite(b.percent))? b.percent : 0;
   document.getElementById('budgetBar').style.width=Math.min(100,bp)+'%';
-  document.getElementById('budgetDetail').textContent='teto R$ '+(b.cap_brl||100).toFixed(2)+' ('+bp.toFixed(1)+'%)';
+  document.getElementById('budgetDetail').textContent='teto R$ '+((b.cap_brl||100).toFixed? (b.cap_brl||100).toFixed(2): (b.cap_brl||100))+' ('+bp.toFixed(1)+'%)';
   // phases
   const ph=d.phases||{};
-  let phHtml='';
+  const phasesDiv=document.getElementById('phases');
+  phasesDiv.textContent='';
   for(const p of PHASES){
-    const val=(ph[p]!==undefined?ph[p]:0);
-    const num=typeof val==='number'?(val<=1?val*100:val):0;
-    phHtml+='<div class="phase"><div class="label"><span>'+p+'</span><span>'+Math.round(num)+'%</span></div><div class="bar"><div style="width:'+num+'%"></div></div></div>';
+    const val=ph[p];
+    const num=(typeof val==='number' && isFinite(val))?(val<=1?val*100:val):0;
+    const wrap=mk('div','phase');
+    const label=mk('div','label');
+    const left=mk('span'); left.textContent=p;
+    const right=mk('span'); right.textContent=Math.round(num)+'%';
+    append(label,left); append(label,right);
+    const bar=mk('div','bar'); const fill=mk('div'); fill.style.width=num+'%'; bar.appendChild(fill);
+    append(wrap,label); append(wrap,bar);
+    phasesDiv.appendChild(wrap);
   }
-  document.getElementById('phases').innerHTML=phHtml;
   // items
-  const items=d.checklist?.items||[];
-  let itHtml='';
+  const itemsDiv=document.getElementById('items');
+  itemsDiv.textContent='';
+  const items = (d.checklist && Array.isArray(d.checklist.items)) ? d.checklist.items : [];
+  if(d.checklist_error){
+    const e=mk('div'); e.style.color='var(--err)'; e.textContent='Checklist invalido: '+d.checklist_error; itemsDiv.appendChild(e);
+  }
   for(const it of items){
     const st=it.estado||'Pendente';
-    const cls='b-'+st.replace(/ /g,'\\ ');
-    itHtml+='<div class="item">'+
-      '<div style="font-weight:700">'+(it.id||'')+'</div>'+
-      '<div>'+(it.title||'')+'<div style="font-size:13px;color:var(--muted)">'+(it.fase||'')+' &middot; peso '+(it.peso??'')+'</div></div>'+
-      '<div><span class="badge '+cls+'">'+st+'</span></div>'+
-      '<div style="font-size:14px">'+(it.evidencia||'')+'</div>'+
-      '<div style="font-size:14px;color:var(--muted)">'+(it.updated_at||'')+'</div>'+
-    '</div>';
+    const row=mk('div','item');
+    const c1=mk('div'); c1.style.fontWeight='700'; c1.textContent=it.id||'';
+    const c2=mk('div');
+    const title=mk('div'); title.textContent=it.title||'';
+    const meta=mk('div'); meta.style.fontSize='13px'; meta.style.color='var(--muted)'; meta.textContent=(it.fase||'')+' · peso '+(it.peso??'');
+    append(c2,title); append(c2,meta);
+    const c3=mk('div'); const badge=mk('span','badge b-'+String(st).replace(/ /g,'-')); badge.textContent=st; c3.appendChild(badge);
+    const c4=mk('div'); c4.style.fontSize='14px'; c4.textContent=it.evidencia||'';
+    const c5=mk('div'); c5.style.fontSize='14px'; c5.style.color='var(--muted)'; c5.textContent=it.updated_at||'';
+    [c1,c2,c3,c4,c5].forEach(c=>row.appendChild(c));
+    itemsDiv.appendChild(row);
   }
-  document.getElementById('items').innerHTML=itHtml || '<div style="color:var(--muted)">sem itens</div>';
+  if(!items.length && !d.checklist_error){ const e=mk('div'); e.style.color='var(--muted)'; e.textContent='sem itens'; itemsDiv.appendChild(e); }
   // PRs
-  function prCard(p){
-    const ci=p.ci||'unknown';
-    const cross=p.awaits_cross_test?' &middot; aguarda teste cruzado':'';
-    return '<div class="pr"><div style="font-weight:700">#'+p.number+' '+ (p.title||'') +'</div>'+
-      '<div style="font-size:14px;color:var(--muted)">CI: <span class="ci '+ci+'">'+ci+'</span>'+cross+' &middot; '+(p.state||'')+'</div></div>';
+  function renderPr(container, list){
+    container.textContent='';
+    const arr=Array.isArray(list)?list:[];
+    if(!arr.length){ const e=mk('div'); e.style.color='var(--muted)'; e.textContent='nehum'; container.appendChild(e); return;}
+    for(const p of arr){
+      const wrap=mk('div','pr');
+      const title=mk('div'); title.style.fontWeight='700'; title.textContent='#'+(p.number||'')+' '+(p.title||'');
+      const ci=p.ci||'unknown';
+      const cross = p.awaits_cross_test ? ' · aguarda teste cruzado' : '';
+      const sub=mk('div'); sub.style.fontSize='14px'; sub.style.color='var(--muted)';
+      const ciSpan=mk('span','ci '+ci); ciSpan.textContent=ci;
+      sub.textContent='CI: '; sub.appendChild(ciSpan); txt(sub, ' '+ (p.state||'') + cross);
+      // rebuild properly:
+      sub.textContent='';
+      const pref=mk('span'); pref.textContent='CI: '; sub.appendChild(pref);
+      sub.appendChild(ciSpan);
+      const tail=mk('span'); tail.textContent=' · '+(p.state||'')+cross; sub.appendChild(tail);
+      append(wrap,title); append(wrap,sub);
+      container.appendChild(wrap);
+    }
   }
-  document.getElementById('prsOpen').innerHTML=(d.prs?.open||[]).map(prCard).join('')||'<div style="color:var(--muted)">nehum</div>';
-  document.getElementById('prsMerged').innerHTML=(d.prs?.merged||[]).map(prCard).join('')||'<div style="color:var(--muted)">nehum</div>';
+  renderPr(document.getElementById('prsOpen'), d.prs?.open||[]);
+  renderPr(document.getElementById('prsMerged'), d.prs?.merged||[]);
   // agents
-  const agents=d.agents?.agents||[];
-  let agHtml='<ul>';
+  const agentsDiv=document.getElementById('agents');
+  agentsDiv.textContent='';
+  const agents=(d.agents && Array.isArray(d.agents.agents))?d.agents.agents:[];
+  if(d.agents && d.agents.available===false){ const e=mk('div'); e.style.color='var(--muted)'; e.textContent=d.agents.error||'maestri indisponivel'; agentsDiv.appendChild(e);}
+  const ul=mk('ul');
   for(const a of agents){
-    const ct=a.current_task || (a.tasks||[]).join(', ');
-    agHtml+='<li><b>'+ (a.name||'') +'</b> '+(a.role?'('+a.role+')':'')+(ct?' — '+ct:'')+'</li>';
+    const ct=a.current_task || (Array.isArray(a.tasks)?a.tasks.join(', '):'');
+    const li=mk('li');
+    const b=mk('b'); b.textContent=a.name||''; li.appendChild(b);
+    const role=a.role?' ('+a.role+')':''; const t=ct?' — '+ct:'';
+    li.appendChild(document.createTextNode(role+t));
+    ul.appendChild(li);
   }
-  agHtml+='</ul>';
-  if(d.agents?.available===false){agHtml='<div style="color:var(--muted)">'+(d.agents.error||'maestri indisponivel')+'</div>';}
-  document.getElementById('agents').innerHTML=agHtml;
+  agentsDiv.appendChild(ul);
   // tasks
-  const tasks=d.tasks||[];
-  let tHtml='<table><thead><tr><th>ID</th><th>Tarefa</th><th>Responsável</th><th>Status</th></tr></thead><tbody>';
+  const tasksDiv=document.getElementById('tasks');
+  tasksDiv.textContent='';
+  const table=mk('table');
+  const thead=mk('thead'); const hr=mk('tr');
+  ['ID','Tarefa','Responsavel','Status'].forEach(h=>{const th=mk('th'); th.textContent=h; hr.appendChild(th);});
+  thead.appendChild(hr); table.appendChild(thead);
+  const tbody=mk('tbody');
+  const tasks=Array.isArray(d.tasks)?d.tasks:[];
   for(const t of tasks){
-    tHtml+='<tr><td>'+ (t.id||'') +'</td><td>'+ (t.tarefa||'') +'</td><td>'+ (t.responsavel||'') +'</td><td>'+ (t.status||'') +'</td></tr>';
+    const tr=mk('tr');
+    [t.id,t.tarefa,t.responsavel,t.status].forEach(v=>{const td=mk('td'); td.textContent=(v===null||v===undefined)?'':v; tr.appendChild(td);});
+    tbody.appendChild(tr);
   }
-  tHtml+='</tbody></table>';
-  document.getElementById('tasks').innerHTML=tHtml;
+  table.appendChild(tbody);
+  tasksDiv.appendChild(table);
   // status
-  const blocks=d.status?.blocks||[];
-  const nexts=d.status?.next_steps||[];
-  document.getElementById('blocks').innerHTML=blocks.map(x=>'<li>'+x+'</li>').join('')||'<li style="color:var(--muted)">n/a</li>';
-  document.getElementById('nexts').innerHTML=nexts.map(x=>'<li>'+x+'</li>').join('')||'<li style="color:var(--muted)">n/a</li>';
+  const blocksDiv=document.getElementById('blocks'); blocksDiv.textContent='';
+  const blocks=Array.isArray(d.status?.blocks)?d.status.blocks:[];
+  if(!blocks.length){ const li=mk('li'); li.style.color='var(--muted)'; li.textContent='n/a'; blocksDiv.appendChild(li);}
+  for(const x of blocks){ const li=mk('li'); li.textContent=x; blocksDiv.appendChild(li);}
+  const nextsDiv=document.getElementById('nexts'); nextsDiv.textContent='';
+  const nexts=Array.isArray(d.status?.next_steps)?d.status.next_steps:[];
+  if(!nexts.length){ const li=mk('li'); li.style.color='var(--muted)'; li.textContent='n/a'; nextsDiv.appendChild(li);}
+  for(const x of nexts){ const li=mk('li'); li.textContent=x; nextsDiv.appendChild(li);}
   // last ci
-  const ci=d.tests?.last_ci_main;
-  if(ci){
-    document.getElementById('lastCi').innerHTML='<div style="font-size:20px;font-weight:700">'+(ci.conclusion||ci.status||'--')+'</div><div style="color:var(--muted);font-size:15px">'+(ci.name||'')+' &middot; '+ (ci.updatedAt||'') +'</div>';
-  }else{
-    document.getElementById('lastCi').textContent='indisponivel';
+  const lastCiDiv=document.getElementById('lastCi'); lastCiDiv.textContent='';
+  const lastCi = (d.tests&&d.tests.last_ci_main) ? d.tests.last_ci_main : null;
+  if(lastCi){
+    const a=mk('div'); a.style.fontWeight='700'; a.textContent=lastCi.conclusion||lastCi.status||'--';
+    const b=mk('div'); b.style.color='var(--muted)'; b.style.fontSize='15px'; b.textContent=(lastCi.name||'')+' · '+(lastCi.updatedAt||'');
+    lastCiDiv.appendChild(a); lastCiDiv.appendChild(b);
+  } else {
+    lastCiDiv.textContent='indisponivel';
   }
 }
 load();
@@ -558,7 +654,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data = STATE.get("data")
             if data is None:
                 data = {"error": "calculando", "generated_at": None}
-            b = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            b = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -583,8 +679,9 @@ def main() -> None:
             if STATE.get("data") is not None:
                 break
         time.sleep(0.1)
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 3300), Handler)
-    print("Painel em http://127.0.0.1:3300", flush=True)
+    port = int(os.getenv("PAINEL_PORT", "3300"))
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print(f"Painel em http://127.0.0.1:{port}", flush=True)
     httpd.serve_forever()
 
 
