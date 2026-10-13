@@ -8,11 +8,9 @@
 | T04 | Glossário e decisões 001 e 003 | orquestrador | concluida | docs/ |
 | T05-spec | Spec do coletor Livelo → Smiles | Planejador | em_revisao | PR #2: QA aprovou com ajustes, Planejador atualizando |
 | T05a | Cliente Wayback CDX e ingest idempotente | Programador | em_correcao (ciclo 2) | PR #1: QA devolveu B1 (rate limit anulável) |
-| T07a | Extrator determinístico regex + pydantic | Programador 2 | em_revisao | PR #5: Planejador aprovou vazamento (82ec792); falta resolver conflito com main e CI |
+| T07a | Extrator determinístico regex + pydantic | Programador 2 | em_revisao | PR #5: conflito com main resolvido, CI rodando (commit 82ec792) |
 | T08a | Baseline B0/B1 e walk-forward | Programador 3 | concluida | PR #3 mergeado; vazamento aprovado; T08 mantém grade diária e reconstrução point-in-time |
 | T09a | Dashboard v0 com dados de exemplo | Designer Frontend | em_revisao | PR #9: QA aprovou com ressalvas; corrigindo N1 e N2 |
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
 | T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
-
-Limite de correções: 3 por problema, depois o orquestrador simplifica ou corta.
