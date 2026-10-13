@@ -10,6 +10,9 @@ import httpx
 CDX_ENDPOINT = "https://web.archive.org/cdx/search/cdx"
 DEFAULT_USER_AGENT = "preditor-promos-milhas/0.1 (+https://github.com/mzinhoww-svg/preditor-promos-milhas)"
 
+_DOMAIN_MIN_INTERVAL = 1.0
+
+
 class WaybackError(Exception):
     """Erro de domínio do cliente Wayback/CDX."""
 
@@ -237,6 +240,13 @@ class CDXClient:
                     time.sleep(max(0.0, min(delay, 60.0)))
                     backoff = min(backoff * 2, 30.0)
                     continue
+                if response.status_code == 429:
+                    raise CDXRateLimitError(
+                        f"CDX HTTP {response.status_code}",
+                        request=getattr(response, "request", None),
+                        response=response,
+                        status_code=response.status_code,
+                    )
                 raise CDXHTTPError(
                     f"CDX HTTP {response.status_code}",
                     request=getattr(response, "request", None),
@@ -316,22 +326,48 @@ WaybackMachineClient = CDXClient
 Client = CDXClient
 
 
-_MODULE_LIMITER = RateLimiter(rate=1.0)
+_MODULE_LIMITER = RateLimiter(min_interval=_DOMAIN_MIN_INTERVAL)
+
+
+def _requested_interval(kwargs):
+    if "min_interval" in kwargs and kwargs.get("min_interval") is not None:
+        try:
+            return float(kwargs["min_interval"])
+        except (TypeError, ValueError):
+            return None
+    if "delay" in kwargs and kwargs.get("delay") is not None:
+        try:
+            return float(kwargs["delay"])
+        except (TypeError, ValueError):
+            return None
+    if "rate_limit_seconds" in kwargs and kwargs.get("rate_limit_seconds") is not None:
+        try:
+            return float(kwargs["rate_limit_seconds"])
+        except (TypeError, ValueError):
+            return None
+    if "rate_limit" in kwargs and kwargs.get("rate_limit") is not None:
+        try:
+            r = float(kwargs["rate_limit"])
+        except (TypeError, ValueError):
+            return None
+        if r <= 0:
+            return 0.0
+        return 1.0 / r
+    return None
 
 
 def list_captures(url, *args, **kwargs):
-    global _MODULE_LIMITER
     kwargs = dict(kwargs)
-    # seleciona rate do limiter compartilhado quando fornecido
-    rl = kwargs.get("rate_limit", kwargs.get("min_interval"))
-    if rl is None:
-        rl = kwargs.get("delay")
-    if "rate_limit" in kwargs or "min_interval" in kwargs or "delay" in kwargs or "rate_limit_seconds" in kwargs:
-        _MODULE_LIMITER = RateLimiter(
-            rate=kwargs.get("rate_limit", None),
-            min_interval=kwargs.get("min_interval", None),
-            delay=kwargs.get("delay", kwargs.get("rate_limit_seconds", None)),
-        )
+    # O limite de dominio nunca é desligado nem relaxado por chamada; parametro
+    # por chamada só pode tornar o limite mais restritivo (intervalo maior).
+    requested = _requested_interval(kwargs)
+    candidate = _MODULE_LIMITER.min_interval
+    if requested is not None:
+        candidate = max(candidate, requested, _DOMAIN_MIN_INTERVAL)
+    else:
+        candidate = max(candidate, _DOMAIN_MIN_INTERVAL)
+    _MODULE_LIMITER.min_interval = candidate
+
     _MODULE_LIMITER.wait()
 
     client = kwargs.pop("client", None) or kwargs.pop("cdx_client", None)

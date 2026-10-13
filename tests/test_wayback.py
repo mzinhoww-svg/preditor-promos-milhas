@@ -115,3 +115,17 @@ def test_module_level_rate_limit_sleeps(monkeypatch):
     list_captures("https://exemplo.com/promo", transport=transport)
     list_captures("https://exemplo.com/promo", transport=transport)
     assert slept, "limiter compartilhado nao dormiu na chamada de modulo"
+
+
+def test_module_list_rate_limit_not_reset_by_kwargs(monkeypatch):
+    slept = []
+    monkeypatch.setattr("preditor.wayback.time.sleep", lambda s: slept.append(s))
+    import preditor.wayback as w
+    # estado mais restritivo persiste mesmo com kwargs "leves"
+    w._MODULE_LIMITER = w.RateLimiter(min_interval=2.0)
+    w._MODULE_LIMITER._last = 0.5
+    monkeypatch.setattr("preditor.wayback.time.monotonic", lambda: 0.0)
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=FIXTURE))
+    # chamada com min_interval menor nao pode desligar o limite existente
+    list_captures("https://exemplo.com/promo", transport=transport, min_interval=0)
+    assert slept, "limite de modulo foi anulado por parametro por chamada"
