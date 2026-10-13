@@ -1,0 +1,34 @@
+   W1 treino ate 2026-01-05 teste de 2026-02-02 gap=28d  n_train=1 n_test=2 purged=2
+   W1 treino ate 2026-02-10 teste de 2026-03-05 gap=23d  n_train=5 n_test=1 purged=0
+[FALHA] W1 gap treino->teste >= horizonte maximo (30d) p/ rotulos H=30 (default purge_days=15)
+[FALHA] W2 itens sem data sao reportados (nao silenciosos) 3 itens sem data sumiram, sem aviso/contador
+   W3 treino (datetime.date(2024, 1, 15), datetime.date(2024, 2, 15)) teste (datetime.date(2026, 1, 15), datetime.date(2026, 1, 15))
+   W3 treino (datetime.date(2024, 1, 15), datetime.date(2026, 1, 15)) teste (datetime.date(2026, 2, 15), datetime.date(2026, 2, 15))
+   W3 treino (datetime.date(2024, 1, 15), datetime.date(2026, 2, 15)) teste (datetime.date(2026, 3, 15), datetime.date(2026, 3, 15))
+[FALHA] W3 janela de treino/teste respeita calendario (sem pular 2 anos) 
+   W4 teste (datetime.date(2025, 3, 10), datetime.date(2025, 9, 10)) (184d)
+   W4 teste (datetime.date(2025, 4, 10), datetime.date(2026, 6, 10)) (426d)
+[OK ] W5 propriedade: max(train) < min(test) em 400 casos aleatorios violacoes=0
+[OK ] W6 propriedade: gap >= purge_days violacoes=0
+   W7 split teste 2026-03-10: itens de treino com first_seen>=test_start: 0
+   W7 split teste 2026-04-10: itens de treino com first_seen>=test_start: 0
+[OK ] W7 treino so contem itens cujo first_seen_at < test_start 
+   W8 [(datetime.date(2026, 1, 6), datetime.date(2026, 3, 9), 1)]
+   W9 vazio: 0 splits
+   W9 None: 0 splits
+   W9 1 mes: 0 splits
+   W9 gerador: 0 splits
+   W10 {'train_months': 0} 2 splits (sem erro; clamp silencioso)
+   W10 {'test_months': -1} 1 splits (sem erro; clamp silencioso)
+   W10 {'step_months': 0} 0 splits (sem erro; clamp silencioso)
+   W10 {'purge_days': -5} 0 splits (sem erro; clamp silencioso)
+   W11 objeto duplicado -> [(2, 1)]
+[OK ] W12 idempotente e independe da ordem 
+[OK ] W13 sem item em dois conjuntos 
+   W14 purged: [] train_end 2026-03-17 test_start 2026-04-03
+   M1 vazio brier/logloss: 0.0 0.0 (0.0 = 'perfeito' p/ vazio)
+   M2 p>1: brier=0.25 logloss=9.999778782803785e-13
+   M2 p<0: brier=0.04000000000000001 logloss=9.999778782803785e-13
+   M2 y=2: brier=2.25 logloss=0.6931471805599453
+   M2 nan: brier=nan logloss=nan
+   M2 len: EXC ValueError('y_true e y_pred devem ter o mesmo tamanho')

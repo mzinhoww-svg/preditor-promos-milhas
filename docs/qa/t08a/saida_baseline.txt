@@ -1,0 +1,29 @@
+[OK ] A1 b0 first_seen>as_of ignorado {7: 0.11308216985397401, 15: 0.22674712921095053, 30: 0.4020799978164936} vs {7: 0.11308216985397401, 15: 0.22674712921095053, 30: 0.4020799978164936}
+[OK ] A1 b1 first_seen>as_of ignorado {7: 0.3016627039062503, 15: 0.6129005503221696, 30: 0.8779701094922029} vs {7: 0.3016627039062503, 15: 0.6129005503221696, 30: 0.8779701094922029}
+[FALHA] A2 first_seen 23h > as_of 08h (mesmo dia) ignorado 0.3016627039062503 vs 0.5217030999999999
+[OK ] A3 b0 start futuro ignorado 
+[OK ] A3 b1 start futuro ignorado 
+[OK ] A4 sem as_of nao levanta erro e vira 'ultimo start' (silencioso) p=0.4047392922257853
+   A4b vazio sem as_of: 0.0
+[OK ] A5 duplicatas exatas nao mudam B0 
+[FALHA] A5b +-3d mesma campanha dedup (glossario) {30: 0.4020799978164936} vs {30: 0.49727360191385006}
+[OK ] A6 outro par/tipo nao contamina 
+[FALHA] A7 segmentada nao entra em oferta geral (segmented=False) {30: 0.45167025923422444} vs {30: 0.4020799978164936}
+[OK ] A7b segmented=False exclui segmentada {30: 0.4020799978164936} vs {30: 0.4020799978164936}
+[OK ] A8 peso 0,5 fonte unica refletido (esperado: mudar, mas com peso 0,5)
+[OK ] A9 registros sem data/data invalida nao quebram {7: 0.3016627039062503, 30: 0.8779701094922029}
+[FALHA] A10 as_of invalido aceitou silenciosamente: 0.4047392922257853
+   A11 horizon 0 0.0
+   A11 horizon -5 0.0
+   A11 horizon 3650 1.0
+[OK ] A12 B1 monotono {1: 0.050000000000000044, 7: 0.3016627039062503, 15: 0.6129005503221696, 30: 0.8779701094922029, 60: 0.9389546733143095, 90: 0.9389546733143095, 365: 0.9989636186281804}
+   A13 1 evento B0: {7: 0.660083322910886, 15: 0.9009628451171672, 30: 0.9901916419527138}
+   A13b 1 evento no as_of B0: {7: 1.0, 15: 1.0, 30: 1.0}
+   A13c 1 evento no as_of B1: {7: 1.0, 15: 1.0, 30: 1.0}
+   A14 rate=1: {7: 1.0}
+   A15 B1 maio zerado? {30: 0.8779701094922029}
+   A16 B1 5000 recs: 0.02s
+   A16 walkforward 5000 recs: 3.09s
+[OK ] A17 nao muta entrada 
+[OK ] A18 idempotente 
+[OK ] A20 independe da ordem 

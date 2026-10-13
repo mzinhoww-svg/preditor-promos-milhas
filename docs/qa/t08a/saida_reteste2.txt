@@ -1,0 +1,27 @@
+[OK ] B-A4 sem as_of levanta ValueError
+[OK ] B-A10 as_of invalido levanta 
+[OK ] B-A11 horizon 0/-5 levanta 
+[OK ] B-A5b dedup +-3d {30: 0.4020799978164936} vs {30: 0.4020799978164936}
+[OK ] B-A7 segmentada nao contamina geral (default) 
+   segmented=True -> {30: 0.942691446698832}
+[OK ] B-legado sem campo segmented entra na geral 
+[FALHA] B-A8 fonte unica pondera 0,5 (zero < half < full) 0.2896 0.4021 0.4021
+[OK ] B-W1 duas linhas da MESMA fonte unica (+1d) nao somam peso 1,0 0.3482 vs 1 linha 0.3482
+   date_conflict ignorado? True
+[FALHA] B-A13 1 evento no as_of nao devolve 1.0 {7: 1.0, 15: 1.0, 30: 1.0}
+   B0 0.402 B1 0.709 (antes 0.402 / 0.878)
+   suja -> aceita sem erro (e dropped/ignorada?)
+[OK ] B-mut/idem/ordem 
+[OK ] B-A2 first_seen 12h <= as_of 12h entra; 12h01 nao 
+   expanding train sizes: [3, 4, 4, 4, 4, 4, 4, 4] | rolling: [3, 2, 3, 2, 2, 2, 2, 2]
+[OK ] W-exp expanding=True cresce o treino (!= rolling) 
+[OK ] W7b first_seen>=test_start fora do treino 
+[OK ] W-def purge default >= 30 
+   W2 dropped exposto: [2]
+   W2b so itens sem data -> splits: 0 (dropped inacessivel)
+   W2c 1 so mes + 1 sem data -> splits: 0 (dropped inacessivel)
+Traceback (most recent call last):
+  File "/private/tmp/claude-503/-Users-aurimar-nogueira-latam-com-Documents-theloyal-preditor-promos-milhas--maestri-roles-a5fcfdca-25b6-4a50-83b7-ac3972cd4a63/b4b86703-843e-423c-85d4-5501b4b909b4/scratchpad/wt8c/docs/qa/t08a/attack_reteste.py", line 76, in <module>
+    if max(x["start_at"] for x in s.train)>ms-timedelta(days=p): bad+=1
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: max() iterable argument is empty
