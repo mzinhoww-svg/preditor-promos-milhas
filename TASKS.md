@@ -7,7 +7,7 @@
 | T03 | Módulo budget com ledger em Postgres | orquestrador | em_revisao | testes verdes; teste cruzado pendente |
 | T04 | Glossário e decisões 001 e 003 | orquestrador | concluida | docs/ |
 | T05-spec | Spec do coletor Livelo → Smiles | Planejador | em_revisao | PR #2: QA aprovou com ajustes, Planejador atualizando |
-| T05a | Cliente Wayback CDX e ingest idempotente | Programador | em_revisao | PR #1: B1 corrigido + R1; commit `5f35efa`; ruff limpo, 32 pytest verdes; aguardando reteste final QA |
+| T05a | Cliente Wayback CDX e ingest idempotente | Programador | concluida | Reteste final d2751b4: 90 passed (banco proprio), ruff ok; B1/R1 e 7 bloqueantes originais corrigidos; ressalvas R2-R6 na T05. Ver docs/qa/t05a/RELATORIO.md |
 | T07a | Extrator determinístico regex + pydantic | Programador 2 | em_revisao | PR #5: conflito com main resolvido, CI rodando (commit 82ec792) |
 | T08a | Baseline B0/B1 e walk-forward | Programador 3 | concluida | PR #3 mergeado; vazamento aprovado; T08 mantém grade diária e reconstrução point-in-time |
 | T09a | Dashboard v0 com dados de exemplo | Designer Frontend | em_revisao | PR #9: QA aprovou com ressalvas; corrigindo N1 e N2 |
