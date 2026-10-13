@@ -14,3 +14,4 @@
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
 | T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
+| T10a | API FastAPI + job diário baseline/accuracy | Programador | em_revisao | PR aberto; endpoints + daily_predict; ruff/pytest verdes |
