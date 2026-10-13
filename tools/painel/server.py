@@ -136,7 +136,15 @@ def collect_prs() -> dict:
             ci = "unknown"
         labels = [ (l.get("name") if isinstance(l, dict) else str(l)) for l in (pr.get("labels") or []) ]
         title = pr.get("title") or ""
-        awaits = ("teste cruzado" in title.lower()) or any("teste" in str(l).lower() or "cross" in str(l).lower() for l in labels)
+        title_low = title.lower()
+        awaits = (
+            ("teste cruzado" in title_low)
+            or any("teste" in str(l).lower() or "cross" in str(l).lower() for l in labels)
+            or (str(pr.get("state", "")).upper() == "OPEN"
+                and ci == "pass"
+                and not title_low.startswith("qa ")
+                and "reteste" not in title_low)
+        )
         item = {
             "number": pr.get("number"),
             "title": title,
@@ -247,21 +255,27 @@ def build_data() -> dict:
     ck = load_json(CHECKLIST)
     prog = load_json(PROGRESS)
 
-    if isinstance(ck, dict):
-        items = ck.get("items") or ck.get("itens") or []
-    elif isinstance(ck, list):
-        items = ck
-    else:
-        items = []
-    calc = calc_progress(items)
+    calc = calc_progress(ck)
     # attach checklist meta
-    calc["updated_at"] = (ck.get("updated_at") if isinstance(ck, dict) else None)
+    if isinstance(ck, dict):
+        calc["updated_at"] = ck.get("updated_at")
 
     phases_pct = calc.get("by_phase_pct", calc.get("by_phase", {}))
     # ensure canonical phases
     tasks = parse_md_table(TASKS)
     prs = collect_prs()
     agents = collect_agents()
+    # enriquece agentes com tarefas atuais
+    for a in agents.get("agents", []):
+        name = (a.get("name") or "").lower()
+        matches = []
+        for t in tasks:
+            resp = str(t.get("responsavel", "")).lower()
+            if name and name in resp:
+                matches.append(t)
+        a["tasks"] = [t.get("tarefa") for t in matches]
+        a["current_task"] = (matches[0].get("tarefa") if matches else None)
+        a["task_count"] = len(matches)
     tests = collect_tests()
     status = read_status()
     budget = extract_budget(prog if prog is not None else {})
@@ -367,7 +381,9 @@ td,th{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:
     <div style="font-size:20px;font-weight:700;margin-bottom:6px">Progresso geral do MVP</div>
     <div class="num" id="overallNum">--%</div>
     <div class="bar" style="margin-top:10px;background:#333"><div id="overallBar" style="background:#4ade80"></div></div>
-    <div id="overallMeta" style="margin-top:8px;font-size:14px;color:#ccc"></div>
+    <div id="overallCounts" style="margin-top:8px;font-size:15px;color:#ddd"></div>
+    <div id="overallMeta" style="margin-top:4px;font-size:14px;color:#ccc"></div>
+    <div id="overallNote" style="margin-top:6px;font-size:14px;color:#bbb">o percentual mede itens do MVP, nao tempo</div>
   </div>
   <div class="card span-4">
     <div style="font-size:20px;font-weight:700;margin-bottom:6px">Testes</div>
@@ -441,6 +457,8 @@ function render(d){
   const op=d.overall_percent||0;
   document.getElementById('overallNum').textContent=Math.round(op)+'%';
   document.getElementById('overallBar').style.width=op+'%';
+  const sc=d.checklist?.progress?.state_counts||{};
+  document.getElementById('overallCounts').textContent='Feito: '+(sc.Feito||0)+' · Em revisao: '+(sc['Em revisao']||0)+' · Em andamento: '+(sc['Em andamento']||0)+' · Pendente: '+(sc.Pendente||0)+' · Bloqueado: '+(sc.Bloqueado||0);
   document.getElementById('overallMeta').textContent='Itens: '+(d.checklist?.progress?.n_items||0)+' | peso: '+((d.checklist?.progress?.total_weight||0).toFixed(1));
   // tests
   const t=d.tests?.pytest||{};
@@ -490,7 +508,8 @@ function render(d){
   const agents=d.agents?.agents||[];
   let agHtml='<ul>';
   for(const a of agents){
-    agHtml+='<li><b>'+ (a.name||'') +'</b> '+(a.role?'('+a.role+')':'')+'</li>';
+    const ct=a.current_task || (a.tasks||[]).join(', ');
+    agHtml+='<li><b>'+ (a.name||'') +'</b> '+(a.role?'('+a.role+')':'')+(ct?' — '+ct:'')+'</li>';
   }
   agHtml+='</ul>';
   if(d.agents?.available===false){agHtml='<div style="color:var(--muted)">'+(d.agents.error||'maestri indisponivel')+'</div>';}

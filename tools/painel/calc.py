@@ -261,6 +261,8 @@ def calc_progress(data: Any = None, *, items: Any = None, checklist: Any = None,
         "done_weight": done_weight,
         "n_items": len(norm),
         "state_counts": state_counts,
+        "counts": state_counts,
+        "state_counts_total": state_counts,
         "items": norm,
     }
     return result
