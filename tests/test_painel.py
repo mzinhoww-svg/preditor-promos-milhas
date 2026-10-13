@@ -89,3 +89,48 @@ def test_state_counts():
     r = calc_progress(items)
     assert r["state_counts"]["Feito"] == 1
     assert r["state_counts"]["Pendente"] == 1
+
+
+def test_refresh_allowed_rate_limit():
+    from preditor.painel import refresh_allowed
+
+    assert refresh_allowed(100.0, 101.0, 2.0) is False
+    assert refresh_allowed(100.0, 102.0, 2.0) is True
+
+
+def test_ignores_non_dict_items():
+    r = calc_progress([1, "x", None])
+    assert r["checklist_error"]
+
+
+def test_infinity_weight_is_finite_and_serializable():
+    import json
+    import math
+
+    r = calc_progress([{"estado": "Feito", "peso": 1e999, "fase": "Setup"}])
+    assert math.isfinite(r["overall"])
+    json.dumps(r, allow_nan=False)
+
+
+def test_html_script_parses_with_node():
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    if shutil.which("node") is None:
+        return
+    src = Path("tools/painel/server.py").read_text(encoding="utf-8")
+    match = re.search(r"<script>\n(.*?)\n</script>", src, re.DOTALL)
+    assert match is not None
+    script_path = Path("/tmp/painel_script_check.js")
+    script_path.write_text(match.group(1), encoding="utf-8")
+    completed = subprocess.run(["node", "--check", str(script_path)], capture_output=True, text=True, check=False)
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_server_does_not_execute_pytest():
+    from pathlib import Path
+
+    src = Path("tools/painel/server.py").read_text(encoding="utf-8")
+    assert "uv run pytest" not in src

@@ -6,8 +6,8 @@ com campos id/fase/peso/estado (ou equivalente em inglês).
 from __future__ import annotations
 
 import math
-
-from typing import Any, Iterable, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 PHASES = (
     "Setup",
@@ -123,13 +123,20 @@ def factor_for(raw: Any) -> float:
 
 def _normalize_item(item: Any) -> Mapping[str, Any]:
     state_raw = _get(item, "estado", "status", "state", default="Pendente")
+    raw_w = _get(item, "peso", "weight", "w", default=1)
+    try:
+        w_norm = float(raw_w)
+    except (TypeError, ValueError):
+        w_norm = 1.0
+    if not math.isfinite(w_norm) or w_norm < 0:
+        w_norm = 0.0
     return {
         "id": _get(item, "id", default=None),
         "title": _get(item, "title", "titulo", "name", "nome", default=None),
         "fase": _get(item, "fase", "phase", "phase_name", default=None),
         "phase": _get(item, "fase", "phase", "phase_name", default=None),
-        "peso": _get(item, "peso", "weight", "w", default=1),
-        "weight": _get(item, "peso", "weight", "w", default=1),
+        "peso": w_norm,
+        "weight": w_norm,
         "estado": normalize_state(state_raw),
         "status": normalize_state(state_raw),
         "evidencia": _get(item, "evidencia", "evidence", default=None),
@@ -207,7 +214,7 @@ def calc_progress(data: Any = None, *, items: Any = None, checklist: Any = None,
                     break
             if source is None:
                 source = next(iter(kwargs.values())) if kwargs else []
-    raw_items = _extract_items(source)
+    raw_items = [x for x in _extract_items(source) if isinstance(x, Mapping)]
     # Se source era string, ja foi tentado parse dentro de _extract_items.
     # Detecta ausencia de itens (vazio/invalido/ausente) como erro, nao 0% silencioso.
     source_was_text = isinstance(source, str)
@@ -335,3 +342,11 @@ def compute(items=None, **kw):
 # compatibility with positional calls
 def __call__(*a, **k):
     return calc_progress(*a, **k)
+
+
+def refresh_allowed(last_ts: float, now_ts: float, min_interval: float = 2.0) -> bool:
+    """Permite refresh se passou min_interval segundos desde o ultimo."""
+    try:
+        return (float(now_ts) - float(last_ts)) >= float(min_interval)
+    except (TypeError, ValueError):
+        return True

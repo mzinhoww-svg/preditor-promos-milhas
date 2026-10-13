@@ -25,6 +25,8 @@ except Exception:  # noqa: BLE001  # pragma: no cover
 
 LOCK = threading.Lock()
 STATE: dict = {"data": None, "updated": 0.0}
+REFRESH_LOCK = threading.Lock()
+LAST_REFRESH_TS = 0.0
 
 
 def run_cmd(cmd: list[str], timeout: int = 20) -> tuple[str | None, str | None]:
@@ -345,6 +347,8 @@ HTML = r"""<!DOCTYPE html>
 <title>Painel de Progresso - MVP</title>
 <style>
 :root{--bg:#ffffff;--fg:#111;--muted:#555;--card:#f4f4f5;--dark:#1a1a1a;--accent:#0b5ed7;--done:#16803d;--rev:#b45309;--prog:#2563eb;--pend:#6b7280;--block:#dc2626;--err:#991b1b;--errbg:#fee2e2}
+button.refresh{padding:8px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}
+button.refresh:disabled{opacity:.6;cursor:not-allowed}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:18px;line-height:1.3}
 .wrap{max-width:1500px;margin:0 auto;padding:24px}
@@ -391,6 +395,12 @@ td,th{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:
 <div id="errorBanner" class="banner"></div>
 <h1>Painel de progresso - MVP</h1>
 <div class="sub">Atualiza a cada 5s (dados recalculados a cada 15s). Fonte: docs/mvp-checklist.json + TASKS.md + GitHub. Gasto: OpenRouter teto R$ 100.</div>
+<div style="margin:0 0 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+  <button id="refreshBtn" class="refresh" type="button">Atualizar agora</button>
+  <span id="refreshStatus" style="color:var(--muted);font-size:15px"></span>
+  <span id="generatedAt" style="color:var(--muted);font-size:15px"></span>
+  <span id="elapsed" style="color:var(--muted);font-size:15px"></span>
+</div>
 
 <div class="grid">
   <div class="card dark span-4">
@@ -459,6 +469,7 @@ td,th{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:
 </div>
 <script>
 const PHASES=["Setup","Portao de viabilidade/coleta","Estruturacao/extrator","Modelo","Produto/dashboard/API/deploy","Seguranca e custo"];
+let lastGeneratedMs=0;
 function showError(msg){
   const b=document.getElementById('errorBanner');
   b.style.display='block';
@@ -484,6 +495,11 @@ async function load(){
     showError('Erro: '+(d.error||d.checklist_error));
   }
   render(d||{});
+  if(d && d.generated_at){
+    lastGeneratedMs=Date.parse(d.generated_at);
+    const ga=document.getElementById('generatedAt');
+    if(ga && !isNaN(lastGeneratedMs)) ga.textContent='gerado em '+new Date(lastGeneratedMs).toLocaleTimeString();
+  }
 }
 function render(d){
   const op = (typeof d.overall_percent === 'number' && isFinite(d.overall_percent)) ? d.overall_percent : null;
@@ -560,7 +576,7 @@ function render(d){
   function renderPr(container, list){
     container.textContent='';
     const arr=Array.isArray(list)?list:[];
-    if(!arr.length){ const e=mk('div'); e.style.color='var(--muted)'; e.textContent='nehum'; container.appendChild(e); return;}
+    if(!arr.length){ const e=mk('div'); e.style.color='var(--muted)'; e.textContent='nenhum'; container.appendChild(e); return;}
     for(const p of arr){
       const wrap=mk('div','pr');
       const title=mk('div'); title.style.fontWeight='700'; title.textContent='#'+(p.number||'')+' '+(p.title||'');
@@ -622,15 +638,44 @@ function render(d){
   for(const x of nexts){ const li=mk('li'); li.textContent=x; nextsDiv.appendChild(li);}
   // last ci
   const lastCiDiv=document.getElementById('lastCi'); lastCiDiv.textContent='';
-  const lastCi = (d.tests&&d.tests.last_ci_main) ? d.tests.last_ci_main : null;
-  if(lastCi){
-    const a=mk('div'); a.style.fontWeight='700'; a.textContent=lastCi.conclusion||lastCi.status||'--';
-    const b=mk('div'); b.style.color='var(--muted)'; b.style.fontSize='15px'; b.textContent=(lastCi.name||'')+' · '+(lastCi.updatedAt||'');
+  const lastCiData = (d.tests&&d.tests.last_ci_main) ? d.tests.last_ci_main : null;
+  if(lastCiData){
+    const a=mk('div'); a.style.fontWeight='700'; a.textContent=lastCiData.conclusion||lastCiData.status||'--';
+    const b=mk('div'); b.style.color='var(--muted)'; b.style.fontSize='15px'; b.textContent=(lastCiData.name||'')+' · '+(lastCiData.updatedAt||'');
     lastCiDiv.appendChild(a); lastCiDiv.appendChild(b);
   } else {
     lastCiDiv.textContent='indisponivel';
   }
 }
+async function doRefresh(){
+  const btn=document.getElementById('refreshBtn');
+  const status=document.getElementById('refreshStatus');
+  if(!btn) return;
+  btn.disabled=true;
+  if(status) status.textContent='Atualizando...';
+  try{
+    const r=await fetch('/refresh',{method:'POST'});
+    const d=await r.json().catch(function(){return {};});
+    if(!r.ok) throw new Error((d && d.error) ? d.error : ('HTTP '+r.status));
+    await load();
+    if(status) status.textContent='Atualizado';
+  }catch(e){
+    if(status) status.textContent='Erro: '+e.message;
+  }finally{
+    btn.disabled=false;
+  }
+}
+const __refreshBtn=document.getElementById('refreshBtn');
+if(__refreshBtn) __refreshBtn.addEventListener('click', doRefresh);
+function updateTimes(){
+  if(lastGeneratedMs){
+    const sec=Math.max(0, Math.round((Date.now()-lastGeneratedMs)/1000));
+    const el=document.getElementById('elapsed');
+    if(el) el.textContent='atualizado ha '+sec+' s';
+  }
+}
+setInterval(updateTimes,1000);
+updateTimes();
 load();
 setInterval(load,5000);
 </script>
@@ -640,6 +685,49 @@ setInterval(load,5000);
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        path = self.path.split("?")[0]
+        if path in ("/refresh", "/refresh/"):
+            # serializa refresh e rate limit 1 chamada / 2s
+            if not REFRESH_LOCK.acquire(blocking=False):
+                self._json(429, {"error": "atualizacao em andamento", "retry_after": 2})
+                return
+            try:
+                global LAST_REFRESH_TS
+                now = time.time()
+                if now - LAST_REFRESH_TS < 2.0:
+                    retry = 2.0 - (now - LAST_REFRESH_TS)
+                    self._json(429, {"error": "limite: 1 atualizacao a cada 2s", "retry_after": retry})
+                    return
+                LAST_REFRESH_TS = now
+                try:
+                    new = build_data()
+                except Exception:  # noqa: BLE001
+                    # tenta expor erro sem segredos
+                    self._json(500, {"error": "falha ao recalcular"})
+                    return
+                with LOCK:
+                    STATE["data"] = new
+                    STATE["updated"] = time.time()
+                self._json(200, {"status": "ok", "generated_at": new.get("generated_at")})
+            finally:
+                REFRESH_LOCK.release()
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def _json(self, status: int, data: dict) -> None:
+        b = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        try:
+            self.wfile.write(b)
+        except BrokenPipeError:
+            pass
+
     def do_GET(self):
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
@@ -650,17 +738,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b)
         elif path == "/data.json":
-            with LOCK:
-                data = STATE.get("data")
-            if data is None:
-                data = {"error": "calculando", "generated_at": None}
-            b = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(b)))
-            self.end_headers()
-            self.wfile.write(b)
+            try:
+                with LOCK:
+                    data = STATE.get("data")
+                if data is None:
+                    data = {"error": "calculando", "generated_at": None}
+                try:
+                    self._json(200, data)
+                except (ValueError, TypeError):
+                    self._json(500, {"error": "dados invalidos"})
+            except Exception:  # noqa: BLE001
+                self._json(500, {"error": "erro ao gerar data.json"})
         else:
             self.send_response(404)
             self.end_headers()
