@@ -10,6 +10,16 @@ URL_DB = os.environ.get("DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL_DB, reason="DATABASE_URL ausente")
 
 
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_schema():
+    import subprocess
+    import sys
+
+    env = dict(os.environ)
+    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True, env=env)
+
+
 @pytest.fixture()
 def eng():
     e = create_engine(URL_DB)
