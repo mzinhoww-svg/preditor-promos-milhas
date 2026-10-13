@@ -7,6 +7,7 @@
 | T03 | Módulo budget com ledger em Postgres | orquestrador | Claude Code | em_revisao | testes verdes |
 | T04 | Glossário e decisões | orquestrador | Claude Code | concluida | docs/glossario.md |
 | T05 | Coletor Livelo → Smiles (Wayback + fontes públicas) | pendente | | pendente | fixture + contrato |
+| T05a | Coletor Wayback CDX + ingest idempotente raw_message | Programador | Claude Code | em_revisao | `src/preditor/wayback.py`, `src/preditor/ingest.py`; testes wayback/ingest; ruff limpo; DB local |
 | T06 | Conjunto de ouro (50 campanhas) | pendente | | pendente | data/gold |
 | T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
 | T08 | Baseline B0/B1 e walk-forward | pendente | | pendente | relatório |
