@@ -1,16 +1,16 @@
 # TASKS
 
-| ID | Tarefa | Responsável | Terminal | Status | Aceite |
-|---|---|---|---|---|---|
-| T01 | Repo, Compose local, schema Alembic, CI com gitleaks | orquestrador | Claude Code | em_revisao | 13 testes verdes local; CI verde |
-| T02 | Módulo campaigns (dedup, validated, peso) | orquestrador | Claude Code | em_revisao | testes unitários verdes |
-| T03 | Módulo budget com ledger em Postgres | orquestrador | Claude Code | em_revisao | testes verdes |
-| T04 | Glossário e decisões | orquestrador | Claude Code | concluida | docs/glossario.md |
-| T05 | Coletor Livelo → Smiles (Wayback + fontes públicas) | pendente | | pendente | fixture + contrato |
-| T05a | Coletor Wayback CDX + ingest idempotente raw_message | Programador | Claude Code | em_revisao | `src/preditor/wayback.py`, `src/preditor/ingest.py`; testes wayback/ingest; ruff limpo; DB local |
-| T06 | Conjunto de ouro (50 campanhas) | pendente | | pendente | data/gold |
-| T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
-| T08 | Baseline B0/B1 e walk-forward | pendente | | pendente | relatório |
-| T09 | API, job diário, dashboard Vercel | pendente | | pendente | MVP |
-
-Teste cruzado (outro agente roda e tenta quebrar) ainda não executado em T01 a T03.
+| ID | Tarefa | Responsável | Status | Aceite / evidência |
+|---|---|---|---|---|
+| T01 | Repo, Compose local, schema Alembic, CI com gitleaks | orquestrador | concluida | CI verde na main |
+| T02 | Módulo campaigns (dedup, validated, peso) | orquestrador | em_revisao | testes verdes; teste cruzado pendente |
+| T03 | Módulo budget com ledger em Postgres | orquestrador | em_revisao | testes verdes; teste cruzado pendente |
+| T04 | Glossário e decisões 001 e 003 | orquestrador | concluida | docs/ |
+| T05-spec | Spec do coletor Livelo → Smiles | Planejador | em_revisao | PR #2: QA aprovou com ajustes, Planejador atualizando |
+| T05a | Cliente Wayback CDX e ingest idempotente | Programador | em_revisao | PR #1: B1 corrigido + R1; commit `5f35efa`; ruff limpo, 32 pytest verdes; aguardando reteste final QA |
+| T07a | Extrator determinístico regex + pydantic | Programador 2 | em_revisao | PR #5: conflito com main resolvido, CI rodando (commit 82ec792) |
+| T08a | Baseline B0/B1 e walk-forward | Programador 3 | concluida | PR #3 mergeado; vazamento aprovado; T08 mantém grade diária e reconstrução point-in-time |
+| T09a | Dashboard v0 com dados de exemplo | Designer Frontend | em_revisao | PR #9: QA aprovou com ressalvas; corrigindo N1 e N2 |
+| T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
+| T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
+| T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
