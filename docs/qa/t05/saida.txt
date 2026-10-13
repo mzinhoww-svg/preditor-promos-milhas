@@ -1,0 +1,31 @@
+   S1 [1, 2] {'raw_message': 2, 'offer': 2, 'offer_evidence': 2, 'source_health': 1}
+[OK ] S1 2 itens -> 2 raw, 2 offers, 2 evidencias, 1 source_health {'raw_message': 2, 'offer': 2, 'offer_evidence': 2, 'source_health': 1}
+   offers: [('livelo', 'smiles', 'transfer_bonus', '2026-10-15', '2026-10-20', '90.00', '2026-10-13 00:00:00+00:00', '1', 'False', '0.50'), ('esfera', 'smiles', 'transfer_bonus', '2026-10-16', '2026-10-21', '80.00', '2026-10-13 00:00:00+00:00', '1', 'False', '0.50')]
+[FALHA] S1b first_seen_at = pubDate (12/10 10:00), nao a hora da coleta 2026-10-13 00:00:00+00:00
+   source_health: [('passageirodeprimeira.com', 2, Decimal('1.0000'), False)]
+[FALHA] S2 reexecucao mesmo `now`: sem linhas novas {'raw_message': 2, 'offer': 2, 'offer_evidence': 2, 'source_health': 1}
+   S2 source_health apos 2a execucao (mesmo now): [(2, False)] (PK source+checked_at: 2a linha perdida em silencio)
+[FALHA] S2b 3a execucao 1h depois sem itens novos reporta items_new=0 (alert) items_new reportado=2 (conta itens do feed, nao novos)
+[FALHA] S3 'Livelo e Smiles' (sem direcao) vira oferta ou erro visivel {'raw_message': 1, 'offer': 0, 'offer_evidence': 0, 'source_health': 1} (raw gravado, oferta perdida em silencio)
+   S4 offer: [(datetime.date(2026, 10, 13), datetime.date(2026, 10, 20), datetime.datetime(2026, 10, 13, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')))]
+[FALHA] S4 so data de fim NAO inventa start_at (= first_seen) [(datetime.date(2026, 10, 13), datetime.date(2026, 10, 20), datetime.datetime(2026, 10, 13, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')))]
+[FALHA] S5 feed em bytes (resposta HTTP real) e processado raw=0
+[FALHA] S6 sem transport faz o fetch HTTP real (producao) retorno=[] (fetch_url sem transport devolve None: coletor nao busca nada)
+[OK ] S7 robots bloqueia /feed/ -> 0 itens []
+   S7 source_health: []
+[FALHA] S7b robots_txt ausente = coleta mesmo assim (spec: reler robots a cada execucao) sem robots_txt o fetch acontece sem consultar robots; coletor nao baixa robots.txt
+   S8 xml invalido: [] source_health: [(0, True, Decimal('0.0000'))] (erro de parse indistinguivel de 'sem itens')
+[FALHA] S9 item de 2023 no feed: first_seen_at = pubDate (2023) [(datetime.datetime(2026, 10, 13, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='Etc/UTC')),)]
+   S10 offers: [('2026-10-15', '2026-10-10', '90.00'), ('2026-01-01', '2026-12-30', '90.00')]
+[FALHA] S10 fim<inicio e janela>90d nao entram como oferta valida 2 ofertas gravadas
+[FALHA] S11 conflito de bonus nao vira segment_label [(False, 'bonus_conflitante', Decimal('80.00'))]
+   S12: [('2', 'True', '1.00'), ('2', 'True', '1.00')]
+[OK ] S12 2 fontes mesma oferta -> n_sources=2 validated [(2, True, Decimal('1.00')), (2, True, Decimal('1.00'))]
+[OK ] S13 PPV guarda so titulo (decisao 002) 'Livelo e Smiles: 90% de bônus'
+   S14 backfill: 3 {'raw_message': 2, 'offer': 1, 'offer_evidence': 2, 'source_health': 1} snapshots baixados: ['https://web.archive.org/web/20231005120000id_/https://passageirodeprimeira.com/promo-a/?utm_source=x', 'https://web.archive.org/web/20250705120000id_/https://passageirodeprimeira.com/promo-a/', 'https://web.archive.org/web/20231006120000id_/https://passageirodeprimeira.com/promo-a/embed/']
+[FALHA] S14 backfill: uma URL normalizada -> 1 raw (captura mais antiga) {'raw_message': 2, 'offer': 1, 'offer_evidence': 2, 'source_health': 1}
+[FALHA] S14b first_seen_at do backfill = data de publicacao/captura antiga, nao now() first_seen=2026-10-13 00:00:00+00:00 collected_at=2026-10-13 19:45:25.646968+00:00
+[FALHA] S14c coluna raw_message.observed_at existe (spec 4.1 item 4) ['id', 'source', 'url', 'content', 'content_hash', 'collected_at']
+   S15 CDX 503: 0 [(0, True)] (falha de CDX vira 'backfill de 0 itens' sem erro)
+   S16 XML bomb: 0 itens em 0.05s
+   S16b feed 2000 itens: 2000 em 0.00s
