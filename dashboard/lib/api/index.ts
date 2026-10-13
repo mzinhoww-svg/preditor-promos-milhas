@@ -48,6 +48,9 @@ export async function getSourceHealth(): Promise<Validated<SourceHealthResponse>
   return validateSourceHealth(await load<unknown>("/source-health", mockSourceHealth));
 }
 
-export async function getAccuracy(opts?: { from?: string; to?: string; horizon?: string }): Promise<Validated<AccuracyResponse>> {
+/** F3: além dos alertas descartados, conta as semanas de `weekly` descartadas. */
+export async function getAccuracy(
+  opts?: { from?: string; to?: string; horizon?: string },
+): Promise<Validated<AccuracyResponse> & { discardedWeekly: number }> {
   return validateAccuracy(await load<unknown>("/prediction-log/accuracy", mockAccuracy, opts));
 }

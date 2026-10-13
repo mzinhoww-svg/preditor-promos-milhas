@@ -30,9 +30,22 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isProb = (v: unknown): v is number => isNum(v) && v >= 0 && v <= 1;
-/** N1: data ISO 8601 (YYYY-MM-DD ou instante) que o Date consegue interpretar. */
-const isIsoDate = (v: unknown): v is string =>
-  isStr(v) && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(v) && !Number.isNaN(Date.parse(v));
+const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):?(\d{2}))?)?$/;
+/**
+ * N1/F1: data ISO 8601 (YYYY-MM-DD ou instante) com calendário válido. O Date
+ * aceita 2026-02-31 e rola para 03/03; aqui o dia precisa existir no mês e
+ * hora, minuto, segundo e fuso precisam estar na faixa.
+ */
+const isIsoDate = (v: unknown): v is string => {
+  if (!isStr(v)) return false;
+  const m = ISO_RE.exec(v);
+  if (!m) return false;
+  const [y, mo, d, hh = "0", mi = "0", ss = "0", tzh = "0", tzm = "0"] = m.slice(1);
+  const Y = +y, Mo = +mo, D = +d;
+  const utc = new Date(Date.UTC(Y, Mo - 1, D));
+  if (utc.getUTCFullYear() !== Y || utc.getUTCMonth() !== Mo - 1 || utc.getUTCDate() !== D) return false;
+  return +hh < 24 && +mi < 60 && +ss < 60 && +tzh < 24 && +tzm < 60;
+};
 const isIsoDateOrNull = (v: unknown): v is string | null | undefined => v === null || v === undefined || isIsoDate(v);
 /** N2: par [num, num] opcional; ausente ou malformado vira null. */
 const pairOrNull = (v: unknown): [number, number] | null =>
@@ -97,7 +110,7 @@ function hasHorizonMetrics(v: unknown, keys: string[]): boolean {
 function isModelSummary(v: unknown): boolean {
   if (!isObj(v) || !isStr(v.name) || !isStr(v.version) || !isIsoDate(v.trained_at)) return false;
   const val = v.validation;
-  if (!isObj(val) || !hasHorizonMetrics(val.by_horizon, ["brier", "log_loss", "auc"])) return false;
+  if (!isObj(val) || !isStr(val.method) || !hasHorizonMetrics(val.by_horizon, ["brier", "log_loss", "auc"])) return false;
   if (!isObj(val.period) || !isIsoDate(val.period.from) || !isIsoDate(val.period.to)) return false;
   const prod = v.production;
   if (prod === null || prod === undefined) return true;
@@ -105,11 +118,18 @@ function isModelSummary(v: unknown): boolean {
   return hasHorizonMetrics(prod.by_horizon, ["brier", "log_loss", "hit_rate", "n"]) && isNum(prod.n_predictions) && isNum(prod.n_resolved);
 }
 
-/** Normaliza um ModelSummary já validado: ci_brier ausente vira null (N2). */
+/** F2: folds precisa ser inteiro positivo; qualquer outra coisa vira null. */
+const foldsOrNull = (v: unknown): number | null => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : null);
+
+/** Normaliza um ModelSummary já validado: ci_brier ausente vira null (N2); folds inválido vira null (F2). */
 function normalizeModelSummary(v: ModelSummary): ModelSummary {
   const by = { ...v.validation.by_horizon };
   for (const h of HORIZON_KEYS) by[h] = { ...by[h], ci_brier: pairOrNull(by[h].ci_brier) };
-  return { ...v, validation: { ...v.validation, by_horizon: by }, production: v.production ?? null };
+  return {
+    ...v,
+    validation: { ...v.validation, folds: foldsOrNull(v.validation.folds), by_horizon: by },
+    production: v.production ?? null,
+  };
 }
 
 export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
@@ -175,7 +195,7 @@ function isAlert(v: unknown): v is Alert {
   );
 }
 
-export function validateAccuracy(raw: unknown): { data: AccuracyResponse; discarded: number } {
+export function validateAccuracy(raw: unknown): { data: AccuracyResponse; discarded: number; discardedWeekly: number } {
   if (
     !isObj(raw) ||
     !isIsoDate(raw.generated_at) ||
@@ -186,7 +206,9 @@ export function validateAccuracy(raw: unknown): { data: AccuracyResponse; discar
   ) {
     throw new InvalidResponseError("/prediction-log/accuracy", "formato inesperado");
   }
-  const weekly = (Array.isArray(raw.weekly) ? raw.weekly : []).filter(
+  // F3: semana malformada é descartada e contada, como itens e alertas.
+  const rawWeekly = Array.isArray(raw.weekly) ? raw.weekly : [];
+  const weekly = rawWeekly.filter(
     (w): w is AccuracyResponse["weekly"][number] => isObj(w) && isIsoDate(w.week) && isNum(w.horizon) && isNum(w.n) && isProb(w.hit_rate) && isNum(w.brier),
   );
   const rawAlerts = Array.isArray(raw.alerts) ? raw.alerts : [];
@@ -204,5 +226,6 @@ export function validateAccuracy(raw: unknown): { data: AccuracyResponse; discar
   return {
     data: { generated_at: out.generated_at, period: out.period, by_horizon: out.by_horizon, weekly, alerts },
     discarded: rawAlerts.length - alerts.length,
+    discardedWeekly: rawWeekly.length - weekly.length,
   };
 }

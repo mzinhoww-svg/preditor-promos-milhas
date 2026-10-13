@@ -13,8 +13,13 @@ ambiente, sem mudar a interface de dados.
   (as chamadas acontecem em Server Components ou Route Handlers).
 - Erros: `401` sem chave, `403` chave inválida, `429` limite excedido, `503` modelo sem
   predições publicadas. Corpo de erro: `{"error": {"code": "string", "message": "string"}}`.
-- Datas e instantes em ISO 8601 UTC (`2026-10-13T06:00:00Z`). Percentuais como número
-  inteiro ou decimal em pontos percentuais (`90` = 90% de bônus). Probabilidades em `[0, 1]`.
+- Datas e instantes em ISO 8601 UTC (`2026-10-13T06:00:00Z`). O dashboard exige calendário
+  válido (dia existente no mês, hora/minuto/segundo na faixa); `2026-02-31` é rejeitado,
+  não rolado para março. Percentuais como número inteiro ou decimal em pontos percentuais
+  (`90` = 90% de bônus). Probabilidades em `[0, 1]`.
+- Tolerância do dashboard: item, alerta, fonte ou semana de `weekly` malformados são
+  descartados e contados na tela; `validation.folds` que não for inteiro positivo e
+  intervalos de confiança ausentes viram `null` em vez de derrubar a tela.
 - Idioma dos textos (`reason`, `label`, `message`): português.
 
 Variáveis do dashboard:
