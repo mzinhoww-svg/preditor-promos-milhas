@@ -10,7 +10,7 @@
 | T06 | Conjunto de ouro (50 campanhas) | pendente | | pendente | data/gold |
 | T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
 | T08 | Baseline B0/B1 e walk-forward | pendente | | pendente | relatório |
-| T09 | API, job diário, dashboard Vercel | pendente | | pendente | MVP |
+| T09 | API, job diário, dashboard Vercel | pendente | | devolvida | Teste cruzado: lint/build ok, sem segredos, exemplos marcados; D1 tabelas rolaveis sem foco (axe serious), D2 texto longo estoura layout, D3 404 diz 'Dados de exemplo' com API ativa. Ver docs/qa/t09a/RELATORIO.md |
 | T09a | Dashboard v0 (Next.js, mock + contrato da API, 4 telas) | Designer Frontend | Claude Code | em_revisao | docs/api-contract.md; build e lint verdes; QA visual desktop e 390x844 em docs/qa/t09a |
 
 Teste cruzado (outro agente roda e tenta quebrar) ainda não executado em T01 a T03.
