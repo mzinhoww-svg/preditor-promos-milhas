@@ -6,8 +6,9 @@ Texto é sempre DADO; instruções eventualmente presentes são descartadas.
 """
 import re
 import unicodedata
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -144,19 +145,54 @@ def _to_date(value: Any):
         return None
 
 
-def _current_year(first_seen_at: Any = None) -> int | None:
-    if first_seen_at is not None:
-        d = first_seen_at
-        if isinstance(first_seen_at, datetime):
-            d = first_seen_at.date()
-        if isinstance(first_seen_at, str):
-            d = _to_date(first_seen_at)
-        if d is not None:
-            return d.year
-    return date.today().year
+def _first_seen_sp_date(first_seen_at: Any) -> date | None:
+    """Normaliza first_seen_at para date em America/Sao_Paulo; None se invalido/ausente."""
+    if first_seen_at is None:
+        return None
+    dt = None
+    if isinstance(first_seen_at, datetime):
+        dt = first_seen_at
+    elif isinstance(first_seen_at, date):
+        return first_seen_at
+    elif isinstance(first_seen_at, str):
+        v = first_seen_at.strip()
+        try:
+            dt = datetime.fromisoformat(v)
+        except ValueError:
+            # aceitar date-only
+            try:
+                return date.fromisoformat(v)
+            except ValueError:
+                return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    try:
+        return dt.astimezone(ZoneInfo("America/Sao_Paulo")).date()
+    except (ValueError, OSError):
+        return dt.date()
 
 
-def _make_date(day, month, year, first_seen_year: int | None) -> str | None:
+def _closest_year(fs_date: date, month: int, day: int) -> int:
+    """Escolhe o ano em {fs-1, fs, fs+1} mais proximo, respeitando fs-7 para inicio."""
+    candidates = []
+    for y in (fs_date.year - 1, fs_date.year, fs_date.year + 1):
+        try:
+            d = date(y, month, day)
+        except ValueError:
+            continue
+        candidates.append((abs((d - fs_date).days), y, d))
+    if not candidates:
+        return fs_date.year
+    # preferir data <= fs_date + 30 e >= fs_date - 7 quando possivel
+    filtered = [c for c in candidates if (fs_date - timedelta(days=7)) <= c[2] <= (fs_date + timedelta(days=30))]
+    pool = filtered if filtered else candidates
+    pool.sort(key=lambda c: (c[0], c[1]))
+    return pool[0][1]
+
+
+def _make_date(day, month, year, fs_date: date | None, inferred: bool = False) -> str | None:
     try:
         d = int(day)
         if isinstance(month, str) and not month.isdigit():
@@ -169,9 +205,9 @@ def _make_date(day, month, year, first_seen_year: int | None) -> str | None:
         else:
             m = int(month)
         if year is None or str(year).strip() == "":
-            y = first_seen_year
-            if y is None:
+            if fs_date is None:
                 return None
+            y = _closest_year(fs_date, int(m), int(d))
         else:
             y_raw = str(year).strip()
             if len(y_raw) == 2:
@@ -185,10 +221,8 @@ def _make_date(day, month, year, first_seen_year: int | None) -> str | None:
 
 
 def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
-    """Coleta datas ISO; rollover de virada só quando o fim omitiu o ano."""
-    fs_year = _current_year(first_seen_at) if first_seen_at is not None else None
-    if fs_year is None:
-        fs_year = date.today().year
+    """Coleta datas ISO com causa point-in-time; None se first_seen ausente/invalido para datas sem ano."""
+    fs_date = _first_seen_sp_date(first_seen_at)
 
     candidates = []
     for m in DATA_NUM_RE.finditer(text_norm):
@@ -197,10 +231,9 @@ def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
         candidates.append((m.start(), m.group(1), m.group(2), m.group(3)))
 
     explicit_years = []
-    resolved = []  # (pos, iso, explicit_year bool)
+    resolved = []  # (pos, iso, year_was_explicit)
     for pos, day, month, year in candidates:
         explicit = (year is not None and str(year).strip() != "")
-        # contexto promocional para datas sem ano
         if not explicit:
             left = text_norm[max(0, pos - 40):pos].lower()
             right = text_norm[pos:pos + 20].lower()
@@ -208,16 +241,12 @@ def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
             if not any(k in ctx for k in (" de ", " a ", "até", "ate", "valid", "vig", "período", "periodo")):
                 continue
         y = year
-        if not explicit:
-            if explicit_years:
-                nearest = min(explicit_years, key=lambda e: abs(e[0] - pos))
-                y = nearest[1][:4]
-            else:
-                y = None
-        iso = _make_date(day, month, y, fs_year if y is None else None)
-        # if iso None but year provided by candidate, _make_date already uses it; fs_year not needed
-        if iso is None and y is not None:
+        if explicit:
             iso = _make_date(day, month, y, None)
+        else:
+            if fs_date is None:
+                continue
+            iso = _make_date(day, month, None, fs_date)
         if iso is None:
             continue
         if explicit:
@@ -229,23 +258,15 @@ def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
         if not out or out[-1] != iso:
             out.append(iso)
 
-    # rollover: fim < inicio => +1 ano SOMENTE se ano do fim foi omitido
+    # rollover: +1 ano apenas se o ano do fim foi omitido
     if len(out) >= 2:
         try:
             d0 = date.fromisoformat(out[0])
             d1 = date.fromisoformat(out[1])
             if d1 < d0:
-                # determinar se segunda data teve ano explicito: procurar candidato
-                second_explicit = False
-                # best effort: se a data final aparece em resolved com explicit True
-                for _pos, iso, explicit in resolved:
-                    if iso == out[1]:
-                        second_explicit = explicit
-                        break
-                if not second_explicit:
-                    nd1 = d1.replace(year=d1.year + 1)
-                    out[1] = nd1.isoformat()
-                # else: mantém (fim_antes_inicio)
+                second_explicit = any(iso == out[1] and exp for (_p, iso, exp) in resolved)
+                if not second_explicit and fs_date is not None:
+                    out[1] = d1.replace(year=d1.year + 1).isoformat()
         except ValueError:
             pass
     return out
@@ -276,7 +297,10 @@ def _directional_pair(sentence: str) -> tuple[str | None, str | None]:
     }
     progs = _programs_in(sentence)
     if len(progs) < 2:
-        return None, (progs[0] if len(progs) == 1 else None)
+        # N4: so vira destino em compra/desconto; demais casos sao None (N1 sem inventar)
+        if len(progs) == 1 and any(k in sentence.lower() for k in ("compra", "desconto", "comprar")):
+            return None, progs[0]
+        return None, None
     # "X para Y" / "X -> Y" / "X a Y"
     for origin in progs:
         for dest in progs:
@@ -538,13 +562,28 @@ PromotionOffer = Offer
 
 
 def _has_invalid_date(sentence: str, first_seen_at: Any = None) -> bool:
-    fs_year = _current_year(first_seen_at)
+    fs_date = _first_seen_sp_date(first_seen_at)
     for m in DATA_NUM_RE.finditer(sentence):
-        if _make_date(m.group(1), m.group(2), m.group(3), fs_year) is None:
-            return True
+        y = m.group(3)
+        # invalid if explicit year invalid OR (no year & no fs)
+        if y and str(y).strip():
+            if _make_date(m.group(1), m.group(2), y, None) is None:
+                return True
+        else:
+            if fs_date is None:
+                return True
+            if _make_date(m.group(1), m.group(2), None, fs_date) is None:
+                return True
     for m in DATA_EXT_RE.finditer(sentence):
-        if _make_date(m.group(1), m.group(2), m.group(3), fs_year) is None:
-            return True
+        y = m.group(3)
+        if y and str(y).strip():
+            if _make_date(m.group(1), m.group(2), y, None) is None:
+                return True
+        else:
+            if fs_date is None:
+                return True
+            if _make_date(m.group(1), m.group(2), None, fs_date) is None:
+                return True
     return False
 
 
@@ -745,10 +784,11 @@ def validate_offer(offer, first_seen_at=None, reference_date=None, mode="live",
         if isinstance(fs, datetime):
             fs = fs.date()
         if isinstance(fs, date) and start_date is not None:
-            tol = 365 if mode == "backfill" else 90
-            if start_date > fs + timedelta(days=tol):
+            tol_past = 365 if mode == "backfill" else 7
+            tol_future = 365 if mode == "backfill" else 30
+            if start_date > fs + timedelta(days=tol_future):
                 reasons.append("inicio_muito_futuro")
-            if start_date < fs - timedelta(days=tol):
+            if start_date < fs - timedelta(days=tol_past):
                 reasons.append("inicio_muito_passado")
     if o.bonus_pct is not None and (o.bonus_pct < 1 or o.bonus_pct > 300):
         reasons.append("bonus_pct_invalido")
