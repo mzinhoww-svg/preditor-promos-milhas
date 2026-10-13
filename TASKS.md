@@ -9,7 +9,7 @@
 | T05 | Coletor Livelo → Smiles (Wayback + fontes públicas) | pendente | | pendente | fixture + contrato |
 | T06 | Conjunto de ouro (50 campanhas) | pendente | | pendente | data/gold |
 | T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
-| T07a | Camada determinística regex + pydantic (extrator) | prog2 | Claude Code | em_revisao | src/preditor/extract.py + 15 fixtures |
+| T07a | Camada determinística regex + pydantic (extrator) | prog2 | Claude Code | devolvida | src/preditor/extract.py + 15 fixtures; teste cruzado: 4 defeitos bloqueantes (injeção contamina bonus_pct, fallback do sanitizer, ano via date.today(), schema pydantic sem validação). Ver docs/qa/t07a/RELATORIO.md |
 | T08 | Baseline B0/B1 e walk-forward | pendente | | pendente | relatório |
 | T09 | API, job diário, dashboard Vercel | pendente | | pendente | MVP |
 
