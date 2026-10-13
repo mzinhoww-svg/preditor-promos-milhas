@@ -18,6 +18,7 @@ const DECISION_LABEL = {
 export default async function ModelPage() {
   const [m, accRes] = await Promise.all([getModelMetrics(), getAccuracy()]);
   const acc = accRes.data;
+  const discardedWeekly = accRes.discardedWeekly;
   const c = m.champion;
   const prod = c.production;
 
@@ -52,7 +53,7 @@ export default async function ModelPage() {
       <div className="grid min-w-0 gap-x-10 gap-y-10 lg:grid-cols-2">
         <Section
           title="Validação histórica"
-          description={`${c.validation.method}, ${c.validation.folds} dobras, ${dateLong(c.validation.period.from)} a ${dateLong(c.validation.period.to)}. Mede o que o modelo teria acertado no passado.`}
+          description={`${c.validation.method}, ${c.validation.folds === null ? "número de dobras não informado" : `${c.validation.folds} dobras`}, ${dateLong(c.validation.period.from)} a ${dateLong(c.validation.period.to)}. Mede o que o modelo teria acertado no passado.`}
         >
           <MetricTable
             label="Tabela de validação histórica por janela"
@@ -157,6 +158,17 @@ export default async function ModelPage() {
         title="Acerto semanal em produção"
         description={`Horizonte de ${acc.weekly[0]?.horizon ?? 30} dias, por semana de emissão da predição.`}
       >
+        {discardedWeekly > 0 ? (
+          <p role="status" className="mb-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+            {discardedWeekly === 1 ? "1 semana da API foi descartada" : `${discardedWeekly} semanas da API foram descartadas`} por
+            formato inválido.
+          </p>
+        ) : null}
+        {acc.weekly.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">
+            Nenhuma semana com predições resolvidas no período.
+          </p>
+        ) : (
         <ScrollRegion label="Tabela de acerto semanal em produção">
           <table className="w-full min-w-[32rem] text-sm">
             <thead>
@@ -185,6 +197,7 @@ export default async function ModelPage() {
             </tbody>
           </table>
         </ScrollRegion>
+        )}
       </Section>
 
       <p className="text-xs text-ink-3">Métricas geradas {dateTime(m.generated_at)}.</p>

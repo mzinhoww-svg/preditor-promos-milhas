@@ -70,7 +70,8 @@ export interface ModelSummary {
   horizons: number[];
   validation: {
     method: string;
-    folds: number;
+    /** F2: null quando a API não manda um inteiro positivo. */
+    folds: number | null;
     period: { from: string; to: string };
     by_horizon: Record<Horizon, ValidationMetrics>;
   };
