@@ -19,7 +19,10 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
   const type = isOfferType(rawType) ? rawType : undefined;
 
-  const [all, data] = await Promise.all([getPredictions(), getPredictions({ type })]);
+  const [allRes, dataRes] = await Promise.all([getPredictions(), getPredictions({ type })]);
+  const all = allRes.data;
+  const data = dataRes.data;
+  const discarded = allRes.discarded;
 
   const top = all.items[0];
   const likely30 = all.items.filter((i) => i.windows["30"].probability >= 0.5).length;
@@ -59,6 +62,13 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
           </FilterChip>
         ))}
       </nav>
+
+      {discarded > 0 ? (
+        <p role="status" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+          {discarded === 1 ? "1 item da API foi descartado" : `${discarded} itens da API foram descartados`} por formato
+          inválido. A lista abaixo mostra só os itens válidos.
+        </p>
+      ) : null}
 
       <PredictionList items={data.items} />
 

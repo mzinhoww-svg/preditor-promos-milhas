@@ -81,25 +81,13 @@ export function ReliabilityChart({
       <figcaption className="mt-2 text-xs text-ink-3">
         Tamanho do ponto proporcional ao número de predições no bin. Linha tracejada: calibração perfeita.
       </figcaption>
-      <table className="sr-only">
-        <caption>Dados da curva de confiabilidade</caption>
-        <thead>
-          <tr>
-            <th>Previsto</th>
-            <th>Observado</th>
-            <th>n</th>
-          </tr>
-        </thead>
-        <tbody>
-          {bins.map((b) => (
-            <tr key={b.p_mean}>
-              <td>{pct(b.p_mean)}</td>
-              <td>{pct(b.observed)}</td>
-              <td>{b.n}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ul className="sr-only" aria-label="Dados da curva de confiabilidade">
+        {bins.map((b, i) => (
+          <li key={`${i}-${b.p_mean}`}>
+            {`previsto ${pct(b.p_mean)}, observado ${pct(b.observed)}, ${b.n} predições`}
+          </li>
+        ))}
+      </ul>
     </figure>
   );
 }

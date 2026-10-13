@@ -16,7 +16,7 @@ export function Nav({ source }: { source: DataSource }) {
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-bg/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl flex-col px-4 sm:flex-row sm:items-center sm:gap-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-3 py-3 sm:py-0">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3 sm:flex-nowrap sm:py-0">
           <Link href="/" className="flex shrink-0 items-center gap-2 text-sm font-semibold tracking-tight text-ink">
             <span aria-hidden="true" className="inline-block size-2.5 rounded-sm bg-primary" />
             Preditor de promoções
@@ -54,7 +54,7 @@ function SourceBadge({ source, className }: { source: DataSource; className?: st
   return (
     <span
       className={
-        "shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium " +
+        "max-w-full truncate rounded-full border px-2 py-0.5 text-xs font-medium sm:shrink-0 " +
         (mock ? "border-warn/40 bg-warn-soft text-warn " : "border-ok/40 bg-ok-soft text-ok ") +
         (className ?? "")
       }

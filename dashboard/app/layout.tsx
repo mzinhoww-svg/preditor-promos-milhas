@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
@@ -13,7 +14,10 @@ export const metadata: Metadata = {
     "Próximas promoções prováveis de pontos e milhas, com probabilidade calibrada, faixa de bônus e saúde do modelo.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // D3: a origem dos dados é resolvida por requisição, nunca congelada no build
+  // (a 404 pré-renderizada mostrava "Dados de exemplo" com a API ativa).
+  await connection();
   const source = dataSource();
   return (
     <html lang="pt-BR" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
@@ -31,7 +35,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <footer className="border-t border-line">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-ink-3 sm:px-6 lg:px-8">
             <span>Preditor de promoções de milhas · dashboard v0</span>
-            <span>Horários em UTC. Probabilidades calibradas pelo modelo em produção.</span>
+            <span>
+              {source === "api"
+                ? "Horários em UTC. Probabilidades calibradas pelo modelo em produção."
+                : "Horários em UTC. Dados de exemplo; nenhum modelo em produção."}
+            </span>
           </div>
         </footer>
       </body>

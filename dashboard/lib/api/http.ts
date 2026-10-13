@@ -1,6 +1,9 @@
 import "server-only";
 import { apiConfig } from "./source";
 
+/** D5: API lenta não pode pendurar a tela. */
+const TIMEOUT_MS = 8000;
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -18,10 +21,20 @@ export async function getJson<T>(path: string, query?: Record<string, string | u
   const url = new URL(baseUrl + path);
   for (const [k, v] of Object.entries(query ?? {})) if (v) url.searchParams.set(k, v);
 
-  const res = await fetch(url, {
-    headers: { "X-API-Key": apiKey, Accept: "application/json" },
-    next: { revalidate: 300 },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { "X-API-Key": apiKey, Accept: "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      next: { revalidate: 300 },
+    });
+  } catch (err) {
+    const name = err instanceof Error ? err.name : "";
+    if (name === "TimeoutError" || name === "AbortError") {
+      throw new ApiError(504, "timeout", `API não respondeu em ${TIMEOUT_MS / 1000} s`);
+    }
+    throw new ApiError(502, "network_error", "Falha de rede ao chamar a API");
+  }
 
   if (!res.ok) {
     let code = "http_error";
@@ -35,5 +48,9 @@ export async function getJson<T>(path: string, query?: Record<string, string | u
     }
     throw new ApiError(res.status, code, message);
   }
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new ApiError(502, "invalid_json", "Resposta da API não é JSON");
+  }
 }

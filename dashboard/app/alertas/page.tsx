@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const ORDER: AlertSeverity[] = ["critical", "warning", "info"];
 
 /** Alertas da API mais os derivados de fontes fora de "ok" que ainda não têm alerta próprio. */
-function mergeAlerts(fromApi: Alert[], sources: Awaited<ReturnType<typeof getSourceHealth>>["sources"]): Alert[] {
+function mergeAlerts(fromApi: Alert[], sources: Awaited<ReturnType<typeof getSourceHealth>>["data"]["sources"]): Alert[] {
   const covered = new Set(fromApi.map((a) => a.related.source).filter(Boolean));
   const derived: Alert[] = sources
     .filter((s) => s.status !== "ok" && !covered.has(s.source))
@@ -30,7 +30,10 @@ function mergeAlerts(fromApi: Alert[], sources: Awaited<ReturnType<typeof getSou
 }
 
 export default async function AlertsPage() {
-  const [acc, sh] = await Promise.all([getAccuracy(), getSourceHealth()]);
+  const [accRes, shRes] = await Promise.all([getAccuracy(), getSourceHealth()]);
+  const acc = accRes.data;
+  const sh = shRes.data;
+  const discarded = accRes.discarded;
   const now = new Date(acc.generated_at);
   const alerts = mergeAlerts(acc.alerts, sh.sources);
   const count = (s: AlertSeverity) => alerts.filter((a) => a.severity === s).length;
@@ -51,6 +54,13 @@ export default async function AlertsPage() {
         ]}
       />
 
+      {discarded > 0 ? (
+        <p role="status" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+          {discarded === 1 ? "1 alerta da API foi descartado" : `${discarded} alertas da API foram descartados`} por
+          formato inválido.
+        </p>
+      ) : null}
+
       <Section title="Lista" description={`${alerts.length} alertas ativos.`}>
         {alerts.length === 0 ? (
           <p className="rounded-lg border border-dashed border-line-strong px-4 py-10 text-center text-sm text-ink-2">
@@ -58,17 +68,17 @@ export default async function AlertsPage() {
           </p>
         ) : (
           <ol className="divide-y divide-line">
-            {alerts.map((a) => (
-              <li key={a.id} className="grid gap-x-6 gap-y-2 py-4 sm:grid-cols-[7rem_minmax(0,1fr)_10rem]">
+            {alerts.map((a, i) => (
+              <li key={`${i}-${a.id}`} className="grid min-w-0 gap-x-6 gap-y-2 py-4 sm:grid-cols-[7rem_minmax(0,1fr)_10rem]">
                 <div className="flex items-start gap-2 sm:flex-col sm:gap-1">
                   <Badge tone={SEVERITY_TONE[a.severity]}>{SEVERITY_LABEL[a.severity]}</Badge>
                   <span className="text-xs text-ink-3">{ALERT_KIND_LABEL[a.kind]}</span>
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-ink">{a.title}</h3>
-                  <p className="mt-1 max-w-prose text-sm leading-6 text-ink-2">{a.detail}</p>
+                  <h3 className="break-words text-sm font-semibold text-ink">{a.title}</h3>
+                  <p className="mt-1 max-w-prose break-words text-sm leading-6 text-ink-2">{a.detail}</p>
                   {a.related.source || a.related.horizon || a.related.pair ? (
-                    <p className="mt-1.5 text-xs text-ink-3">
+                    <p className="mt-1.5 break-all text-xs text-ink-3">
                       {a.related.source ? (
                         <>
                           Fonte:{" "}

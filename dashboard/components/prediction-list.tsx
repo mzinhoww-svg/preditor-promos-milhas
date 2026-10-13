@@ -2,12 +2,12 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { Probability } from "@/components/probability";
 import { HORIZONS, type PredictionItem, type Reason } from "@/lib/api/types";
-import { OFFER_TYPE_LABEL, OFFER_TYPE_SHORT, dateShort } from "@/lib/format";
+import { OFFER_TYPE_LABEL, OFFER_TYPE_SHORT, dateShort, pct } from "@/lib/format";
 
 function PairName({ item }: { item: PredictionItem }) {
   const same = item.pair.origin === item.pair.destination;
   return (
-    <span className="text-base font-semibold tracking-tight text-ink">
+    <span className="min-w-0 break-words text-base font-semibold tracking-tight text-ink">
       {item.pair.origin}
       {same ? null : (
         <>
@@ -33,12 +33,12 @@ const REASON_KIND_LABEL: Record<Reason["kind"], string> = {
 function Reasons({ reasons }: { reasons: Reason[] }) {
   return (
     <ul className="flex flex-col gap-1.5">
-      {reasons.map((r) => (
-        <li key={r.kind + r.label} className="flex items-start gap-2 text-sm leading-5">
+      {reasons.map((r, i) => (
+        <li key={`${i}-${r.kind}`} className="flex items-start gap-2 text-sm leading-5">
           <span className="tnum mt-0.5 w-9 shrink-0 text-right text-xs text-ink-3" title="peso do fator">
-            {Math.round(r.weight * 100)}%
+            {pct(Math.max(0, Math.min(1, r.weight)))}
           </span>
-          <span className="min-w-0">
+          <span className="min-w-0 break-words">
             <span className="text-ink">{r.label}</span>
             {r.detail ? <span className="text-ink-3"> · {r.detail}</span> : null}
             <span className="sr-only"> ({REASON_KIND_LABEL[r.kind]})</span>
@@ -78,9 +78,9 @@ export function PredictionList({ items }: { items: PredictionItem[] }) {
       </div>
 
       <ol className="divide-y divide-line">
-        {items.map((item) => (
-          <li key={`${item.rank}-${item.pair.origin}-${item.pair.destination}-${item.type}-${item.segment_label ?? ""}`}>
-            <article className="grid grid-cols-1 gap-x-4 gap-y-4 py-5 lg:grid-cols-[2.5rem_minmax(0,1.6fr)_repeat(3,minmax(0,0.9fr))_minmax(0,1.1fr)]">
+        {items.map((item, index) => (
+          <li key={`${index}-${item.rank}-${item.pair.origin}-${item.pair.destination}-${item.type}`}>
+            <article className="grid min-w-0 grid-cols-1 gap-x-4 gap-y-4 py-5 lg:grid-cols-[2.5rem_minmax(0,1.6fr)_repeat(3,minmax(0,0.9fr))_minmax(0,1.1fr)]">
               <div className="tnum hidden text-lg font-semibold text-ink-3 lg:block">{item.rank}</div>
 
               <div className="min-w-0">
@@ -88,9 +88,11 @@ export function PredictionList({ items }: { items: PredictionItem[] }) {
                   <span className="tnum text-sm font-semibold text-ink-3 lg:hidden">{item.rank}.</span>
                   <PairName item={item} />
                 </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
                   <Badge tone="primary">{OFFER_TYPE_SHORT[item.type]}</Badge>
-                  {item.segmented && item.segment_label ? <Badge>{item.segment_label}</Badge> : null}
+                  {item.segmented && item.segment_label ? (
+                    <Badge title={item.segment_label}>{item.segment_label}</Badge>
+                  ) : null}
                   <span className="sr-only">{OFFER_TYPE_LABEL[item.type]}</span>
                 </div>
                 {item.last_offer ? (
@@ -106,7 +108,7 @@ export function PredictionList({ items }: { items: PredictionItem[] }) {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-3 lg:contents">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))] gap-3 lg:contents">
                 {HORIZONS.map((h, i) => (
                   <div key={h}>
                     <div className="mb-1 text-xs text-ink-3 lg:hidden">{h} dias</div>
@@ -131,25 +133,30 @@ export function PredictionList({ items }: { items: PredictionItem[] }) {
                 <p className="mt-1 text-xs text-ink-3">mediana e quartis do bônus</p>
               </div>
 
-              <div className="lg:col-span-6 lg:pl-[3.5rem]">
-                <details className="group rounded-md border border-line bg-surface-2 open:bg-bg">
-                  <summary className="flex items-center justify-between gap-3 px-3 py-2 text-sm text-ink-2 hover:text-ink">
-                    <span>
-                      <span className="font-medium text-ink">Por que está na lista:</span>{" "}
-                      {item.reasons[0]?.label}
-                      {item.reasons.length > 1 ? ` e mais ${item.reasons.length - 1}` : ""}
-                    </span>
-                    <span aria-hidden="true" className="text-xs text-ink-3 group-open:hidden">
-                      ver fatores
-                    </span>
-                    <span aria-hidden="true" className="hidden text-xs text-ink-3 group-open:inline">
-                      ocultar
-                    </span>
-                  </summary>
-                  <div className="border-t border-line px-3 py-3">
-                    <Reasons reasons={item.reasons} />
-                  </div>
-                </details>
+              <div className="min-w-0 lg:col-span-6 lg:pl-[3.5rem]">
+                {item.reasons.length === 0 ? (
+                  <p className="rounded-md border border-dashed border-line-strong px-3 py-2 text-sm text-ink-2">
+                    Sem fatores registrados para este item.
+                  </p>
+                ) : (
+                  <details className="group rounded-md border border-line bg-surface-2 open:bg-bg">
+                    <summary className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm text-ink-2 hover:text-ink">
+                      <span className="min-w-0 truncate" title={item.reasons.map((r) => r.label).join("; ")}>
+                        <span className="font-medium text-ink">Por que está na lista:</span> {item.reasons[0].label}
+                        {item.reasons.length > 1 ? ` e mais ${item.reasons.length - 1}` : ""}
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-xs text-ink-3 group-open:hidden">
+                        ver fatores
+                      </span>
+                      <span aria-hidden="true" className="hidden shrink-0 text-xs text-ink-3 group-open:inline">
+                        ocultar
+                      </span>
+                    </summary>
+                    <div className="border-t border-line px-3 py-3">
+                      <Reasons reasons={item.reasons} />
+                    </div>
+                  </details>
+                )}
               </div>
             </article>
           </li>

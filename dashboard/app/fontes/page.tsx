@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Badge, STATUS_TONE } from "@/components/badge";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
+import { ScrollRegion } from "@/components/scroll-region";
 import { getSourceHealth, type SourceStatus } from "@/lib/api";
 import { SOURCE_KIND_LABEL, SOURCE_STATUS_LABEL, dateTime, int, pct, relativeFrom } from "@/lib/format";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 const ORDER: SourceStatus[] = ["blocked", "error", "degraded", "stale", "ok"];
 
 export default async function SourcesPage() {
-  const data = await getSourceHealth();
+  const { data, discarded } = await getSourceHealth();
   const now = new Date(data.generated_at);
   const sources = [...data.sources].sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
   const count = (s: SourceStatus) => sources.filter((x) => x.status === s).length;
@@ -33,9 +34,16 @@ export default async function SourcesPage() {
         ]}
       />
 
+      {discarded > 0 ? (
+        <p role="status" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+          {discarded === 1 ? "1 fonte da API foi descartada" : `${discarded} fontes da API foram descartadas`} por formato
+          inválido.
+        </p>
+      ) : null}
+
       <Section title="Fontes" description="Ordenadas da mais crítica para a mais saudável.">
         <p className="mb-2 text-xs text-ink-3 lg:hidden">Deslize a tabela para o lado para ver todas as colunas.</p>
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Tabela de saúde das fontes">
           <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
@@ -51,12 +59,12 @@ export default async function SourcesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {sources.map((s) => (
-                <tr key={s.source} className="align-top">
+              {sources.map((s, i) => (
+                <tr key={`${i}-${s.source}`} className="align-top">
                   <td className="py-3 pr-4">
-                    <div className="font-medium text-ink">{s.source}</div>
+                    <div className="max-w-[22rem] break-all font-medium text-ink">{s.source}</div>
                     <div className="mt-0.5 text-xs text-ink-3">{SOURCE_KIND_LABEL[s.kind]}</div>
-                    {s.message ? <p className="mt-1.5 max-w-[22rem] text-xs leading-5 text-ink-2">{s.message}</p> : null}
+                    {s.message ? <p className="mt-1.5 max-w-[22rem] break-words text-xs leading-5 text-ink-2">{s.message}</p> : null}
                   </td>
                   <td className="py-3 pr-4">
                     <Badge tone={STATUS_TONE[s.status]}>{SOURCE_STATUS_LABEL[s.status]}</Badge>
@@ -84,7 +92,7 @@ export default async function SourcesPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         <p className="mt-3 max-w-prose text-xs leading-5 text-ink-3">
           Extração = itens com campanha reconhecida sobre itens coletados nos últimos 7 dias. Destaque em laranja
           abaixo de 80%; erro em vermelho acima de 20% nas últimas 24 h. Fontes Wayback só servem ao backfill histórico.

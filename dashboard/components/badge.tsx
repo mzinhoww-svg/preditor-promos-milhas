@@ -11,10 +11,19 @@ const TONE: Record<Tone, string> = {
   primary: "border-primary/30 bg-primary-soft text-primary",
 };
 
-export function Badge({ tone = "neutral", children }: { tone?: Tone; children: React.ReactNode }) {
+export function Badge({
+  tone = "neutral",
+  title,
+  children,
+}: {
+  tone?: Tone;
+  title?: string;
+  children: React.ReactNode;
+}) {
   return (
     <span
-      className={`inline-flex items-center whitespace-nowrap rounded border px-1.5 py-0.5 text-xs font-medium leading-4 ${TONE[tone]}`}
+      title={title ?? (typeof children === "string" ? children : undefined)}
+      className={`inline-flex max-w-full items-center truncate whitespace-nowrap rounded border px-1.5 py-0.5 text-xs font-medium leading-4 ${TONE[tone]}`}
     >
       {children}
     </span>

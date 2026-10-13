@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Badge } from "@/components/badge";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ReliabilityChart } from "@/components/reliability-chart";
+import { ScrollRegion } from "@/components/scroll-region";
 import { getAccuracy, getModelMetrics, HORIZONS, type ModelSummary } from "@/lib/api";
 import { dateLong, dateTime, int, num, pct, signed } from "@/lib/format";
 
@@ -15,7 +16,8 @@ const DECISION_LABEL = {
 } as const;
 
 export default async function ModelPage() {
-  const [m, acc] = await Promise.all([getModelMetrics(), getAccuracy()]);
+  const [m, accRes] = await Promise.all([getModelMetrics(), getAccuracy()]);
+  const acc = accRes.data;
   const c = m.champion;
   const prod = c.production;
 
@@ -47,12 +49,13 @@ export default async function ModelPage() {
         ]}
       />
 
-      <div className="grid gap-x-10 gap-y-10 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-x-10 gap-y-10 lg:grid-cols-2">
         <Section
           title="Validação histórica"
           description={`${c.validation.method}, ${c.validation.folds} dobras, ${dateLong(c.validation.period.from)} a ${dateLong(c.validation.period.to)}. Mede o que o modelo teria acertado no passado.`}
         >
           <MetricTable
+            label="Tabela de validação histórica por janela"
             rows={HORIZONS.map((h) => {
               const v = c.validation.by_horizon[h];
               return {
@@ -74,6 +77,7 @@ export default async function ModelPage() {
         >
           {prod ? (
             <MetricTable
+              label="Tabela de precisão em produção por janela"
               rows={HORIZONS.map((h) => {
                 const p = prod.by_horizon[h];
                 const v = c.validation.by_horizon[h];
@@ -107,7 +111,7 @@ export default async function ModelPage() {
           title="Campeão × desafiante"
           description="O desafiante só vai para produção se vencer em Brier e log-loss com intervalo de confiança por bootstrap em blocos."
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
             <ModelCard model={c} role="Campeão" />
             {m.challenger ? (
               <ModelCard model={m.challenger} role="Desafiante" />
@@ -115,7 +119,7 @@ export default async function ModelPage() {
               <p className="text-sm text-ink-2">Sem desafiante treinado.</p>
             )}
           </div>
-          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-line p-4 text-sm sm:grid-cols-4">
+          <dl className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-x-6 gap-y-3 rounded-lg border border-line p-4 text-sm">
             <div>
               <dt className="text-xs text-ink-3">Horizonte</dt>
               <dd className="tnum mt-0.5 font-medium text-ink">{m.comparison.horizon} dias</dd>
@@ -134,13 +138,13 @@ export default async function ModelPage() {
               <dt className="text-xs text-ink-3">Δ Log-loss</dt>
               <dd className="tnum mt-0.5 font-medium text-ink">{signed(m.comparison.delta_log_loss)}</dd>
             </div>
-            <div className="col-span-2 sm:col-span-4">
+            <div className="col-span-full">
               <dt className="text-xs text-ink-3">Decisão</dt>
               <dd className="mt-0.5 flex flex-wrap items-center gap-2 text-ink">
                 <Badge tone={m.comparison.decision === "promote_challenger" ? "ok" : "neutral"}>
                   {DECISION_LABEL[m.comparison.decision]}
                 </Badge>
-                <span className="text-ink-2">{m.comparison.note}</span>
+                <span className="min-w-0 break-words text-ink-2">{m.comparison.note}</span>
               </dd>
             </div>
           </dl>
@@ -151,7 +155,7 @@ export default async function ModelPage() {
         title="Acerto semanal em produção"
         description={`Horizonte de ${acc.weekly[0]?.horizon ?? 30} dias, por semana de emissão da predição.`}
       >
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Tabela de acerto semanal em produção">
           <table className="w-full min-w-[32rem] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
@@ -163,8 +167,8 @@ export default async function ModelPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {acc.weekly.map((wk) => (
-                <tr key={wk.week}>
+              {acc.weekly.map((wk, i) => (
+                <tr key={`${i}-${wk.week}`}>
                   <td className="py-2 pr-4 text-ink">{dateLong(wk.week)}</td>
                   <td className="tnum py-2 pr-4 text-ink-2">{int(wk.n)}</td>
                   <td className="tnum py-2 pr-4 font-medium text-ink">{pct(wk.hit_rate)}</td>
@@ -178,7 +182,7 @@ export default async function ModelPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </Section>
 
       <p className="text-xs text-ink-3">Métricas geradas {dateTime(m.generated_at)}.</p>
@@ -187,15 +191,17 @@ export default async function ModelPage() {
 }
 
 function MetricTable({
+  label,
   headers,
   rows,
 }: {
+  label: string;
   headers: string[];
   rows: { horizon: string; cells: string[]; flag?: boolean }[];
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <ScrollRegion label={label}>
+      <table className="w-full min-w-[26rem] text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
             <th className="py-2 pr-4 font-medium">Janela</th>
@@ -207,8 +213,8 @@ function MetricTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
-          {rows.map((r) => (
-            <tr key={r.horizon}>
+          {rows.map((r, i) => (
+            <tr key={`${i}-${r.horizon}`}>
               <td className="py-2.5 pr-4 font-medium text-ink">
                 {r.horizon} dias
                 {r.flag ? (
@@ -226,22 +232,22 @@ function MetricTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollRegion>
   );
 }
 
 function ModelCard({ model, role }: { model: ModelSummary; role: string }) {
   const v30 = model.validation.by_horizon["30"];
   return (
-    <div className="rounded-lg border border-line p-4">
-      <div className="flex items-center justify-between gap-2">
+    <div className="min-w-0 rounded-lg border border-line p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-medium text-ink-3">{role}</span>
         <Badge tone={model.production ? "ok" : "neutral"}>{model.production ? "em produção" : "sem produção"}</Badge>
       </div>
-      <p className="mt-1 text-lg font-semibold tracking-tight text-ink">
+      <p className="mt-1 break-words text-lg font-semibold tracking-tight text-ink">
         {model.name} <span className="tnum text-base font-medium text-ink-2">{model.version}</span>
       </p>
-      <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
+      <dl className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 text-sm">
         <div>
           <dt className="text-xs text-ink-3">Brier 30 d</dt>
           <dd className="tnum font-medium text-ink">{num(v30.brier)}</dd>

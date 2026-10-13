@@ -3,6 +3,9 @@ import type { AlertKind, AlertSeverity, OfferType, SourceKind, SourceStatus } fr
 const ptBR = "pt-BR";
 
 export function pct(value: number, digits = 0): string {
+  // D6: valores minúsculos mas positivos não viram "0%".
+  if (digits === 0 && value > 0 && value < 0.005) return "<1%";
+  if (digits === 0 && value < 1 && value > 0.995) return ">99%";
   return new Intl.NumberFormat(ptBR, {
     style: "percent",
     minimumFractionDigits: digits,
