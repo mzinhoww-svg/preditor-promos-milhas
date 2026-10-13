@@ -6,6 +6,7 @@ from preditor.extract import (
     BONUS_PCT_RE,
     Offer,
     cross_check,
+    detect_bonus_conflict,
     extract,
     normalize,
     validate_offer,
@@ -92,3 +93,34 @@ def test_validate_offer_invalid_date():
     ok, reasons = validate_offer(off)
     assert ok is False
     assert "inicio_invalido" in reasons
+
+
+def test_n1_inverted_explicit_year_does_not_roll():
+    off = extract("Livelo para Smiles: 90% de bônus de 15/03/2025 a 10/03/2025.").ofertas[0]
+    assert off.inicio == "2025-03-15"
+    assert off.fim == "2025-03-10"
+    ok, reasons = validate_offer(off)
+    assert ok is False
+    assert "fim_antes_inicio" in reasons
+
+
+def test_n2_only_end_has_no_inicio():
+    off = extract("Livelo para Smiles: 90% de bônus até 15/03/2025.").ofertas[0]
+    assert off.inicio is None
+    assert off.fim == "2025-03-15"
+
+
+def test_n3_conflicting_bonus_flagged():
+    text = "Livelo para Smiles: bônus de 60% de 10/03/2025 a 15/03/2025. Também 80% de bônus."
+    assert detect_bonus_conflict(text) is True
+    off = extract(text).ofertas[0]
+    assert off.segmento == "bonus_conflitante"
+
+
+def test_n4_single_program_purchase_destination_and_film_not_offer():
+    film = extract("Filme Smiles de 90% de aprovação.").ofertas
+    assert film == []
+    off = extract("Smiles: compra de pontos com 40% de desconto de 10/03/2025 a 15/03/2025.").ofertas[0]
+    assert off.origem is None
+    assert off.destino == "smiles"
+    assert off.tipo == "purchase_discount"

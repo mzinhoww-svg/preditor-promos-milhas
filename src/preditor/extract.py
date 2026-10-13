@@ -92,7 +92,7 @@ def _sanitize_sentence(sentence: str) -> str | None:
     low = sentence.lower()
     if any(m in low for m in _NEGATION_MARKERS):
         return None
-    if any(m in low for m in _HISTORY_MARKERS) and not _promo_signal(sentence):
+    if any(m in low for m in _HISTORY_MARKERS):
         return None
     # trunca em marcador de injeção
     for marker in _INJECTION_MARKERS:
@@ -126,7 +126,7 @@ def _sanitize(text_norm: str) -> str:
         if not s:
             continue
         out = _sanitize_sentence(s)
-        if out:
+        if out and _promo_signal(out):
             kept.append(out)
     if not kept:
         return ""
@@ -185,84 +185,67 @@ def _make_date(day, month, year, first_seen_year: int | None) -> str | None:
 
 
 def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
-    """Coleta datas ISO de um trecho, com inferência de ano e rollover de virada."""
-    fs_year = _current_year(first_seen_at)
+    """Coleta datas ISO; rollover de virada só quando o fim omitiu o ano."""
+    fs_year = _current_year(first_seen_at) if first_seen_at is not None else None
+    if fs_year is None:
+        fs_year = date.today().year
+
     candidates = []
     for m in DATA_NUM_RE.finditer(text_norm):
         candidates.append((m.start(), m.group(1), m.group(2), m.group(3)))
     for m in DATA_EXT_RE.finditer(text_norm):
         candidates.append((m.start(), m.group(1), m.group(2), m.group(3)))
-    candidates.sort(key=lambda c: c[0])
 
-    # contexto promocional: dd/mm sem ano só se houver palavra-chave perto
-    promoted = []
+    explicit_years = []
+    resolved = []  # (pos, iso, explicit_year bool)
     for pos, day, month, year in candidates:
-        if (year is None or str(year).strip() == ""):
+        explicit = (year is not None and str(year).strip() != "")
+        # contexto promocional para datas sem ano
+        if not explicit:
             left = text_norm[max(0, pos - 40):pos].lower()
             right = text_norm[pos:pos + 20].lower()
             ctx = left + right
-            if not any(k in ctx for k in ("de ", " a ", "até", "ate", "valid", "vig", "período", "periodo", "até")):
+            if not any(k in ctx for k in (" de ", " a ", "até", "ate", "valid", "vig", "período", "periodo")):
                 continue
-        iso = _make_date(day, month, year, fs_year)
-        if iso:
-            promoted.append((pos, iso, year is not None and str(year).strip() != ""))
-
-    # infer year from nearest explicit year in the segment
-    explicit_years = []
-    for pos, day, month, year in candidates:
-        if year is not None and str(year).strip() != "":
-            iso = _make_date(day, month, year, fs_year)
-            if iso:
-                explicit_years.append((pos, iso))
-
-    for pos, day, month, year in candidates:
         y = year
-        if y is None or str(y).strip() == "":
+        if not explicit:
             if explicit_years:
                 nearest = min(explicit_years, key=lambda e: abs(e[0] - pos))
-                # derive year from nearest iso
                 y = nearest[1][:4]
             else:
                 y = None
-        iso = _make_date(day, month, y, fs_year)
-        if iso:
-            pass
-    # fallback: just rebuild from promoted list already computed; redo cleanly:
-    out = []
-    # Recompute with nearest explicit
-    results = []
-    for pos, day, month, year in candidates:
-        if year is None or str(year).strip() == "":
-            # require context to accept yearless
-            left = text_norm[max(0, pos - 40):pos].lower()
-            right = text_norm[pos:pos + 20].lower()
-            ctx = left + right
-            if not any(k in ctx for k in ("de ", " a ", "até", "ate", "valid", "vig", "período", "periodo")):
-                continue
-        y = year
-        if y is None or str(y).strip() == "":
-            if explicit_years:
-                nearest = min(explicit_years, key=lambda e: abs(e[0] - pos))
-                y = nearest[1][:4]
-            else:
-                y = fs_year
-        iso = _make_date(day, month, y, fs_year)
-        if not iso:
+        iso = _make_date(day, month, y, fs_year if y is None else None)
+        # if iso None but year provided by candidate, _make_date already uses it; fs_year not needed
+        if iso is None and y is not None:
+            iso = _make_date(day, month, y, None)
+        if iso is None:
             continue
-        results.append((pos, iso, (year is not None and str(year).strip() != "")))
-    # dedup preserving order
-    for pos, iso, hasy in sorted(results, key=lambda x: x[0]):
+        if explicit:
+            explicit_years.append((pos, iso))
+        resolved.append((pos, iso, explicit))
+
+    out = []
+    for pos, iso, explicit in sorted(resolved, key=lambda x: x[0]):
         if not out or out[-1] != iso:
             out.append(iso)
-    # rollover: if two dates and second < first and first year not both explicit
+
+    # rollover: fim < inicio => +1 ano SOMENTE se ano do fim foi omitido
     if len(out) >= 2:
         try:
             d0 = date.fromisoformat(out[0])
             d1 = date.fromisoformat(out[1])
             if d1 < d0:
-                # if second lacks explicit year (best effort: infer) add 1 year
-                nd1 = d1.replace(year=d1.year + 1)
-                out[1] = nd1.isoformat()
+                # determinar se segunda data teve ano explicito: procurar candidato
+                second_explicit = False
+                # best effort: se a data final aparece em resolved com explicit True
+                for _pos, iso, explicit in resolved:
+                    if iso == out[1]:
+                        second_explicit = explicit
+                        break
+                if not second_explicit:
+                    nd1 = d1.replace(year=d1.year + 1)
+                    out[1] = nd1.isoformat()
+                # else: mantém (fim_antes_inicio)
         except ValueError:
             pass
     return out
@@ -293,7 +276,7 @@ def _directional_pair(sentence: str) -> tuple[str | None, str | None]:
     }
     progs = _programs_in(sentence)
     if len(progs) < 2:
-        return (progs[0] if len(progs) == 1 else None), None
+        return None, (progs[0] if len(progs) == 1 else None)
     # "X para Y" / "X -> Y" / "X a Y"
     for origin in progs:
         for dest in progs:
@@ -565,6 +548,30 @@ def _has_invalid_date(sentence: str, first_seen_at: Any = None) -> bool:
     return False
 
 
+
+_BONUS_CONFLICT_CACHE: set[str] = set()
+
+
+def detect_bonus_conflict(text: Any) -> bool:
+    """Retorna True se houver mais de um percentual de bônus distinto (sem soma additive)."""
+    tn = normalize(text)
+    vals = []
+    for m in BONUS_PCT_RE.finditer(tn):
+        v = m.group(1) or m.group(2)
+        if v:
+            try:
+                vals.append(float(v.replace(",", ".")))
+            except ValueError:
+                pass
+    distinct = {round(x, 3) for x in vals}
+    # additive plus patterns não contam como conflito
+    if re.search(r"\d{1,3}(?:,\d+)?\s*%[^.]*?\+\s*\d{1,3}(?:,\d+)?\s*%", tn):
+        return False
+    return len(distinct) > 1
+
+
+has_bonus_conflict = detect_bonus_conflict
+
 def _build_offer(sentence: str, first_seen_at: Any = None) -> Offer | None:
     sentence = sentence.strip()
     if not sentence:
@@ -582,17 +589,33 @@ def _build_offer(sentence: str, first_seen_at: Any = None) -> Offer | None:
     segmented_flag = [False]
     bonus = _extract_bonus(cleaned, segmented_flag)
     segmented = _detect_segmented(cleaned) or segmented_flag[0]
-    segmento = _segment_label(cleaned, segmented)
+    conflict = detect_bonus_conflict(cleaned)
+    if conflict:
+        segmento = "bonus_conflitante"
+    else:
+        segmento = _segment_label(cleaned, segmented)
     dates = _collect_dates(cleaned, first_seen_at)
-    inicio = dates[0] if len(dates) >= 1 else None
-    fim = dates[1] if len(dates) >= 2 else (dates[0] if len(dates) == 1 and any(k in cleaned.lower() for k in ("até", "ate", "válido", "valido", "validade", "termina", "encerra")) else None)
-    # if only one date and no explicit end marker, treat as inicio
-    if len(dates) == 1 and fim is None and inicio is None:
+    if len(dates) >= 2:
         inicio = dates[0]
-    if len(dates) == 1 and fim is None and not any(k in cleaned.lower() for k in ("até", "ate", "termina", "encerra")):
-        inicio = dates[0]
+        fim = dates[1]
+    elif len(dates) == 1:
+        d0 = dates[0]
+        lowc = cleaned.lower()
+        if any(k in lowc for k in ("até", "ate", "válido", "valido", "validade", "termina", "encerra")):
+            inicio = None
+            fim = d0
+        else:
+            inicio = d0
+            fim = None
+    else:
+        inicio = None
         fim = None
 
+    # require tipo + bonus/desconto ligado
+    if tipo is None:
+        return None
+    if bonus is None and not (dates and any(k in cleaned.lower() for k in ("bônus", "bonus", "bonifica", "desconto"))):
+        return None
     # require some promotion signal
     if bonus is None and not dates and origin is None and dest is None and tipo is None:
         return None
@@ -624,15 +647,10 @@ def extract(text: Any, first_seen_at: Any = None, **kwargs: Any) -> Extraction:
     tn = _sanitize(normalize(text))
     offers = []
     if tn:
-        # split into sentences and process each
-        for sent in re.split(r"(?<=[.!?])\s+", tn):
-            sent = sent.strip()
-            if not sent:
-                continue
-            off = _build_offer(sent, first_seen_at=first_seen_at)
-            if off is not None and not (off.origem is None and off.destino is None and off.tipo is None
-                                            and off.bonus_pct is None and off.inicio is None and off.fim is None):
-                offers.append(off)
+        off = _build_offer(tn, first_seen_at=first_seen_at)
+        if off is not None and not (off.origem is None and off.destino is None and off.tipo is None
+                                        and off.bonus_pct is None and off.inicio is None and off.fim is None):
+            offers.append(off)
     # dedup
     uniq = []
     seen_keys = set()
