@@ -1,16 +1,18 @@
 # TASKS
 
-| ID | Tarefa | Responsável | Terminal | Status | Aceite |
-|---|---|---|---|---|---|
-| T01 | Repo, Compose local, schema Alembic, CI com gitleaks | orquestrador | Claude Code | em_revisao | 13 testes verdes local; CI verde |
-| T02 | Módulo campaigns (dedup, validated, peso) | orquestrador | Claude Code | em_revisao | testes unitários verdes |
-| T03 | Módulo budget com ledger em Postgres | orquestrador | Claude Code | em_revisao | testes verdes |
-| T04 | Glossário e decisões | orquestrador | Claude Code | concluida | docs/glossario.md |
-| T05 | Coletor Livelo → Smiles (Wayback + fontes públicas) | pendente | | pendente | fixture + contrato |
-| T05-spec | Spec do coletor Livelo → Smiles (robots/termos, Wayback CDX, schema do extrator, aceite) | Revisor | Claude Code | em_revisao | `docs/plans/coletor-livelo-smiles.md`; robots/termos verificados em 2026-10-13; CDX: 146 URLs únicas em 2023-2026; schema validado com jsonschema; `docs/decisions/002` |
-| T06 | Conjunto de ouro (50 campanhas) | pendente | | pendente | data/gold |
-| T07 | Extrator OpenRouter + regex | pendente | | pendente | metas do briefing |
-| T08 | Baseline B0/B1 e walk-forward | pendente | | pendente | relatório |
-| T09 | API, job diário, dashboard Vercel | pendente | | pendente | MVP |
+| ID | Tarefa | Responsável | Status | Aceite / evidência |
+|---|---|---|---|---|
+| T01 | Repo, Compose local, schema Alembic, CI com gitleaks | orquestrador | concluida | CI verde na main |
+| T02 | Módulo campaigns (dedup, validated, peso) | orquestrador | em_revisao | testes verdes; teste cruzado pendente |
+| T03 | Módulo budget com ledger em Postgres | orquestrador | em_revisao | testes verdes; teste cruzado pendente |
+| T04 | Glossário e decisões 001 e 003 | orquestrador | concluida | docs/ |
+| T05-spec | Spec do coletor Livelo → Smiles | Planejador | em_revisao | PR #2: QA aprovou com ajustes, Planejador atualizando |
+| T05a | Cliente Wayback CDX e ingest idempotente | Programador | em_correcao (ciclo 2) | PR #1: QA devolveu B1 (rate limit anulável) |
+| T07a | Extrator determinístico regex + pydantic | Programador 2 | em_revisao | PR #5: Planejador aprovou vazamento (82ec792); falta resolver conflito com main e CI |
+| T08a | Baseline B0/B1 e walk-forward | Programador 3 | concluida | PR #3 mergeado; vazamento aprovado; T08 mantém grade diária e reconstrução point-in-time |
+| T09a | Dashboard v0 com dados de exemplo | Designer Frontend | em_revisao | PR #9: QA aprovou com ressalvas; corrigindo N1 e N2 |
+| T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
+| T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
+| T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
 
-Teste cruzado (outro agente roda e tenta quebrar) ainda não executado em T01 a T03.
+Limite de correções: 3 por problema, depois o orquestrador simplifica ou corta.

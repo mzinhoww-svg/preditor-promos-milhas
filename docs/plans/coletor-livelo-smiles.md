@@ -113,7 +113,8 @@ Uma mensagem pode gerar zero ou mais ofertas. A saída do extrator é `{"ofertas
           "inicio":     {"type": ["string", "null"], "pattern": "^20[2-3][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
           "fim":        {"type": ["string", "null"], "pattern": "^20[2-3][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
           "segmentada": {"type": "boolean"},
-          "segmento":   {"type": ["string", "null"], "maxLength": 60}
+          "segmento":   {"type": ["string", "null"], "maxLength": 60},
+          "bumerangue_pct": {"type": ["number", "null"], "minimum": 1, "maximum": 300}
         }
       }
     }
@@ -138,8 +139,8 @@ Regras de negócio que o JSON Schema não expressa e que um validador Python apl
 
 ### 3.2 Divergências com o esquema do banco
 
-- `segmento` foi adicionado ao schema v1 (3.1), correspondendo a `offer.segment_label`, que entra na chave única. Sem ele, duas ofertas segmentadas diferentes no mesmo dia colidiriam. **DECIDIR:**
-- "Bumerangue Livelo" (a Livelo devolve parte dos pontos transferidos) aparece em vários artigos (por exemplo, `bumerangue-livelo-orange-friday-smiles-nov23`). Não é bônus da Smiles, e o glossário não tem esse tipo. Proposta: ignorar no v1, ou somar ao `bonus_pct`? Recomendo **ignorar** e registrar em `offer_evidence`, para não inflar o bônus.
+- `segmento` foi adicionado ao schema v1 (3.1), correspondendo a `offer.segment_label`, que entra na chave única. Sem ele, duas ofertas segmentadas diferentes no mesmo dia colidiriam. Ver a decisão 004.
+- "Bumerangue Livelo" (a Livelo devolve parte dos pontos transferidos) aparece em vários artigos (por exemplo, `bumerangue-livelo-orange-friday-smiles-nov23`). Não é bônus da Smiles, e o glossário não tem esse tipo. Tratamento: **decisão 004** (o bumerangue é ignorado no `bonus_pct`). O campo opcional `bumerangue_pct` entra no schema (3.1).
 
 ### 3.3 Regex: pré-filtro e checagem cruzada (camada regex da T07)
 
@@ -196,12 +197,12 @@ Ficam em `tests/fixtures/contract/` e são versionadas. Elas travam o formato da
    - campanha passada citada (deve gerar 0 ofertas, pela regra 4 da 3.1);
    - virada de ano sem ano no texto ("de 30/12 a 05/01" visto em 28/12 e em 02/01) e `inicio=null` só com "até DD/MM";
    - outro par (Livelo → LATAM Pass: o extrator devolve a oferta e o validador do PoC a descarta, então ficam 0 ofertas Livelo → Smiles);
-   - bumerangue (conforme a decisão 3.2);
+   - bumerangue (`bonus_pct` sem a soma do bumerangue, e `bumerangue_pct` preenchido, conforme a decisão 004);
    - data inválida (`31/02`; deve ser descartada).
 4. **Teste de contrato:**
    - todo `esperado.json` valida no schema;
    - o regex e o validador de negócio passam em 100% dos casos;
-   - o extrator LLM, rodado de forma explícita e fora do CI para não gastar orçamento, é medido contra a mesma fixture. **PENDENTE:** as metas numéricas da T07 (precisão e recall por campo) não estão no repositório, e o `TASKS.md` só diz "metas do briefing". O orquestrador precisa registrá-las na spec da T07 antes do aceite.
+   - o extrator LLM, rodado de forma explícita e fora do CI para não gastar orçamento, é medido contra a mesma fixture e contra o conjunto de ouro, com as metas por campo da **decisão 004**.
    - Uma mudança no schema exige versão nova (`oferta-v2.json`) e atualização da fixture no mesmo PR.
 
 ## 5. Fora de escopo
