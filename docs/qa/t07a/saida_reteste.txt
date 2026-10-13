@@ -1,0 +1,80 @@
+   base: {'origem': None, 'destino': None, 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': '2025-03-10', 'fim': '2025-03-15', 'segmentada': False, 'segmento': None}
+   I1 injecao com dado verdadeiro depois: {'origem': None, 'destino': None, 'tipo': 'transfer_bonus', 'bonus_pct': 85.0, 'inicio': '2025-10-10', 'fim': '2025-10-15', 'segmentada': False, 'segmento': None}
+   I2 injecao na mesma sentenca que o fato: {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 85.0, 'inicio': '2025-10-10', 'fim': '2025-10-15', 'segmentada': False, 'segmento': None}
+   I3 fato dentro de sentenca com gatilho 'instruções': {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': '2025-03-10', 'fim': '2025-03-15', 'segmentada': False, 'segmento': None}
+   I4 gatilho em palavra comum (ignore/ouro/prata/público): {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 80.0, 'inicio': '2025-03-01', 'fim': '2025-03-05', 'segmentada': False, 'segmento': None}
+   I5 injecao inserindo segunda oferta falsa: {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 50.0, 'inicio': '2025-03-01', 'fim': '2025-03-05', 'segmentada': False, 'segmento': None}
+   I6 injecao em caixa/unicode (homoglifos, zero-width): {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 70.0, 'inicio': '2025-03-01', 'fim': '2025-03-05', 'segmentada': False, 'segmento': None}
+   I7 JSON embutido: {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 40.0, 'inicio': '2025-03-01', 'fim': '2025-03-05', 'segmentada': False, 'segmento': None}
+[OK ] I2 injecao nao altera bonus (esperado 85) 85.0
+[OK ] I3 fato legitimo preservado {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': '2025-03-10', 'fim': '2025-03-15', 'segmentada': False, 'segmento': None}
+[OK ] I5 bonus nao contaminado por texto injetado (esperado 50) 50.0
+[OK ] I7 JSON embutido nao vira dado (bonus 40, origem livelo) {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 40.0, 'inicio': '2025-03-01', 'fim': '2025-03-05', 'segmentada': False, 'segmento': None}
+[OK ] I6 zero-width nao burla (bonus 70) 70.0
+   D1 31/02: None
+   D2 fim antes do inicio: ('2025-03-15', '2026-03-10', 90.0)
+   D3 mes 13: None
+   D4 ano 2 digitos: ('2025-03-10', '2025-03-15', 90.0)
+   D5 sem ano: ('2026-03-10', '2026-03-15', 90.0)
+   D6 virada de ano sem ano: ('2026-12-28', '2027-01-03', 90.0)
+   D7 29/02 bissexto 2024: ('2024-02-29', '2024-03-05', 90.0)
+   D8 29/02/2025 invalido: None
+   D9 janela 400 dias: ('2025-01-01', '2026-02-05', 90.0)
+   D10 ano 2099: None
+   D11 tres datas: ('2025-03-01', '2025-03-05', 90.0)
+   D12 data de publicacao antes da vigencia: ('2025-03-10', '2025-03-15', 90.0)
+   D13 extenso invalido: None
+   D14 so uma data de fim: ('2025-03-15', '2025-03-15', 90.0)
+   D15 telefone/preco como data: (None, None, 90.0)
+[OK ] D1 data invalida nao gera oferta com datas nulas silenciosamente (None ou flag) None
+[OK ] D2 fim<inicio detectado na validacao ('2025-03-15', '2026-03-10')
+[OK ] D6 virada de ano: fim > inicio ('2026-12-28', '2027-01-03')
+   D5 sem ano usa date.today(): ('2026-03-10', '2026-03-15') (nao deterministico: depende do dia da execucao)
+[OK ] D13 31 de abril rejeitado None
+[OK ] D12 inicio=vigencia (10/03), nao data de publicacao ('2025-03-10', '2025-03-15')
+[OK ] D11 fim=05/03 (ignora regulamento) ('2025-03-01', '2025-03-05')
+[OK ] D15 nao inventa datas {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': None, 'fim': None, 'segmentada': False, 'segmento': None}
+   E vazio: 0 ofertas  (0.00s)
+   E so espacos: 0 ofertas  (0.00s)
+   E None: 0 ofertas  (0.00s)
+   E bytes: 1 ofertas {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': None, 'fim': None, 'segmentada': False, 'segmento': None} (0.00s)
+   E bytes invalido: 0 ofertas  (0.00s)
+   E int: 0 ofertas  (0.00s)
+   E lista: 1 ofertas {'origem': None, 'destino': None, 'tipo': 'transfer_bonus', 'bonus_pct': None, 'inicio': None, 'fim': None, 'segmentada': False, 'segmento': None} (0.00s)
+   E so programa: 0 ofertas  (0.00s)
+   E so pct: 1 ofertas {'origem': None, 'destino': None, 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': None, 'fim': None, 'segmentada': False, 'segmento': None} (0.00s)
+   E texto longo: 1 ofertas {'origem': 'livelo', 'destino': 'smiles', 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': None, 'fim': None, 'segmentada': False, 'segmento': None} (0.27s)
+[OK ] E so pct: oferta sem par/datas nao deveria ser aceita como valida {'origem': None, 'destino': None, 'tipo': 'transfer_bonus', 'bonus_pct': 90.0, 'inicio': None, 'fim': None, 'segmentada': False, 'segmento': None}
+[OK ] E so programa: nao cria oferta None
+[OK ] R redos livelo <1s 0.00s
+[OK ] R redos par <1s 0.01s
+[OK ] R redos pct <1s 0.02s
+[OK ] R redos datas <1s 0.09s
+   S1 direcao invertida: ('smiles', 'livelo', 'transfer_bonus', 90.0, False)
+   S2 'a' ambíguo: ('livelo', 'smiles', 'transfer_bonus', 90.0, False)
+   S3 'e' = par nao direcionado: (None, None, 'transfer_bonus', 90.0, False)
+   S4 mencao a outro programa: ('livelo', 'smiles', 'transfer_bonus', 90.0, False)
+   S5 negacao: None
+   S6 porcentagens multiplas (maior eh pt 'ate'): ('livelo', 'smiles', 'transfer_bonus', 90.0, True)
+   S7 compra + bonus: ('livelo', 'smiles', 'transfer_bonus', 100.0, False)
+   S8 acumulo 'turbinado' + bonus: ('livelo', 'smiles', 'transfer_bonus', 90.0, False)
+[OK ] S1 direcao smiles->livelo ('smiles', 'livelo')
+[OK ] S3 'Livelo e Smiles' nao deve afirmar direcao sem evidencia (None, None)
+[OK ] S4 par certo apesar de 3o programa ('livelo', 'smiles')
+[OK ] S5 negacao nao vira oferta ativa None
+[OK ] S7 tipo=transfer_bonus (compra aparece antes) transfer_bonus
+[OK ] S8 tipo=transfer_bonus transfer_bonus
+[OK ] S9 'ouro/prata' soltos nao marcam segmentada (False, None)
+[OK ] S10 'público' (geral) nao marca segmentada (False, None)
+[OK ] S11 80%+10% = 90, segmentada (90.0, True)
+[OK ] S12 percentual alheio (taxa 20%) nao vira bonus 25.0
+[OK ] S13 bonus anterior citado nao vira bonus atual 30.0
+   S14 bonus 15%: 15.0
+[OK ] S15 bonus de 1 digito (5%) capturado 5.0
+   S16 bonus decimal 100,5%: 100.5
+[OK ] Z1 idempotente 
+[OK ] Z2 first_seen_at resolve ano ausente (ano deve vir de first_seen_at, nao de today) 2024-03-10 vs 2031-03-10
+   V1 first_seen apos inicio (1d): True []
+[OK ] V2 first_seen 80d depois do inicio vira 'inicio_muito_passado' (backfill legitimo rejeitado?) []
+[OK ] V3 origem fora de PROGRAMS rejeitada ValidationError
+[OK ] V4 schema rejeita invalidos ValidationError
