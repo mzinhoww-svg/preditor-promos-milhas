@@ -21,7 +21,10 @@ def content_hash(value: Any) -> str:
 
 def _to_text(value: Any) -> str:
     if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise InvalidUTF8Error("conteudo nao e UTF-8 valido") from exc
     if isinstance(value, str):
         return value
     return str(value)
@@ -35,15 +38,44 @@ def _normalize_collected_at(value: Any) -> datetime | None:
             value = value.replace(tzinfo=UTC)
         return value
     if isinstance(value, str):
-        # aceita ISO 8601
         try:
             v = datetime.fromisoformat(value)
-            if v.tzinfo is None:
-                v = v.replace(tzinfo=UTC)
-            return v
-        except ValueError:
-            return None
-    return None
+        except ValueError as exc:
+            raise InvalidCollectedAtError(f"collected_at invalido: {value!r}") from exc
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=UTC)
+        return v
+    raise InvalidCollectedAtError(f"collected_at invalido: {value!r}")
+
+
+
+class IngestError(ValueError):
+    """Erro de domínio da ingestão."""
+
+
+class EmptyContentError(IngestError):
+    pass
+
+
+class EmptySourceError(IngestError):
+    pass
+
+
+class InvalidURLError(IngestError):
+    pass
+
+
+class InvalidCollectedAtError(IngestError):
+    pass
+
+
+class NullByteError(IngestError):
+    pass
+
+
+class InvalidUTF8Error(IngestError):
+    pass
+
 
 
 @dataclass
@@ -119,9 +151,26 @@ def _resolve_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> tuple[Any, s
     return engine, str(source), str(url), content, collected_at
 
 
+def _validate_url(url: Any) -> None:
+    from urllib.parse import urlparse
+
+    p = urlparse(str(url).strip())
+    if p.scheme not in ("http", "https") or not p.netloc:
+        raise InvalidURLError(f"URL invalida ou sem esquema http(s): {url!r}")
+
+
 def _store(engine, source, url, content, collected_at=None) -> RawMessage:
-    h = content_hash(content)
+    if not isinstance(source, str) or not source.strip():
+        raise EmptySourceError("source nao pode ser vazio")
+    _validate_url(url)
+
     text_content = _to_text(content)
+    if not text_content.strip():
+        raise EmptyContentError("conteudo vazio ou so espacos")
+    if "\x00" in text_content:
+        raise NullByteError("conteudo nao pode conter byte nulo")
+    h = content_hash(text_content)
+
     dt = _normalize_collected_at(collected_at)
 
     with engine.begin() as conn:

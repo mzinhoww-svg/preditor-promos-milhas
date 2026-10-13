@@ -10,6 +10,37 @@ import httpx
 CDX_ENDPOINT = "https://web.archive.org/cdx/search/cdx"
 DEFAULT_USER_AGENT = "preditor-promos-milhas/0.1 (+https://github.com/mzinhoww-svg/preditor-promos-milhas)"
 
+class WaybackError(Exception):
+    """Erro de domínio do cliente Wayback/CDX."""
+
+
+class CDXError(WaybackError):
+    """Erro geral do CDX."""
+
+
+class CDXHTTPError(CDXError, httpx.HTTPStatusError):
+    def __init__(self, message: str, *, request=None, response=None, status_code=None):
+        Exception.__init__(self, message)
+        self.request = request
+        self.response = response
+        self.status_code = status_code if status_code is not None else (getattr(response, "status_code", None))
+        if response is not None or request is not None:
+            httpx.HTTPStatusError.__init__(self, message, request=request, response=response)
+
+
+class CDXRateLimitError(CDXHTTPError):
+    pass
+
+
+class CDXResponseError(CDXError, ValueError):
+    pass
+
+
+WaybackHTTPError = CDXHTTPError
+WaybackRateLimitError = CDXRateLimitError
+WaybackResponseError = CDXResponseError
+
+
 
 class Capture(dict):
     def __getattr__(self, item):
@@ -32,24 +63,26 @@ def _to_cdx_timestamp(value):
     s = str(value).strip()
     if not s:
         return None
-    # tenta ISO 8601 / datas com separadores
+    try:
+        if "T" in s or " " in s or "-" in s or ":" in s:
+            dt = datetime.fromisoformat(s)
+            if ":" in s or "T" in s or " " in s:
+                return dt.strftime("%Y%m%d%H%M%S")
+            return dt.strftime("%Y%m%d")
+    except ValueError:
+        pass
     for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y%m%d", "%Y%m%d%H%M%S"):
         try:
-            # remove Z
-            cand = s.replace("Z", "+00:00")
-            # fromisoformat mais flexível
-            if "T" in cand or " " in cand or "-" in cand:
-                dt = datetime.fromisoformat(cand)
-            else:
-                dt = datetime.strptime(cand, fmt)
-            if "T" in s or ":" in s or " " in s:
+            dt = datetime.strptime(s, fmt)
+            if "%H" in fmt or ":" in fmt or "T" in s or " " in s:
                 return dt.strftime("%Y%m%d%H%M%S")
             return dt.strftime("%Y%m%d")
         except ValueError:
             continue
-    # último recurso: remove separadores
     cleaned = s.replace("-", "").replace(":", "").replace(" ", "").replace("T", "")
-    return cleaned or None
+    if cleaned.isdigit() and len(cleaned) in (8, 14):
+        return cleaned
+    raise ValueError(f"data invalida: {value!r}")
 
 
 def _first_not_none(mapping, *names):
@@ -64,11 +97,15 @@ _INTERVAL_KEYS_END = ("end", "end_ts", "to_ts", "to_date", "end_date", "until", 
 
 
 def _normalize_interval(kwargs):
-    start = _first_not_none(kwargs, *_INTERVAL_KEYS_START)
-    end = _first_not_none(kwargs, *_INTERVAL_KEYS_END)
+    start_raw = _first_not_none(kwargs, *_INTERVAL_KEYS_START)
+    end_raw = _first_not_none(kwargs, *_INTERVAL_KEYS_END)
     for key in _INTERVAL_KEYS_START + _INTERVAL_KEYS_END:
         kwargs.pop(key, None)
-    return _to_cdx_timestamp(start), _to_cdx_timestamp(end)
+    start = _to_cdx_timestamp(start_raw)
+    end = _to_cdx_timestamp(end_raw)
+    if start is not None and end is not None and start > end:
+        raise ValueError("intervalo invalido: from > to")
+    return start, end
 
 
 class RateLimiter:
@@ -113,6 +150,13 @@ class CDXClient:
         self.transport = transport
         self.timeout = timeout
         self._extra = kwargs
+        attempts = None
+        for k in ("max_retries", "retries", "max_attempts", "attempts", "retry_count"):
+            if k in kwargs and kwargs[k] is not None:
+                attempts = kwargs[k]
+        if attempts is None:
+            attempts = 3
+        self.max_attempts = max(1, int(attempts))
 
     def _params(self, url, start, end, extra):
         params = {"url": url, "output": "json"}
@@ -147,21 +191,75 @@ class CDXClient:
         extra = dict(kwargs)
         params = self._params(url, start, end, extra)
 
-        self.rate_limiter.wait()
+        data = self._request(params, extra)
+        return parse_cdx_response(data, base_url_fallback=url)
 
+    def _request(self, params, extra):
         headers = {"User-Agent": self.user_agent}
         injected = extra.pop("client", None) or extra.pop("http_client", None)
-        if self.transport is not None:
-            with httpx.Client(headers=headers, transport=self.transport, timeout=self.timeout) as client:
-                response = client.get(self.base_url, params=params)
-        elif injected is not None:
-            response = injected.get(self.base_url, params=params, headers=headers)
-        else:
-            with httpx.Client(headers=headers, timeout=self.timeout) as client:
-                response = client.get(self.base_url, params=params)
-        response.raise_for_status()
-        data = response.json() if response.content else []
-        return parse_cdx_response(data, base_url_fallback=url)
+        retryable = {429, 500, 502, 503, 504}
+        backoff = 0.1
+        last_exc = None
+        for attempt in range(1, self.max_attempts + 1):
+            self.rate_limiter.wait()
+            response = None
+            try:
+                if self.transport is not None:
+                    with httpx.Client(headers=headers, transport=self.transport, timeout=self.timeout) as client:
+                        response = client.get(self.base_url, params=params)
+                elif injected is not None:
+                    response = injected.get(self.base_url, params=params, headers=headers)
+                else:
+                    with httpx.Client(headers=headers, timeout=self.timeout) as client:
+                        response = client.get(self.base_url, params=params)
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                if attempt < self.max_attempts:
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 30.0)
+                    continue
+                raise CDXHTTPError(str(exc))
+            # retryable status
+            if response.status_code in retryable:
+                if attempt < self.max_attempts:
+                    delay = backoff
+                    ra = response.headers.get("Retry-After") or response.headers.get("retry-after")
+                    if ra:
+                        try:
+                            delay = max(delay, float(ra))
+                        except ValueError:
+                            from email.utils import parsedate_to_datetime
+                            try:
+                                dt = parsedate_to_datetime(ra)
+                                delay = max(delay, (dt.timestamp() - time.time()))
+                            except (TypeError, ValueError, OverflowError):
+                                pass
+                    time.sleep(max(0.0, min(delay, 60.0)))
+                    backoff = min(backoff * 2, 30.0)
+                    continue
+                raise CDXHTTPError(
+                    f"CDX HTTP {response.status_code}",
+                    request=getattr(response, "request", None),
+                    response=response,
+                    status_code=response.status_code,
+                )
+            if response.status_code >= 400:
+                raise CDXHTTPError(
+                    f"CDX HTTP {response.status_code}",
+                    request=getattr(response, "request", None),
+                    response=response,
+                    status_code=response.status_code,
+                )
+            # parse json
+            if not response.content:
+                return []
+            try:
+                return response.json()
+            except Exception as exc:
+                raise CDXResponseError("resposta CDX nao e JSON valido") from exc
+        if last_exc is not None:
+            raise CDXHTTPError(str(last_exc))
+        raise CDXHTTPError("CDX: tentativas esgotadas")
 
 
 def parse_cdx_response(data, base_url_fallback=None):
@@ -193,14 +291,6 @@ def parse_cdx_response(data, base_url_fallback=None):
             cap = Capture(**mapping)
             _add_aliases(cap, base_url_fallback)
             captures.append(cap)
-        if (not captures) and all(isinstance(x, (list, tuple)) for x in data):
-            std = ["urlkey", "timestamp", "original", "mimetype", "statuscode", "digest", "length"]
-            captures = []
-            for row in data:
-                mapping = {std[i]: (row[i] if i < len(row) else None) for i in range(min(len(std), len(row)))}
-                cap = Capture(**mapping)
-                _add_aliases(cap, base_url_fallback)
-                captures.append(cap)
         return captures
     return []
 
@@ -226,7 +316,24 @@ WaybackMachineClient = CDXClient
 Client = CDXClient
 
 
+_MODULE_LIMITER = RateLimiter(rate=1.0)
+
+
 def list_captures(url, *args, **kwargs):
+    global _MODULE_LIMITER
+    kwargs = dict(kwargs)
+    # seleciona rate do limiter compartilhado quando fornecido
+    rl = kwargs.get("rate_limit", kwargs.get("min_interval"))
+    if rl is None:
+        rl = kwargs.get("delay")
+    if "rate_limit" in kwargs or "min_interval" in kwargs or "delay" in kwargs or "rate_limit_seconds" in kwargs:
+        _MODULE_LIMITER = RateLimiter(
+            rate=kwargs.get("rate_limit", None),
+            min_interval=kwargs.get("min_interval", None),
+            delay=kwargs.get("delay", kwargs.get("rate_limit_seconds", None)),
+        )
+    _MODULE_LIMITER.wait()
+
     client = kwargs.pop("client", None) or kwargs.pop("cdx_client", None)
     if client is None:
         ctor_keys = {"base_url", "user_agent", "rate_limit", "min_interval", "delay", "transport", "timeout", "ua", "rate_limit_seconds"}
@@ -262,12 +369,20 @@ __all__ = [
     "CDX_ENDPOINT",
     "DEFAULT_USER_AGENT",
     "CDXClient",
+    "CDXError",
+    "CDXHTTPError",
+    "CDXRateLimitError",
+    "CDXResponseError",
     "Capture",
     "Client",
     "RateLimiter",
     "WaybackCDXClient",
     "WaybackClient",
+    "WaybackError",
+    "WaybackHTTPError",
     "WaybackMachineClient",
+    "WaybackRateLimitError",
+    "WaybackResponseError",
     "cdx",
     "content_hash",
     "fetch_captures",

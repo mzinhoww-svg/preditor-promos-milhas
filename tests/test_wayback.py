@@ -1,9 +1,12 @@
 
 import httpx
+import pytest
 
 from preditor.wayback import (
     DEFAULT_USER_AGENT,
     CDXClient,
+    CDXHTTPError,
+    CDXResponseError,
     list_captures,
     parse_cdx_response,
 )
@@ -36,40 +39,79 @@ def test_list_captures_uses_mock_transport_and_parses():
 
 
 def test_list_captures_function_accepts_interval_positional():
-    def h(request):
-        return httpx.Response(200, json=FIXTURE)
-    transport = httpx.MockTransport(h)
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=FIXTURE))
     captures = list_captures(
         "https://exemplo.com/promo", "20260101", "20260301", transport=transport, rate_limit=0
     )
     assert len(captures) == 2
 
 
-def test_rate_limit_calls_sleep(monkeypatch):
+def test_header_only_returns_empty():
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=[["urlkey", "timestamp"]]))
+    captures = CDXClient(transport=transport, rate_limit=0).list_captures("https://exemplo.com/promo")
+    assert captures == []
+
+
+def test_retry_on_500_respects_limit():
+    calls = {"n": 0}
+
+    def h(request):
+        calls["n"] += 1
+        return httpx.Response(500, json={"err": "boom"})
+
+    transport = httpx.MockTransport(h)
+    with pytest.raises(CDXHTTPError):
+        CDXClient(transport=transport, rate_limit=0, max_retries=2).list_captures("https://exemplo.com/promo")
+    assert calls["n"] == 2
+
+
+def test_retry_on_429_respects_retry_after(monkeypatch):
     slept = []
+    monkeypatch.setattr("preditor.wayback.time.sleep", lambda s: slept.append(s))
+    calls = {"n": 0}
 
-    def fake_sleep(seconds):
-        slept.append(seconds)
+    def h(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(429, headers={"Retry-After": "2"}, json={})
+        return httpx.Response(200, json=FIXTURE)
 
-    monkeypatch.setattr("preditor.wayback.time.sleep", fake_sleep)
-    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=FIXTURE))
-    c1 = CDXClient(transport=transport, rate_limit=2)  # 0.5s interval
-    c1.list_captures("https://exemplo.com/promo", rate_limit=0) if False else None
-    # duas requisições no mesmo cliente devem respeitar intervalo
-    client = CDXClient(transport=transport, rate_limit=2, min_interval=0.25)
-    client.list_captures("https://exemplo.com/promo")
-    # força segunda chamada imediata
-    monkeypatch.setattr("preditor.wayback.time.monotonic", lambda: 0.0)
-    client.list_captures("https://exemplo.com/promo")
-    assert slept  # ao menos uma espera
+    transport = httpx.MockTransport(h)
+    caps = CDXClient(transport=transport, rate_limit=0, max_retries=3).list_captures("https://exemplo.com/promo")
+    assert len(caps) == 2
+    assert calls["n"] == 2
+    assert any(s >= 2 for s in slept)
 
 
-def test_parse_cdx_response_handles_empty():
+def test_html_200_raises_response_error():
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, text="<html>nope</html>", headers={"content-type": "text/html"}))
+    with pytest.raises((CDXResponseError, ValueError)):
+        CDXClient(transport=transport, rate_limit=0).list_captures("https://exemplo.com/promo")
+
+
+def test_parse_empty():
     assert parse_cdx_response([]) == []
     assert parse_cdx_response(None) == []
 
 
-def test_no_real_network_needed():
-    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=[["timestamp"], []] if False else FIXTURE))
-    captures = CDXClient(transport=transport, rate_limit=0).list_captures("https://exemplo.com/promo")
-    assert isinstance(captures, list)
+def test_invalid_dates_raise():
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=FIXTURE))
+    with pytest.raises(ValueError):
+        CDXClient(transport=transport, rate_limit=0).list_captures("https://exemplo.com/promo", from_date="lixo")
+    with pytest.raises(ValueError):
+        CDXClient(transport=transport, rate_limit=0).list_captures("https://exemplo.com/promo", from_date="2026-03-01", to_date="2026-01-01")
+
+
+def test_module_level_rate_limit_sleeps(monkeypatch):
+    slept = []
+    monkeypatch.setattr("preditor.wayback.time.sleep", lambda s: slept.append(s))
+    import preditor.wayback as w
+    # baseline old
+    w._MODULE_LIMITER = w.RateLimiter(rate=1.0)
+    w._MODULE_LIMITER._last = 0.5
+    # monotonic stays 0 so second call sleeps
+    monkeypatch.setattr("preditor.wayback.time.monotonic", lambda: 0.0)
+    transport = httpx.MockTransport(lambda r: httpx.Response(200, json=FIXTURE))
+    list_captures("https://exemplo.com/promo", transport=transport)
+    list_captures("https://exemplo.com/promo", transport=transport)
+    assert slept, "limiter compartilhado nao dormiu na chamada de modulo"
