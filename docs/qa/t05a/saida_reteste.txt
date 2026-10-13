@@ -1,0 +1,57 @@
+[OK ] I1 reingestao idempotente (mesmo id, 1 linha) id 1/1 linhas=1
+[OK ] I1b reingestao nao altera collected_at original 2026-01-02 03:04:05+00:00
+   I1c mesmo conteudo, outra URL, mesma fonte -> id 1 url guardada: https://www.passageirodeprimeira.com/promo-livelo (dedup por (source, hash); URL da 2a captura se perde)
+[OK ] I1d mesma carga em outra fonte cria linha nova 
+   I2 vazio: REJEITADO EmptyContentError
+   I2 so espacos: REJEITADO EmptyContentError
+   I2 None: REJEITADO ValueError
+   I2 url vazia: REJEITADO InvalidURLError
+   I2 url sem esquema: REJEITADO InvalidURLError
+   I2 url javascript: REJEITADO InvalidURLError
+   I2 url file: REJEITADO InvalidURLError
+   I2 url http://: REJEITADO InvalidURLError
+   I2 source vazio: REJEITADO EmptySourceError
+   I2 source espacos: REJEITADO EmptySourceError
+   I2 nul: REJEITADO NullByteError
+   I2 collected invalido: REJEITADO InvalidCollectedAtError
+   I2 collected int: REJEITADO InvalidCollectedAtError
+[OK ] I3 bytes nao-UTF8 rejeitados com erro de dominio InvalidUTF8Error
+[FALHA] I3b surrogate solto em str -> erro de dominio (IngestError) UnicodeEncodeError
+[OK ] I3c unicode/emoji ok e round-trip 
+   I3d BOM UTF-8: '\ufeffbom' (BOM mantido no conteudo e no hash)
+[FALHA] I4 URL com espacos nas pontas e normalizada ao guardar '  https://www.passageirodeprimeira.com/promo-livelo  '
+[FALHA] I4b URL com controle/quebra de linha rejeitada 'https://www.passageirodeprimeira.com/promo-livelo\n'
+[FALHA] I5 collected_at no futuro rejeitado 2999-01-01 00:00:00+00:00
+   I5b collected_at 1900: aceito
+[FALHA] I6 conteudo que nao e str/bytes rejeitado (lista) "['a', 'b']"
+[OK ] I7 12 threads mesmo conteudo -> 1 id e 0 erros {12}
+   I8 5 MB: ok 0.24s
+   C1 corpo vazio: 0 capturas 
+   C1 []: 0 capturas 
+   C1 so cabecalho: 0 capturas 
+   C1 null: 0 capturas 
+   C1 html no 200: EXC CDXResponseError
+   C1 objeto: 0 capturas 
+   C1 linha curta: 1 capturas {"urlkey": "k", "timestamp": "20250101000000", "original": null, "mimetype": null, "status
+   C1 linha nao-lista: 0 capturas 
+   C1 sem timestamp: 1 capturas {"urlkey": "k", "original": "http://a.com/x", "url": "http://a.com/x"}
+   C1 timestamp invalido: 1 capturas {"urlkey": "k", "timestamp": "ontem", "original": "http://a.com/x", "mimetype": "text/html
+   C1 bytes nao utf8: EXC CDXResponseError
+[OK ] C2 429 Retry-After:2 -> 3 tentativas, espera>=2s, erro tipado CDXHTTPError sleeps=[2.0, 2.0]
+[OK ] C2 500 Retry-After:2 -> 3 tentativas, espera>=2s, erro tipado CDXHTTPError sleeps=[2.0, 2.0]
+[OK ] C2 502 Retry-After:2 -> 3 tentativas, espera>=2s, erro tipado CDXHTTPError sleeps=[2.0, 2.0]
+[OK ] C2 503 Retry-After:2 -> 3 tentativas, espera>=2s, erro tipado CDXHTTPError sleeps=[2.0, 2.0]
+[OK ] C2 504 Retry-After:2 -> 3 tentativas, espera>=2s, erro tipado CDXHTTPError sleeps=[2.0, 2.0]
+[FALHA] C2b 429 final vira CDXRateLimitError CDXHTTPError
+   C2c Retry-After 3600: 3 tentativas, esperas [60.0, 60.0] (limitado a 60 s; Retry-After do servidor ignorado alem disso)
+   C2d Retry-After data HTTP: [60.0, 60.0]
+   C2e Retry-After negativo: [0.1, 0.2]
+   C2f Retry-After lixo: 3 [0.1, 0.2]
+[OK ] C3 503,503,200 -> sucesso None 3
+[OK ] C4 404 nao repete 1 tentativas
+[OK ] C5 erro de rede -> erro tipado apos retries CDXHTTPError 3 tentativas
+[OK ] C5b timeout -> erro tipado CDXHTTPError 3
+   M1 4 chamadas de modulo seguidas (rate 1/s padrao): esperas simuladas = [1.0, 1.0, 1.0]
+[OK ] M1 limitador de modulo espera entre chamadas [1.0, 1.0, 1.0]
+[FALHA] M2 passar rate_limit=1.0 por chamada NAO reinicia o limitador (espera entre chamadas) []
+[FALHA] M3 min_interval=2 por chamada respeita 2 s entre chamadas []
