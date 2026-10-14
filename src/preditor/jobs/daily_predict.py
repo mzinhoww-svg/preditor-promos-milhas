@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from preditor.api.db import get_engine
 from preditor.api.queries import fetch_prediction_accuracy
-from preditor.baseline import predict_proba
+from preditor.baseline import _available, predict_proba
 
 HORIZONS = (7, 15, 30)
 MIN_CAMPAIGNS_B1 = 25
@@ -104,8 +104,9 @@ def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
             segmented=segmented,
             segment_label=segment_label if segment_label else None,
         )
-        # bonus percentis
-        bonus_vals = sorted(float(o["bonus_pct"]) for o in recs if o.get("bonus_pct") is not None)
+        # bonus percentis: apenas ofertas já conhecidas em as_of (point-in-time)
+        known_recs = [o for o in recs if _available(o, ao, made_at)]
+        bonus_vals = sorted(float(o["bonus_pct"]) for o in known_recs if o.get("bonus_pct") is not None)
         p25 = _quantile(bonus_vals, 0.25)
         p50 = _quantile(bonus_vals, 0.50)
         p75 = _quantile(bonus_vals, 0.75)
@@ -131,34 +132,24 @@ def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
                     "p75": p75,
                 })
                 inserted_predictions += 1
-            # prediction_log append-only, idempotente por chave lógica
+            # prediction_log append-only, idempotente por chave lógica (+ constraint única no banco)
             model_version = "B1" if method == "b1" else "B0"
             with eng.begin() as conn:
-                exists = conn.execute(text(
-                    "SELECT 1 FROM prediction_log WHERE model_version=:mv AND origin=:o AND destination=:d "
-                    "AND event_type=:e AND horizon_days=:h AND logged_at::date = :dte"
+                res = conn.execute(text(
+                    "INSERT INTO prediction_log (logged_at, model_version, origin, destination, "
+                    "event_type, horizon_days, probability) VALUES (:logged_at, :mv, :o, :d, :e, :h, :prob) "
+                    "ON CONFLICT (model_version, origin, destination, event_type, horizon_days, "
+                    "((logged_at AT TIME ZONE 'UTC')::date)) DO NOTHING"
                 ), {
+                    "logged_at": made_at,
                     "mv": model_version,
                     "o": origin,
                     "d": destination,
                     "e": event_type,
                     "h": int(h),
-                    "dte": made_at.date(),
-                }).fetchone()
-                if exists is None:
-                    conn.execute(text(
-                        "INSERT INTO prediction_log (logged_at, model_version, origin, destination, "
-                        "event_type, horizon_days, probability) VALUES (:logged_at, :mv, :o, :d, :e, :h, :prob)"
-                    ), {
-                        "logged_at": made_at,
-                        "mv": model_version,
-                        "o": origin,
-                        "d": destination,
-                        "e": event_type,
-                        "h": int(h),
-                        "prob": p,
-                    })
-                    inserted_logs += 1
+                    "prob": p,
+                })
+                inserted_logs += int(res.rowcount or 0)
     return {"as_of": str(ao), "pairs": len(groups), "inserted_predictions": inserted_predictions, "inserted_logs": inserted_logs}
 
 

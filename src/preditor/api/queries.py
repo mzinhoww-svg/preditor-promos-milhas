@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -158,8 +158,10 @@ def fetch_prediction_accuracy(date_from=None, date_to=None, horizon=None) -> dic
     def _d(v):
         if v is None:
             return None
-        if hasattr(v, "date"):
-            return v.date() if not isinstance(v, _date) else v
+        if isinstance(v, datetime):
+            return v.date()
+        if isinstance(v, _date):
+            return v
         return _date.fromisoformat(str(v)[:10])
 
     if date_from:
@@ -190,6 +192,16 @@ def fetch_prediction_accuracy(date_from=None, date_to=None, horizon=None) -> dic
 
     by: dict[str, dict] = defaultdict(lambda: {"n": 0, "hits": 0, "brier_sum": 0.0, "ll_sum": 0.0})
     weekly: list[dict] = []
+    from datetime import date as _today_date
+    today = _today_date.today()
+    resolved_logs = []
+    for lg in logs:
+        h = int(lg["horizon_days"])
+        ld = _d(lg["logged_at"])
+        if ld is None or (ld + timedelta(days=h)) > today:
+            continue
+        resolved_logs.append(lg)
+    logs = resolved_logs
     for lg in logs:
         h = str(lg["horizon_days"])
         p = float(lg["probability"])
