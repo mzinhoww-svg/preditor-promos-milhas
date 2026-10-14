@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { Badge } from "@/components/badge";
+import { DataNotice } from "@/components/data-notice";
+import { Freshness } from "@/components/freshness";
+import { ModelBadge } from "@/components/model-badge";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ReliabilityChart } from "@/components/reliability-chart";
 import { ScrollRegion } from "@/components/scroll-region";
-import { getAccuracy, getModelMetrics, HORIZONS, type ModelSummary } from "@/lib/api";
+import { dataSource, getAccuracy, getExplanations, getModelMetrics, getPredictions, getStatus, HORIZONS, withExplanations, type ModelSummary } from "@/lib/api";
+import { comparisonLabel, headerModel } from "@/lib/model-label";
 import { dateLong, dateTime, int, num, pct, signed } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Modelo" };
@@ -16,10 +20,37 @@ const DECISION_LABEL = {
 } as const;
 
 export default async function ModelPage() {
-  const [m, accRes] = await Promise.all([getModelMetrics(), getAccuracy()]);
+  const configured = dataSource();
+  const [mRes, accRes, statusRes, predRes] = await Promise.all([getModelMetrics(), getAccuracy(), getStatus(), getPredictions({ limit: 12 })]);
+  const m = mRes.data;
   const acc = accRes.data;
-  const c = m.champion;
+  const discardedWeekly = accRes.discardedWeekly;
+  // Campeão decidido = is_champion na API (predictions.champion) e resumo presente; senão, o run que serve.
+  const decided = m.champion !== null && predRes.data.champion !== null;
+  const c: ModelSummary = m.champion ?? {
+    name: m.serving?.name ?? predRes.data.model.name,
+    version: m.serving?.version ?? "—",
+    trained_at: m.serving?.trained_at ?? m.generated_at,
+    horizons: [7, 15, 30],
+    validation: { method: "walk-forward", folds: null, period: { from: null, to: null }, by_horizon: {} },
+    production: null,
+  };
   const prod = c.production;
+  const expl = await getExplanations(predRes.data.items);
+  const served = withExplanations(predRes.data.items, expl.byKey);
+  const serving = headerModel(predRes.data.model.name, served, m.comparison.decision);
+  const first = served[0] ?? null;
+  const minB1 = [...expl.byKey.values()].find((e) => e?.factors.min_campaigns_b1)?.factors.min_campaigns_b1 ?? null;
+  const cmpLabel = comparisonLabel(m.comparison, {
+    pair: first ? `${first.pair.origin} → ${first.pair.destination}` : null,
+    n_campaigns: first?.n_campaigns ?? null,
+    min: minB1,
+  });
+  const n30 = acc.by_horizon["30"].n;
+  const hasValidation = HORIZONS.some((h) => c.validation.by_horizon[h]);
+  const nCampaigns = statusRes.data?.n_campaigns_total ?? null;
+  const cmp = m.comparison;
+  const now = new Date();
 
   return (
     <>
@@ -28,23 +59,35 @@ export default async function ModelPage() {
         description="Validação histórica (walk-forward) e precisão real em produção ficam lado a lado, mas nunca misturadas. A produção conta só predições registradas em prediction_log e já resolvidas."
       />
 
+      <DataNotice configured={configured} sources={[mRes, accRes]} />
+
+      <Freshness origin={mRes.origin} fetchedAt={mRes.fetchedAt} generatedAt={m.generated_at} now={now} />
+
       <SummaryPanel
         items={[
-          { label: "Em produção", value: `${c.name} ${c.version}`, hint: `treinado ${dateLong(c.trained_at)}` },
+          {
+            label: "Em produção",
+            value: decided ? <ModelBadge name={c.name} decision={m.comparison.decision} /> : <Badge tone="warn">Modelo não decidido</Badge>,
+            hint: decided
+              ? `${c.name} ${c.version} · treinado ${dateLong(c.trained_at)}${nCampaigns !== null ? ` · ${int(nCampaigns)} campanhas` : ""}`
+              : `servindo ${serving.label} · run ${m.serving?.run_id ?? predRes.data.model.run_id}`,
+          },
           {
             label: "Brier em produção · 30 d",
-            value: prod ? num(prod.by_horizon["30"].brier) : "—",
-            hint: prod ? `validação: ${num(c.validation.by_horizon["30"].brier)}` : "sem predições resolvidas",
+            value: acc.by_horizon["30"].n > 0 ? num(acc.by_horizon["30"].brier) : "—",
+            hint: c.validation.by_horizon["30"] ? `validação: ${num(c.validation.by_horizon["30"].brier)}` : "sem validação histórica registrada",
           },
           {
             label: "Acerto em produção · 30 d",
-            value: prod ? pct(prod.by_horizon["30"].hit_rate) : "—",
-            hint: prod ? `${int(prod.n_resolved)} de ${int(prod.n_predictions)} resolvidas` : undefined,
+            value: n30 > 0 ? pct(acc.by_horizon["30"].hit_rate) : "—",
+            hint: n30 > 0 ? `${int(n30)} predições resolvidas${n30 < 30 ? " · amostra pequena (n < 30)" : ""}` : "sem predições resolvidas",
           },
           {
             label: "Campeão × desafiante",
-            value: DECISION_LABEL[m.comparison.decision],
-            hint: `Δ Brier ${signed(m.comparison.delta_brier)}${m.comparison.ci_delta_brier ? ` · IC ${num(m.comparison.ci_delta_brier[0])} a ${num(m.comparison.ci_delta_brier[1])}` : " · IC indisponível"}`,
+            value: cmpLabel.value,
+            hint: cmp.has_data
+              ? `Δ Brier ${signed(cmp.delta_brier)}${cmp.ci_delta_brier ? ` · IC ${num(cmp.ci_delta_brier[0])} a ${num(cmp.ci_delta_brier[1])}` : " · IC indisponível"}`
+              : cmpLabel.detail,
           },
         ]}
       />
@@ -52,19 +95,29 @@ export default async function ModelPage() {
       <div className="grid min-w-0 gap-x-10 gap-y-10 lg:grid-cols-2">
         <Section
           title="Validação histórica"
-          description={`${c.validation.method}, ${c.validation.folds} dobras, ${dateLong(c.validation.period.from)} a ${dateLong(c.validation.period.to)}. Mede o que o modelo teria acertado no passado.`}
+          description={
+            hasValidation
+              ? `${c.validation.method}, ${c.validation.folds === null ? "número de dobras não informado" : `${c.validation.folds} dobras`}, ${dateLong(c.validation.period.from)} a ${dateLong(c.validation.period.to)}. Mede o que o modelo teria acertado no passado.`
+              : "O modelo em produção ainda não tem walk-forward registrado na API."
+          }
         >
-          <MetricTable
-            label="Tabela de validação histórica por janela"
-            rows={HORIZONS.map((h) => {
-              const v = c.validation.by_horizon[h];
-              return {
-                horizon: h,
-                cells: [num(v.brier), v.ci_brier ? `${num(v.ci_brier[0])}–${num(v.ci_brier[1])}` : "—", num(v.log_loss), num(v.auc, 2)],
-              };
-            })}
-            headers={["Brier", "IC Brier", "Log-loss", "AUC"]}
-          />
+          {hasValidation ? (
+            <MetricTable
+              label="Tabela de validação histórica por janela"
+              rows={HORIZONS.map((h) => {
+                const v = c.validation.by_horizon[h];
+                return {
+                  horizon: h,
+                  cells: v ? [num(v.brier), v.ci_brier ? `${num(v.ci_brier[0])}–${num(v.ci_brier[1])}` : "—", num(v.log_loss), num(v.auc, 2)] : ["—", "—", "—", "—"],
+                };
+              })}
+              headers={["Brier", "IC Brier", "Log-loss", "AUC"]}
+            />
+          ) : (
+            <p className="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">
+              Sem métricas de validação. Quando o treino registrar o walk-forward em model_run, esta tabela se preenche.
+            </p>
+          )}
         </Section>
 
         <Section
@@ -72,7 +125,9 @@ export default async function ModelPage() {
           description={
             prod
               ? `${dateLong(prod.period.from)} a ${dateLong(prod.period.to)}. Predições servidas pelo painel, conferidas com o que aconteceu.`
-              : "Ainda sem predições resolvidas em produção."
+              : acc.period.from
+                ? `${dateLong(acc.period.from)} a ${dateLong(acc.period.to)}, de prediction_log. Predições registradas pelo job, conferidas com o que aconteceu.`
+                : "Ainda sem predições resolvidas em produção."
           }
         >
           {prod ? (
@@ -81,11 +136,26 @@ export default async function ModelPage() {
               rows={HORIZONS.map((h) => {
                 const p = prod.by_horizon[h];
                 const v = c.validation.by_horizon[h];
-                const delta = p.brier - v.brier;
+                if (!p) return { horizon: h, cells: ["—", "—", "—", "—", "—"] };
+                const delta = v ? p.brier - v.brier : null;
                 return {
                   horizon: h,
-                  cells: [num(p.brier), signed(delta), num(p.log_loss), pct(p.hit_rate), int(p.n)],
-                  flag: v.ci_brier ? delta > v.ci_brier[1] - v.brier : false,
+                  cells: [num(p.brier), delta === null ? "—" : signed(delta), num(p.log_loss), pct(p.hit_rate), int(p.n)],
+                  flag: v && v.ci_brier && delta !== null ? delta > v.ci_brier[1] - v.brier : false,
+                };
+              })}
+              headers={["Brier", "Δ vs. validação", "Log-loss", "Acerto", "n"]}
+            />
+          ) : acc.by_horizon["30"].n > 0 || acc.by_horizon["7"].n > 0 || acc.by_horizon["15"].n > 0 ? (
+            <MetricTable
+              label="Tabela de precisão em produção por janela (prediction_log)"
+              rows={HORIZONS.map((h) => {
+                const p = acc.by_horizon[h];
+                const v = c.validation.by_horizon[h];
+                const delta = v ? p.brier - v.brier : null;
+                return {
+                  horizon: h,
+                  cells: p.n > 0 ? [num(p.brier), delta === null ? "—" : signed(delta), num(p.log_loss), pct(p.hit_rate), int(p.n)] : ["—", "—", "—", "—", "0"],
                 };
               })}
               headers={["Brier", "Δ vs. validação", "Log-loss", "Acerto", "n"]}
@@ -97,6 +167,7 @@ export default async function ModelPage() {
           )}
           <p className="mt-2 text-xs text-ink-3">
             Δ positivo = pior que a validação. Linhas marcadas estão fora do intervalo de confiança da validação.
+            {n30 > 0 && n30 < 30 ? " Amostra pequena (n < 30): o acerto ainda oscila muito." : ""}
           </p>
         </Section>
 
@@ -104,7 +175,13 @@ export default async function ModelPage() {
           title={`Curva de confiabilidade · ${m.reliability.horizon} dias`}
           description="Quando o modelo diz 70%, acontece em cerca de 70% das vezes? Pontos na diagonal dizem que sim."
         >
-          <ReliabilityChart bins={m.reliability.bins} horizon={m.reliability.horizon} />
+          {m.reliability.bins.length > 0 ? (
+            <ReliabilityChart bins={m.reliability.bins} horizon={m.reliability.horizon} />
+          ) : (
+            <p className="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">
+              Sem predições resolvidas em número suficiente para a curva. Ela aparece quando a API devolver bins.
+            </p>
+          )}
         </Section>
 
         <Section
@@ -112,13 +189,14 @@ export default async function ModelPage() {
           description="O desafiante só vai para produção se vencer em Brier e log-loss com intervalo de confiança por bootstrap em blocos."
         >
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-            <ModelCard model={c} role="Campeão" />
+            <ModelCard model={c} role={decided ? "Campeão" : "Servindo (sem decisão)"} />
             {m.challenger ? (
               <ModelCard model={m.challenger} role="Desafiante" />
             ) : (
               <p className="text-sm text-ink-2">Sem desafiante treinado.</p>
             )}
           </div>
+          {cmp.has_data ? (
           <dl className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-x-6 gap-y-3 rounded-lg border border-line p-4 text-sm">
             <div>
               <dt className="text-xs text-ink-3">Horizonte</dt>
@@ -126,30 +204,31 @@ export default async function ModelPage() {
             </div>
             <div>
               <dt className="text-xs text-ink-3">Δ Brier (desafiante − campeão)</dt>
-              <dd className="tnum mt-0.5 font-medium text-ink">{signed(m.comparison.delta_brier)}</dd>
+              <dd className="tnum mt-0.5 font-medium text-ink">{signed(cmp.delta_brier)}</dd>
             </div>
             <div>
               <dt className="text-xs text-ink-3">IC do Δ Brier</dt>
               <dd className="tnum mt-0.5 font-medium text-ink">
-                {m.comparison.ci_delta_brier
-                  ? `${num(m.comparison.ci_delta_brier[0])} a ${num(m.comparison.ci_delta_brier[1])}`
-                  : "—"}
+                {cmp.ci_delta_brier ? `${num(cmp.ci_delta_brier[0])} a ${num(cmp.ci_delta_brier[1])}` : "—"}
               </dd>
             </div>
             <div>
               <dt className="text-xs text-ink-3">Δ Log-loss</dt>
-              <dd className="tnum mt-0.5 font-medium text-ink">{signed(m.comparison.delta_log_loss)}</dd>
+              <dd className="tnum mt-0.5 font-medium text-ink">{signed(cmp.delta_log_loss)}</dd>
             </div>
             <div className="col-span-full">
               <dt className="text-xs text-ink-3">Decisão</dt>
               <dd className="mt-0.5 flex flex-wrap items-center gap-2 text-ink">
-                <Badge tone={m.comparison.decision === "promote_challenger" ? "ok" : "neutral"}>
-                  {DECISION_LABEL[m.comparison.decision]}
-                </Badge>
-                <span className="min-w-0 break-words text-ink-2">{m.comparison.note}</span>
+                <Badge tone={cmp.decision === "promote_challenger" ? "ok" : "neutral"}>{DECISION_LABEL[cmp.decision]}</Badge>
+                <span className="min-w-0 break-words text-ink-2">{cmp.note}</span>
               </dd>
             </div>
           </dl>
+          ) : (
+            <p className="mt-4 rounded-lg border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-ink">
+              <span className="font-semibold text-warn">Não decidido:</span> {cmpLabel.detail}. Δ e IC aparecem quando houver predições resolvidas dos dois modelos.
+            </p>
+          )}
         </Section>
       </div>
 
@@ -157,6 +236,17 @@ export default async function ModelPage() {
         title="Acerto semanal em produção"
         description={`Horizonte de ${acc.weekly[0]?.horizon ?? 30} dias, por semana de emissão da predição.`}
       >
+        {discardedWeekly > 0 ? (
+          <p role="status" className="mb-3 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+            {discardedWeekly === 1 ? "1 semana da API foi descartada" : `${discardedWeekly} semanas da API foram descartadas`} por
+            formato inválido.
+          </p>
+        ) : null}
+        {acc.weekly.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">
+            Nenhuma semana com predições resolvidas no período.
+          </p>
+        ) : (
         <ScrollRegion label="Tabela de acerto semanal em produção">
           <table className="w-full min-w-[32rem] text-sm">
             <thead>
@@ -185,6 +275,7 @@ export default async function ModelPage() {
             </tbody>
           </table>
         </ScrollRegion>
+        )}
       </Section>
 
       <p className="text-xs text-ink-3">Métricas geradas {dateTime(m.generated_at)}.</p>
@@ -252,15 +343,15 @@ function ModelCard({ model, role }: { model: ModelSummary; role: string }) {
       <dl className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 text-sm">
         <div>
           <dt className="text-xs text-ink-3">Brier 30 d</dt>
-          <dd className="tnum font-medium text-ink">{num(v30.brier)}</dd>
+          <dd className="tnum font-medium text-ink">{v30 ? num(v30.brier) : "—"}</dd>
         </div>
         <div>
           <dt className="text-xs text-ink-3">Log-loss</dt>
-          <dd className="tnum font-medium text-ink">{num(v30.log_loss)}</dd>
+          <dd className="tnum font-medium text-ink">{v30 ? num(v30.log_loss) : "—"}</dd>
         </div>
         <div>
           <dt className="text-xs text-ink-3">AUC</dt>
-          <dd className="tnum font-medium text-ink">{num(v30.auc, 2)}</dd>
+          <dd className="tnum font-medium text-ink">{v30 ? num(v30.auc, 2) : "—"}</dd>
         </div>
       </dl>
       <p className="mt-3 text-xs text-ink-3">Treinado {dateLong(model.trained_at)}</p>

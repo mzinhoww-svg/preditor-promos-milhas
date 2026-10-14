@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-10-13T06:00:00Z",
+  "items": [
+    {
+      "made_at": "2026-10-13T00:00:00Z",
+      "pair": { "origin": "Livelo", "destination": "Smiles" },
+      "type": "transfer_bonus",
+      "horizon_days": 7,
+      "probability": 0.62,
+      "previous_probability": 0.44,
+      "threshold": 0.5
+    },
+    {
+      "made_at": "2026-10-13T00:00:00Z",
+      "pair": { "origin": "Livelo", "destination": "LATAM Pass" },
+      "type": "transfer_bonus",
+      "horizon_days": 15,
+      "probability": 0.58,
+      "previous_probability": 0.47,
+      "threshold": 0.5
+    },
+    {
+      "made_at": "2026-10-11T00:00:00Z",
+      "pair": { "origin": "Esfera", "destination": "Azul Fidelidade" },
+      "type": "transfer_bonus",
+      "horizon_days": 30,
+      "probability": 0.71,
+      "previous_probability": null,
+      "threshold": 0.5
+    }
+  ]
+}

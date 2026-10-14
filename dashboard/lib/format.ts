@@ -62,6 +62,32 @@ export function relativeFrom(iso: string | null | undefined, now: Date): string 
   return `há ${Math.round(diffH / 24)} dias`;
 }
 
+/** Hora do dado, "06:00 UTC", para a faixa de status ("dados de HH:MM"). */
+export function timeUTC(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat(ptBR, { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
+}
+
+/** Idade curta de um instante: "agora", "há 5 min", "há 3 h", "há 2 dias". */
+export function ageLabel(iso: string | null | undefined, now: Date): string {
+  if (!iso) return "—";
+  const ms = now.getTime() - new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "—";
+  const min = Math.round(ms / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `há ${h} h`;
+  return `há ${Math.round(h / 24)} dias`;
+}
+
+/** Dado velho: gerado há mais de `maxHours` (o job é diário; 36 h cobre um atraso de meio dia). */
+export function isStale(iso: string | null | undefined, now: Date, maxHours = 36): boolean {
+  if (!iso) return false;
+  const ms = now.getTime() - new Date(iso).getTime();
+  return Number.isFinite(ms) && ms > maxHours * 36e5;
+}
+
 export const OFFER_TYPE_LABEL: Record<OfferType, string> = {
   transfer_bonus: "Bônus de transferência",
   purchase_discount: "Compra com desconto",

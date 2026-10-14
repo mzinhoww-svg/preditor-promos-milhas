@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: { default: "Preditor de promoções", template: "%s · Preditor de promoções" },
   description:
-    "Próximas promoções prováveis de pontos e milhas, com probabilidade calibrada, faixa de bônus e saúde do modelo.",
+    "Próximas promoções prováveis de pontos e milhas, com probabilidade estimada, bônus das campanhas anteriores e saúde do modelo.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -34,11 +34,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         </main>
         <footer className="border-t border-line">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-ink-3 sm:px-6 lg:px-8">
-            <span>Preditor de promoções de milhas · dashboard v0</span>
+            <span>Preditor de promoções de milhas · dashboard v1</span>
             <span>
               {source === "api"
-                ? "Horários em UTC. Probabilidades calibradas pelo modelo em produção."
-                : "Horários em UTC. Dados de exemplo; nenhum modelo em produção."}
+                ? "Horários em UTC. Probabilidades estimadas pelo modelo em produção."
+                : "Horários em UTC. Dados simulados; nenhum modelo em produção."}
             </span>
           </div>
         </footer>
