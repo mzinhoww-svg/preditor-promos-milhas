@@ -11,7 +11,7 @@
 | T07a | Extrator determinístico regex + pydantic | Programador 2 | em_revisao | PR #5: conflito com main resolvido, CI rodando (commit 82ec792) |
 | T08a | Baseline B0/B1 e walk-forward | Programador 3 | concluida | PR #3 mergeado; vazamento aprovado; T08 mantém grade diária e reconstrução point-in-time |
 | T09a | Dashboard v0 com dados de exemplo | Designer Frontend | em_revisao | PR #9: D1–D9, N1 e N2 corrigidos; main mesclada; reteste final pedido ao QA |
-| T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
+| T06 | Conjunto de ouro (50 campanhas) | Planejador (spec) | spec_em_revisao | spec docs/plans/t06-conjunto-de-ouro.md + decisao 005 (split 20 dev/30 test por campanha, trecho <=600 chars, gold_provisional ate conferencia); PR feat/t06-spec |
 | T05 | Coletor RSS e backfill Wayback | Programador 2 | em_revisao | ciclo2: observed_at migracao 0002 nullable, LEAST, process fail-closed, 110 pytest verdes, 18 testes ataque; PR #19 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
 | TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |
