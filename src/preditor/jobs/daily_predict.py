@@ -37,8 +37,8 @@ def fetch_offers(engine) -> list[dict]:
         return [dict(r._mapping) for r in rows]
 
 
-def pair_campaign_counts(engine) -> dict[tuple, int]:
-    offers = fetch_offers(engine)
+def pair_campaign_counts(offers: list[dict]) -> dict[tuple, int]:
+    """Conta campanhas por chave a partir de ofertas já filtradas point-in-time."""
     counts: dict[tuple, int] = defaultdict(int)
     for o in offers:
         key = (o["origin"], o["destination"], o["event_type"], bool(o.get("segmented")), o.get("segment_label") or "")
@@ -78,8 +78,10 @@ def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
     eng = _engine(engine)
     ao = _as_date(as_of) if as_of is not None else date.today()
     made_at = datetime(ao.year, ao.month, ao.day, tzinfo=UTC)
-    offers = fetch_offers(eng)
-    counts = pair_campaign_counts(eng)
+    ao_dt = made_at
+    # point-in-time: par, método (B0/B1) e bônus derivam só do que já era conhecido em as_of
+    offers = [o for o in fetch_offers(eng) if _available(o, ao, ao_dt)]
+    counts = pair_campaign_counts(offers)
     model_run_id = get_or_create_champion_model_run(eng, ao)
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for o in offers:

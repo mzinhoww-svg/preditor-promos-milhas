@@ -28,7 +28,9 @@ def fetch_predictions(type_filter: str | None = None, limit: int = 50) -> dict[s
             params["t"] = type_filter
         rows = _rows(conn.execute(text(
             f"SELECT made_at, model_run_id, origin, destination, event_type, horizon_days, probability, bonus_p25, bonus_p50, bonus_p75 "
-            f"FROM prediction {where} ORDER BY made_at DESC"
+            f"FROM (SELECT DISTINCT ON (origin, destination, event_type, horizon_days) * FROM prediction {where} "
+            f"ORDER BY origin, destination, event_type, horizon_days, made_at DESC, model_run_id DESC) p "
+            f"ORDER BY made_at DESC"
         ), params))
     generated_at = _now()
     # agrupa por made_at mais recente por item
