@@ -141,6 +141,22 @@ def _explanation(known_recs: list[dict], method: str, ao: date, probs: Any) -> d
     }
 
 
+def _one_series_per_pair(groups: dict[tuple, list[dict]], counts: dict[tuple, int]) -> dict[tuple, list[dict]]:
+    """Uma serie por (origem, destino, tipo): prediction/prediction_log nao tem coluna de segmento.
+
+    Sem isto, grupos segmentados colidiam com o principal no ON CONFLICT e o primeiro a chegar
+    ganhava. Fica o grupo com mais campanhas; empate: nao segmentado, depois rotulo (deterministico).
+    """
+    best: dict[tuple, tuple] = {}
+    for key in groups:
+        pair = key[:3]
+        rank = (-counts.get(key, 0), bool(key[3]), key[4])
+        if pair not in best or rank < best[pair][0]:
+            best[pair] = (rank, key)
+    keep = {v[1] for v in best.values()}
+    return {k: v for k, v in groups.items() if k in keep}
+
+
 def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
     check_stop()
     eng = _engine(engine)
@@ -154,6 +170,7 @@ def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
     for o in offers:
         key = (o["origin"], o["destination"], o["event_type"], bool(o.get("segmented")), o.get("segment_label") or "")
         groups[key].append(o)
+    groups = _one_series_per_pair(groups, counts)
     methods = {k: ("b1" if counts.get(k, 0) >= MIN_CAMPAIGNS_B1 else "b0") for k in groups}
     n_by_method = {m: sum(1 for v in methods.values() if v == m) for m in ("b0", "b1")}
     run_model = "B1" if n_by_method["b1"] else "B0"
@@ -200,7 +217,7 @@ def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
         for h in HORIZONS:
             p = float(probs.get(h, 0.0) if isinstance(probs, dict) else 0.0)
             with eng.begin() as conn:
-                conn.execute(text(
+                res_p = conn.execute(text(
                     "INSERT INTO prediction (made_at, model_run_id, origin, destination, event_type, "
                     "horizon_days, probability, bonus_p25, bonus_p50, bonus_p75, explanation) VALUES "
                     "(:made_at, :mr, :origin, :destination, :event_type, :h, :prob, :p25, :p50, :p75, "
@@ -219,7 +236,7 @@ def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
                     "p75": p75,
                     "ex": json.dumps(explanation),
                 })
-                inserted_predictions += 1
+                inserted_predictions += int(res_p.rowcount or 0)
             # prediction_log append-only, idempotente por chave lógica (+ constraint única no banco)
             model_version = "B1" if method == "b1" else "B0"
             with eng.begin() as conn:
