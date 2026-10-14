@@ -1,0 +1,29 @@
+{
+ "vazio": "EXC ValueError: dados insuficientes para walk-forward",
+ "poucos(5)": "EXC ValueError: dados insuficientes para walk-forward",
+ "duplicadas_n_campanhas": [
+  143,
+  143
+ ],
+ "duplicadas_mesmo_p_c1": true,
+ "reexec_deterministico": true,
+ "n_campanhas_por_par": {
+  "esfera|latam|transfer_bonus": 38,
+  "itau|azul|transfer_bonus": 48,
+  "livelo|smiles|transfer_bonus": 57
+ },
+ "calibrado": true,
+ "decisao_real_n<25?": [
+  "promote_challenger",
+  []
+ ],
+ "troca_c1_pior_promove?": false,
+ "ci_c1_melhor": true,
+ "ci_c1_pior": true,
+ "datas_invalidas": 1149,
+ "relatorio_banner": false,
+ "predict_proba_c1": [
+  0.99,
+  1.6
+ ]
+}

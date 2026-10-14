@@ -1,0 +1,7 @@
+0003 (head)
+tests/test_t08b_portao.py::test_migration_fixed_parent_single_head
+  /private/tmp/claude-503/-Users-aurimar-nogueira-latam-com-Documents-theloyal-preditor-promos-milhas--maestri-roles-a5fcfdca-25b6-4a50-83b7-ac3972cd4a63/b4b86703-843e-423c-85d4-5501b4b909b4/scratchpa
+    util.warn_deprecated(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+160 passed, 1 warning in 22.37s

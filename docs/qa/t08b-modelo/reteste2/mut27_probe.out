@@ -1,0 +1,14 @@
+== M1_available_offers_ignora_t
+{"n": 1149, "p_c1_hash": "96dc3093314d", "p_b1_hash": "df123316ca27", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.0549}
+== M2_treino_sem_cutoff
+{"n": 1149, "p_c1_hash": "aa323ae402c7", "p_b1_hash": "01c91d99dcd5", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05396}
+== M3_pool_futuro
+{"n": 1149, "p_c1_hash": "96dc3093314d", "p_b1_hash": "df123316ca27", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.0549}
+== M4_fit_as_of_futuro
+{"n": 1149, "p_c1_hash": "c9ee49094cf3", "p_b1_hash": "01c91d99dcd5", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.0481}
+== M5_predict_trained_at_sem_filtro
+{"n": 1149, "p_c1_hash": "a8e87260c77e", "p_b1_hash": "0f16c89c1763", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05829}
+== M6_vazamento_total_predicao
+{"n": 1149, "p_c1_hash": "525612a91add", "p_b1_hash": "9f722e813c6c", "common": 1149, "changed_by_late_records": 156, "brier_b1": 0.16071, "brier_c1": 0.05195}
+== M7_grade_features_sem_filtro_t
+{"n": 1149, "p_c1_hash": "ce94c189b13a", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05728}

@@ -1,0 +1,20 @@
+== M0_first_seen_sempre_None
+FAILED tests/test_t08b_portao.py::test_evaluate_few_campaigns_blocks_promotion
+FAILED tests/test_t08b_portao.py::test_evaluate_synthetic_flagged_records_not_counted
+FAILED tests/test_t08b_portao.py::test_evaluate_default_data_source_is_synthetic
+FAILED tests/test_t08b_portao.py::test_sibling_features_no_double_count - ass...
+FAILED tests/test_t08b_portao.py::test_calibration_purged_and_same_booster - ...
+5 failed, 47 passed, 1 warning, 4 errors in 2.78s
+== M2_treino_sem_cutoff
+56 passed, 1 warning in 9.02s
+== M3_pool_futuro
+56 passed, 1 warning in 7.58s
+== M4_fit_as_of_futuro
+56 passed, 1 warning in 11.57s
+== M5_predict_trained_at_sem_filtro
+56 passed, 1 warning in 8.61s
+== M6_vazamento_total_predicao
+FAILED tests/test_t08b_portao.py::test_evaluate_late_first_seen_does_not_change_predictions
+1 failed, 55 passed, 1 warning in 7.44s
+== M7_grade_features_sem_filtro_t
+56 passed, 1 warning in 6.42s

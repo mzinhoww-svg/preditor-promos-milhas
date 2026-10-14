@@ -1,0 +1,17 @@
+== M0_first_seen_sempre_None
+______________ ERROR at setup of test_evaluate_output_not_vacuous ______________
+            raise ValueError(f"data_source deve ser um de {DATA_SOURCES}: {data_source!r}")
+            raise ValueError("horizons vazio")
+            raise ValueError("purge_days deve ser >= max(horizons)")
+            raise ValueError("dados insuficientes para walk-forward")
+>           raise ValueError("avaliacao sem linhas de teste")
+E           ValueError: avaliacao sem linhas de teste
+src/preditor/model.py:1334: ValueError
+_______________ ERROR at setup of test_evaluate_purge_invariant ________________
+            raise ValueError(f"data_source deve ser um de {DATA_SOURCES}: {data_source!r}")
+            raise ValueError("horizons vazio")
+            raise ValueError("purge_days deve ser >= max(horizons)")
+            raise ValueError("dados insuficientes para walk-forward")
+>           raise ValueError("avaliacao sem linhas de teste")
+== M1_available_offers_ignora_t
+56 passed, 1 warning in 12.21s
