@@ -8,7 +8,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _TRUTHY = {"1", "true", "yes", "on"}
 
 
-class StopRequested(RuntimeError):
+class StopRequested(Exception):  # nao RuntimeError: os laços capturam RuntimeError
     """STOP presente: o job/coletor deve abortar antes de ler ou gravar qualquer coisa."""
 
 

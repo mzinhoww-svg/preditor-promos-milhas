@@ -83,17 +83,18 @@ def fetch_model_info() -> dict[str, Any]:
     engine = get_engine()
     with engine.connect() as conn:
         rows = _rows(conn.execute(text(
-            "SELECT id, model_version, trained_at, hyperparams, metrics, is_champion FROM model_run ORDER BY is_champion DESC, trained_at DESC"
+            "SELECT id, model_version, trained_at, hyperparams, metrics, is_champion, role FROM model_run "
+            "ORDER BY is_champion DESC, (role = 'daily') DESC, trained_at DESC"
         )))
     champion = None
     challenger = None
     for r in rows:
         if champion is None and r.get("is_champion"):
             champion = r
-        elif challenger is None and not r.get("is_champion"):
+        elif challenger is None and not r.get("is_champion") and r.get("role") != "daily":
             challenger = r
     if champion is None and rows:
-        champion = rows[0]
+        champion = rows[0]  # sem campeão decidido: o run diário mais recente serve as predições
     def _name_version(run):
         if not run:
             return {"name": None, "version": None, "trained_at": None, "run_id": None}
@@ -326,24 +327,25 @@ def fetch_alerts(limit: int = 100) -> dict[str, Any]:
 
 
 def fetch_explanation(origin: str, destination: str, event_type: str) -> dict[str, Any] | None:
-    """Explicação gravada pelo job na predição mais recente (point-in-time por construção)."""
+    """Explicação gravada pelo job na rodada mais recente do item (mesmo made_at e model_run)."""
     engine = get_engine()
     with engine.connect() as conn:
         rows = _rows(conn.execute(text(
-            "SELECT DISTINCT ON (horizon_days) made_at, horizon_days, probability, explanation "
-            "FROM prediction WHERE origin = :o AND destination = :d AND event_type = :t "
-            "ORDER BY horizon_days, made_at DESC, model_run_id DESC"
+            "SELECT made_at, model_run_id, horizon_days, probability, explanation FROM prediction "
+            "WHERE origin = :o AND destination = :d AND event_type = :t AND (made_at, model_run_id) = ("
+            "  SELECT made_at, model_run_id FROM prediction WHERE origin = :o AND destination = :d "
+            "  AND event_type = :t ORDER BY made_at DESC, model_run_id DESC LIMIT 1) "
+            "ORDER BY horizon_days"
         ), {"o": origin, "d": destination, "t": event_type}))
     if not rows:
         return None
-    latest = max(rows, key=lambda r: r["made_at"])
-    ex = latest.get("explanation") or {}
+    ex = rows[0].get("explanation") or {}
     return {
         "pair": {"origin": origin, "destination": destination},
         "type": event_type,
-        "as_of": ex.get("as_of") or latest["made_at"].astimezone(UTC).date().isoformat(),
+        "as_of": ex.get("as_of") or rows[0]["made_at"].astimezone(UTC).date().isoformat(),
         "windows": {str(r["horizon_days"]): float(r["probability"]) for r in rows},
         "factors": {k: ex.get(k) for k in (
-            "method", "n_campaigns", "last_campaign_start", "days_since_last",
+            "method", "probability_driven_by", "n_campaigns", "last_campaign_start", "days_since_last",
             "median_interval_days", "min_campaigns_b1")},
     }

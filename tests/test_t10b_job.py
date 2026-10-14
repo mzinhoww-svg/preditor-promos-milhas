@@ -231,3 +231,52 @@ def test_explicacao_por_item_usa_so_o_conhecido_em_as_of(engine):
     assert f["method"] in {"b0", "b1"}
     assert set(ex["windows"]) == {"7", "15", "30"}
     assert "2026-09-01" not in str(ex)
+
+
+# ---- ciclo 1: is_champion nao significa "ultima execucao" ---------------------
+def test_run_marcado_campeao_continua_campeao_apos_run_daily(engine):
+    from preditor.jobs.daily_predict import run_daily
+
+    with engine.begin() as c:
+        champ = c.execute(text(
+            "INSERT INTO model_run (model_version, trained_at, dataset_version, feature_version, hyperparams, metrics, code_hash, is_champion) "
+            "VALUES ('C1', now(), 'dd','1','{}'::jsonb,'{}'::jsonb,'hh',TRUE) RETURNING id"
+        )).scalar()
+    _seed(engine)
+    res = run_daily(as_of="2026-06-01", engine=engine)
+    with engine.connect() as c:
+        champs = [r[0] for r in c.execute(text("SELECT id FROM model_run WHERE is_champion"))]
+        daily = c.execute(text("SELECT role, is_champion FROM model_run WHERE id = :i"), {"i": res["model_run_id"]}).one()
+    assert champs == [champ]
+    assert daily[0] == "daily" and daily[1] is False
+
+
+def test_model_info_continua_apontando_para_o_campeao(engine):
+    from preditor.api.queries import fetch_model_info
+    from preditor.jobs.daily_predict import run_daily
+
+    with engine.begin() as c:
+        c.execute(text(
+            "INSERT INTO model_run (model_version, trained_at, dataset_version, feature_version, hyperparams, metrics, code_hash, is_champion) "
+            "VALUES ('C1', now(), 'dd','1','{\"name\":\"C1\",\"version\":\"9\"}'::jsonb,'{}'::jsonb,'hh',TRUE)"
+        ))
+    _seed(engine)
+    run_daily(as_of="2026-06-01", engine=engine)
+    info = fetch_model_info()
+    assert info["champion"]["name"] == "C1"
+
+
+def test_model_run_concorrente_nao_duplica(engine):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from preditor.jobs.daily_predict import record_model_run
+
+    def go(_):
+        return record_model_run(engine, "B0", "a" * 64, {"n_offers": 1}, {"b0": 1, "b1": 0})
+
+    with ThreadPoolExecutor(8) as ex:
+        ids = list(ex.map(go, range(8)))
+    assert len(set(ids)) == 1
+    with engine.connect() as c:
+        assert c.execute(text("SELECT count(*) FROM model_run WHERE role='daily'")).scalar() == 1
+        assert c.execute(text("SELECT count(*) FROM model_run WHERE is_champion")).scalar() == 0

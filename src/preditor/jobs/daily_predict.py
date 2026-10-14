@@ -54,7 +54,7 @@ def pair_campaign_counts(offers: list[dict]) -> dict[tuple, int]:
     return counts
 
 
-CODE_FILES = ("baseline.py", "jobs/daily_predict.py")
+CODE_FILES = ("baseline.py", "jobs/daily_predict.py", "offer_filter.py", "records.py", "extract.py")
 
 
 def code_hash() -> str:
@@ -71,7 +71,7 @@ def dataset_hash(offers: list[dict]) -> str:
     rows = sorted(
         (
             str(o.get("origin")), str(o.get("destination")), str(o.get("event_type")),
-            str(o.get("start_at")), str(o.get("end_at")), str(o.get("bonus_pct")),
+            str(o.get("start_at")), str(o.get("bonus_pct")),
             bool(o.get("segmented")), str(o.get("segment_label") or ""), str(o.get("first_seen_at")),
         )
         for o in offers
@@ -80,27 +80,30 @@ def dataset_hash(offers: list[dict]) -> str:
 
 
 def record_model_run(engine, model_version: str, data_hash: str, metrics: dict, methods: dict) -> int:
-    """Grava (ou reutiliza, se versão+dados+código forem os mesmos) o model_run da execução."""
+    """Grava (ou reutiliza) o run do job diário (role='daily').
+
+    Nunca altera is_champion: o campeão só muda pela decisão campeão × desafiante (T08b).
+    Concorrência: índice único parcial + ON CONFLICT; quem perde a corrida lê o run vencedor.
+    """
     chash = code_hash()
+    params = {
+        "mv": model_version, "t": datetime.now(UTC), "dv": data_hash, "ch": chash,
+        "hp": json.dumps({"name": model_version, "version": "1.0.0", "methods": methods,
+                          "min_campaigns_b1": MIN_CAMPAIGNS_B1}),
+        "m": json.dumps(metrics),
+    }
     with engine.begin() as conn:
-        row = conn.execute(text(
-            "SELECT id FROM model_run WHERE model_version = :mv AND dataset_version = :dv AND code_hash = :ch "
-            "ORDER BY id DESC LIMIT 1"
-        ), {"mv": model_version, "dv": data_hash, "ch": chash}).fetchone()
-        if row is not None:
-            return int(row[0])
-        row = conn.execute(text(
+        conn.execute(text(
             "INSERT INTO model_run (model_version, trained_at, dataset_version, feature_version, "
-            "hyperparams, metrics, code_hash, is_champion) VALUES "
-            "(:mv, :t, :dv, '1', CAST(:hp AS jsonb), CAST(:m AS jsonb), :ch, TRUE) RETURNING id"
-        ), {
-            "mv": model_version, "t": datetime.now(UTC), "dv": data_hash, "ch": chash,
-            "hp": json.dumps({"name": model_version, "version": "1.0.0", "methods": methods,
-                              "min_campaigns_b1": MIN_CAMPAIGNS_B1}),
-            "m": json.dumps(metrics),
-        }).fetchone()
-        conn.execute(text("UPDATE model_run SET is_champion = FALSE WHERE id <> :id"), {"id": int(row[0])})
-        return int(row[0])
+            "hyperparams, metrics, code_hash, is_champion, role) VALUES "
+            "(:mv, :t, :dv, '1', CAST(:hp AS jsonb), CAST(:m AS jsonb), :ch, FALSE, 'daily') "
+            "ON CONFLICT (model_version, dataset_version, code_hash) WHERE role = 'daily' DO NOTHING"
+        ), params)
+        row = conn.execute(text(
+            "SELECT id FROM model_run WHERE role = 'daily' AND model_version = :mv "
+            "AND dataset_version = :dv AND code_hash = :ch"
+        ), params).one()
+    return int(row[0])
 
 
 def _quantile(sorted_vals: list[float], q: float) -> float | None:
@@ -132,6 +135,8 @@ def _explanation(known_recs: list[dict], method: str, ao: date, probs: Any) -> d
         "days_since_last": (ao - last).days if last else None,
         "median_interval_days": median_gap,
         "min_campaigns_b1": MIN_CAMPAIGNS_B1,
+        # B0 usa só a taxa base: recência/intervalo são contexto, não causa da probabilidade
+        "probability_driven_by": "base_rate" if method == "b0" else "seasonal_hazard",
         "windows": {str(h): float(probs.get(h, 0.0)) if isinstance(probs, dict) else 0.0 for h in HORIZONS},
     }
 
@@ -169,6 +174,7 @@ def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
     inserted_predictions = 0
     inserted_logs = 0
     for key, recs in groups.items():
+        check_stop()  # STOP criado no meio da execução para antes do próximo grupo
         origin, destination, event_type, segmented, segment_label = key
         method = methods[key]
         # filtra registros conhecidos até as_of via baseline predict_proba

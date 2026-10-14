@@ -15,10 +15,12 @@ import httpx
 try:
     from preditor import article as A
     from preditor import collector as C
+    from preditor.stop import StopRequested, check_stop
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
     from preditor import article as A
     from preditor import collector as C
+    from preditor.stop import StopRequested, check_stop
 
 STATE_PATH = Path("data/raw/backfill/state.json")
 RATE_LIMIT_DEFAULT = 10.0
@@ -236,6 +238,7 @@ def _retry_allowed(prev: dict, max_attempts: int) -> bool:
 
 
 def run_backfill(args: argparse.Namespace) -> dict:
+    check_stop()
     state = _load_state()
     state.setdefault("version", 2)
     state.setdefault("params", {})
@@ -254,6 +257,7 @@ def run_backfill(args: argparse.Namespace) -> dict:
 
     summary: dict[str, dict] = {}
     for idx, source in enumerate(args.sources):
+        check_stop()
         if idx > 0:
             time.sleep(max(args.rate_limit, 10.0))  # >=10 s entre fontes
         src_state = state["sources"].setdefault(source, {})
@@ -292,6 +296,7 @@ def run_backfill(args: argparse.Namespace) -> dict:
         max_fetch = getattr(args, "max_fetch", None)
         ordered = sorted(candidates, key=lambda c: (-slug_priority(c["url"]), c["url"]))
         for cand in ordered:
+            check_stop()
             url = cand["url"]
             ts = cand["timestamp"]
             prev = processed.get(url, {})
@@ -309,7 +314,9 @@ def run_backfill(args: argparse.Namespace) -> dict:
             fetched_this_run += 1
             attempts = prev.get("attempts", 0) + 1
             time.sleep(args.rate_limit)
+            check_stop()
             content = fetch_snapshot_backoff(ts, url)
+            check_stop()
             if not content:
                 processed[url] = {"status": "fetch_failed", "timestamp": ts, "attempts": attempts}
                 _save_state(state)
@@ -396,6 +403,7 @@ def _pub_date(raw: str | None) -> datetime | None:
 def collect_archived_feed(engine, source: str, feed_url: str, from_date: date, rate_limit: float = 10.0,
                           step_days: int = 5) -> dict:
     """RSS arquivado (decisao 002, opcao C): so titulo, data e link de cada captura; nunca o corpo."""
+    check_stop()
     status, robots_txt = fetch_robots_strict(source)
     if status != "ok":
         return {"status": "robots_unavailable", "captures": 0, "items": 0}
@@ -407,6 +415,7 @@ def collect_archived_feed(engine, source: str, feed_url: str, from_date: date, r
     caps = _thin(list_feed_captures(feed_url, from_date, rate_limit), step_days)
     items_total = 0
     for cap in caps:
+        check_stop()
         ts = cap["timestamp"]
         if ts in done:
             continue
@@ -420,6 +429,7 @@ def collect_archived_feed(engine, source: str, feed_url: str, from_date: date, r
             continue
         n = 0
         for it in parsed:
+            check_stop()
             title = (it.get("title") or "").strip()
             if not title:
                 continue
@@ -440,6 +450,7 @@ def collect_archived_feed(engine, source: str, feed_url: str, from_date: date, r
 
 def collect_titles_rss(engine, source: str, feed_url: str) -> dict:
     """2a fonte (decisao 002, opcao C): so titulo/data/link do RSS; robots fail-closed antes de buscar."""
+    check_stop()
     status, robots_txt = fetch_robots_strict(source)
     if status != "ok":
         return {"status": "robots_unavailable", "items": 0}
@@ -477,6 +488,7 @@ def dedupe_extensions(engine) -> int:
 
 
 def recompute_gap(engine, ts_by_url: dict[str, str]) -> int:
+    check_stop()
     """Marca published_vs_capture_gap nas mensagens ja gravadas (timestamp da captura vem do state)."""
     import sqlalchemy as sa
 
@@ -501,6 +513,8 @@ def reprocess(engine) -> dict:
     """Apaga ofertas/evidencias e reextrai de raw_message so do corpo do artigo (sem rede)."""
     import sqlalchemy as sa
 
+    check_stop()  # antes do DELETE
+
     with engine.connect() as c:
         old = {tuple(str(x) for x in r) for r in c.execute(sa.text(
             "SELECT origin,destination,event_type,start_at,bonus_pct FROM offer")).all()}
@@ -511,6 +525,7 @@ def reprocess(engine) -> dict:
         rows = c.execute(sa.text(
             "SELECT id, source, content, observed_at FROM raw_message WHERE observed_at IS NOT NULL ORDER BY id")).all()
     for rid, source, content, observed in rows:
+        check_stop()
         _process_snippets(engine, source, rid, content, observed)
     merged = dedupe_extensions(engine)
     with engine.connect() as c:
@@ -547,6 +562,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    try:
+        return _main(args)
+    except StopRequested as exc:
+        print(f"STOP: {exc}")
+        return 3
+
+
+def _main(args: argparse.Namespace) -> int:
+    check_stop()
     if not args.sources:
         args.sources = list(SOURCES_DEFAULT)
     if isinstance(args.sources, str):

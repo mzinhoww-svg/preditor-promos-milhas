@@ -429,6 +429,7 @@ def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=N
         update_source_health(engine, source, items_new=0, extraction_rate=0.0, robots_txt=robots_txt, now=ts, alert=True)
         return raw_ids
     for it in items:
+        check_stop()
         is_new = False
         try:
             is_new = _is_new_raw(engine, source, (it.get("title") or "") + "\n" + (it.get("description") or ""))
