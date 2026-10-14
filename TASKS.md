@@ -18,3 +18,4 @@
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
 | T10a | API FastAPI + job diário baseline/accuracy | Programador | em_revisao | PR #25; commit `70c0687`/`b2bfaf8`; B1-B3 corrigidos (job roda com ofertas, unicidade prediction_log, accuracy from/to); ruff/pytest verdes (99); ciclo 3: vazamento corrigido (P1 última predição na API, J1b par e J1c método point-in-time), `tests/test_t10a_leakage.py`, pytest 140 verdes |
 | TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |
+| QA-T09b-r | Ressalvas 1-4 do #57 (PR #59) | QA Cruzado | aprovada | aacd7cd: 'Sem dados' na comparacao, cabecalho 'B0/B1 por par', no-store + frescor/'dado velho', janela invalida sinalizada sem descartar; vitest 28, lint/build verdes, axe 0 violacoes; obs: KPI conta janela invalida como acompanhada; ver docs/qa/t09b/reteste-ressalvas/RELATORIO.md |
