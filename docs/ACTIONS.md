@@ -66,3 +66,49 @@ Resíduo de teste (`raw_message` id=1) removido do `preditor_p2`; `tests/conftes
 ```
 
 Frequência de 30 min; sai com código 1 se alguma fonte falhar por robots/feed (alerta em `source_health`). Antes de agendar: confirmar `DATABASE_URL` da VPS e criar `logs/`.
+
+### Fluxo ponta a ponta local (feat/run-e2e-local, 2026-10-14)
+
+**Premissa corrigida:** o banco `preditor` (127.0.0.1:5432) estava **vazio** (sem tabelas, sem `alembic_version`); o backfill reprocessado vivia no `preditor_p2` (head 0005, 1.239 `raw_message`, 64 ofertas). Para não mexer no banco do Programador 2, criei `preditor_e2e` com `CREATE DATABASE preditor_e2e TEMPLATE preditor_p2` e migrei: `alembic upgrade head` → **0008**. Nada foi gravado em produção/VPS; o `STOP` não existe na raiz.
+
+**Comandos exatos** (o pacote não está instalado no `.venv`; sem `PYTHONPATH=src` o `-m preditor...` dá `No module named 'preditor'`; com `uv run` funciona):
+
+```
+export DATABASE_URL=postgresql+psycopg://<usuario>:<senha>@127.0.0.1:5432/preditor_e2e
+export PYTHONPATH=src
+.venv/bin/alembic upgrade head
+.venv/bin/python -m preditor.jobs.daily_predict daily          # as_of = hoje (2026-10-14)
+.venv/bin/python -m preditor.jobs.daily_predict daily --as-of AAAA-MM-DD   # retroativo
+```
+
+Não existe comando "resolver": a resolução é feita na leitura (`GET /v1/prediction-log/accuracy`): uma linha de `prediction_log` conta quando `logged_at + horizonte ≤ hoje`; acerto = existe oferta (não só-gap) do par com início em `(logged_at, logged_at + h]`.
+
+**Execução de hoje (as_of 2026-10-14):** 3 pares × 3 horizontes = **9 predições e 9 linhas de log, todas B0** (`n_b0=3`, `n_b1=0`). Resolvidas: **0** (nenhuma janela vencida, é a primeira execução). Alertas: 0.
+
+| Par (transfer_bonus) | Campanhas (não só-gap, não segmentadas) | Método | P(7d) / P(15d) / P(30d) |
+|---|---|---|---|
+| livelo→smiles | 23 | B0 (< 25) | 0,113 / 0,227 / 0,402 |
+| livelo→latam_pass | 3 | B0 | 0,029 / 0,061 / 0,119 |
+| esfera→azul_fidelidade | 1 (só segmentada) | B0 | 0,021 / 0,044 / 0,087 |
+
+**B0 × B1:** B1 **não rodou para nenhum par** — o par principal tem 23 campanhas, abaixo do mínimo de 25. Logo não há comparação B0 × B1 possível; todo o log é B0.
+
+**Erro encontrado e corrigido (TDD, `tests/test_e2e_segment_collision.py`):** `prediction`/`prediction_log` não têm coluna de segmento; os grupos segmentados (`clube`, `segmentado`, `bonus_conflitante`) do mesmo par colidiam com o principal no `ON CONFLICT DO NOTHING` e **o primeiro a chegar ganhava**. Na 1ª execução, livelo→smiles saiu com a série `clube` (3 campanhas, P(30d)=0,081) em vez da principal (23, P(30d)=0,402). Além disso, `inserted_predictions` contava conflitos como inseridos (15 reportados, 9 gravadas). Agora o job grava **uma série por (origem, destino, tipo)**: a de mais campanhas (empate: não segmentada, depois rótulo) e conta só linhas realmente inseridas. Ressalva: pares só com ofertas segmentadas (esfera→azul) ainda geram predição com a série segmentada.
+
+**Execuções retroativas (só para ter janelas vencidas):** `daily --as-of` semanal de 2025-01-05 a 2026-09-13 (89 execuções), point-in-time (só ofertas com `first_seen_at ≤ as_of`). Total do log: **672 linhas** (224 por horizonte), todas B0; **221 resolvidas por horizonte** (3 pares). **Atenção:** essas linhas têm `logged_at` retroativo — são backtest, não previsão prospectiva; **não** executar no banco de produção, onde o log precisa ser só de predições feitas na hora.
+
+**Acurácia (`/v1/prediction-log/accuracy`), n = 221 por horizonte, B0 apenas:**
+
+| Horizonte | n | Taxa de acerto (ocorreu oferta) | Brier | Log-loss |
+|---|---|---|---|---|
+| 7 d | 221 | 0,050 | 0,051 | 0,204 |
+| 15 d | 221 | 0,113 | 0,104 | 0,353 |
+| 30 d | 221 | 0,208 | 0,167 | 0,522 |
+
+**Leitura honesta:** n é pequeno e **não independente** — são 3 pares, janelas semanais que se sobrepõem (30 d sobrepõe ~4 vezes) e 14 ofertas válidas desde 2025-01. Por par (30 d): livelo→smiles 89 linhas, 36 acertos, Brier 0,244 (constante com a taxa média dá 0,279); livelo→latam_pass 89, 10 acertos, Brier 0,111 (≈ constante 0,109); esfera→azul 43, 0 acertos, Brier 0,122 (constante 0,043: pior). **Não há base para afirmar acurácia do modelo**; o que se mede é só que o fluxo roda. O acompanhamento real começa quando o job passar a rodar todo dia.
+
+**Outros achados (não corrigidos, decisão de modelagem — Planejador):**
+1. **B0 explode com n=1:** taxa = peso / dias desde a 1ª campanha. esfera→azul (1 campanha segmentada) deu P(30d)=0,996 cinco dias após a campanha e gerou os **3 alertas** da tabela `alert` (limiar 0,5), todos ruído. Sugestão: mínimo de campanhas/dias de janela para emitir probabilidade ou alerta.
+2. `/v1/prediction-log/accuracy` com n=0 devolve `hit_rate`/`brier`/`log_loss` = 0,0 (parece perfeito); o campo `n` é o único aviso. `weekly` sempre `[]`. Não alterei por causa do contrato do dashboard.
+3. `GET /v1/prediction-log/accuracy` não separa B0 × B1; hoje só há B0, então não distorce.
+4. `run_accuracy` no job ignora `engine` (código morto `if False`).
