@@ -13,6 +13,7 @@ import httpx
 from preditor.campaigns import Evidence, consolidate
 from preditor.extract import extract, validate_offer
 from preditor.ingest import store_raw_message
+from preditor.stop import check_stop
 from preditor.wayback import DEFAULT_USER_AGENT, CDXClient, RateLimiter
 
 UA = DEFAULT_USER_AGENT
@@ -391,6 +392,7 @@ def fetch_robots(source_or_url, transport=None, rate_limiter=None):
 
 def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=None, now=None,
                 min_interval=RATE_LIMIT_SEC, **kwargs):
+    check_stop()
     engine = engine if engine is not None else _engine_from(kwargs)
     source = source if source is not None else kwargs.get("source")
     url = url if url is not None else kwargs.get("url") or kwargs.get("feed_url")
@@ -427,6 +429,7 @@ def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=N
         update_source_health(engine, source, items_new=0, extraction_rate=0.0, robots_txt=robots_txt, now=ts, alert=True)
         return raw_ids
     for it in items:
+        check_stop()
         is_new = False
         try:
             is_new = _is_new_raw(engine, source, (it.get("title") or "") + "\n" + (it.get("description") or ""))
@@ -471,6 +474,7 @@ def collect_rss(engine=None, source=None, url=None, transport=None, robots_txt=N
     return raw_ids
 
 def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=None, **kwargs):
+    check_stop()
     engine = engine if engine is not None else _engine_from(kwargs)
     source = source if source is not None else kwargs.get("source")
     from_ = from_ if from_ is not None else kwargs.get("from") or kwargs.get("from_ts") or "202301"
