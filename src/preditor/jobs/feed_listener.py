@@ -13,11 +13,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -28,6 +30,9 @@ from preditor import collector as C
 
 INTERVAL = 10.0
 GAP_DAYS = 7
+DAILY_CAP = 200          # req/dia por dominio (spec coletor 1.3)
+PAUSE_HOURS = 1          # pausa apos 429/503
+STATE_PATH = Path("data/raw/feed_listener_state.json")
 
 FEEDS: list[dict[str, str]] = [
     {"source": "pontospravoar.com", "feed": "https://pontospravoar.com/feed/", "mode": "titles"},
@@ -58,6 +63,58 @@ class _Pacer:
         self.seen.add(dom)
 
 
+def canonical_url(url: str) -> str:
+    """Chave de comparacao: sem esquema, sem www., sem query/fragmento, sem barra final, minusculas."""
+    k = re.sub(r"^https?://(www\.)?", "", str(url or "").strip().lower())
+    k = re.sub(r"[?#].*$", "", k)
+    return k.rstrip("/")
+
+
+def clean_link(url: str) -> str:
+    """URL a gravar: https, sem query (utm_*) nem fragmento."""
+    u = re.sub(r"[?#].*$", "", str(url).strip())
+    return re.sub(r"^http://", "https://", u)
+
+
+def _load_state(path) -> dict:
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_state(path, state: dict) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(state, indent=2))
+
+
+class _Budget:
+    """Teto diario por dominio e pausa de 1 h apos 429/503, persistidos em state."""
+
+    def __init__(self, state: dict, domain: str, now: datetime):
+        self.state, self.domain, self.now = state, domain, now
+        d = state.setdefault(domain, {})
+        today = now.date().isoformat()
+        if d.get("day") != today:
+            d["day"], d["count"] = today, 0
+        self.d = d
+
+    def paused(self) -> bool:
+        pu = self.d.get("pause_until")
+        return bool(pu and datetime.fromisoformat(pu) > self.now)
+
+    def can_request(self) -> bool:
+        return self.d.get("count", 0) < DAILY_CAP
+
+    def count(self) -> None:
+        self.d["count"] = self.d.get("count", 0) + 1
+
+    def throttled(self, status: int) -> None:
+        if status in (429, 503):
+            self.d["pause_until"] = (self.now + timedelta(hours=PAUSE_HOURS)).isoformat()
+
+
 def _pub_date(raw: str | None) -> datetime | None:
     if not raw:
         return None
@@ -79,9 +136,12 @@ def _record_health(engine, source: str, now: datetime, items_new: int, rate: flo
 
 
 def _known(engine, source: str, url: str) -> bool:
+    key = canonical_url(url)
     with engine.connect() as c:
-        return c.execute(sa.text("SELECT 1 FROM raw_message WHERE source=:s AND url=:u LIMIT 1"),
-                         {"s": source, "u": url}).first() is not None
+        return c.execute(sa.text(
+            "SELECT 1 FROM raw_message WHERE source=:s AND "
+            "rtrim(regexp_replace(regexp_replace(lower(url), '^https?://(www\\.)?', ''), '[?#].*$', ''), '/') = :k "
+            "LIMIT 1"), {"s": source, "k": key}).first() is not None
 
 
 def _store(engine, source, url, content, observed, pub, gap):
@@ -93,12 +153,28 @@ def _store(engine, source, url, content, observed, pub, gap):
     return rid
 
 
-def run_source(engine, cfg: dict[str, str], *, http_get, sleep, now: datetime) -> dict[str, Any]:
+def run_source(engine, cfg: dict[str, str], *, http_get, sleep, now: datetime,
+               state: dict | None = None) -> dict[str, Any]:
     source, feed_url, mode = cfg["source"], cfg["feed"], cfg["mode"]
     pacer = _Pacer(sleep)
+    budget = _Budget(state if state is not None else {}, source, now)
+    if budget.paused():
+        return {"status": "paused", "items_new": 0, "offers": 0}
+
+    def get(url: str):
+        if not budget.can_request():
+            return None
+        pacer.wait(url)
+        budget.count()
+        st, body = http_get(url)
+        budget.throttled(st)
+        return st, body
+
     robots_url = f"https://{source}/robots.txt"
-    pacer.wait(robots_url)
-    status, robots_txt = http_get(robots_url)
+    r = get(robots_url)
+    if r is None:
+        return {"status": "daily_cap_reached", "items_new": 0, "offers": 0}
+    status, robots_txt = r
     if status in (404, 410):
         status, robots_txt = 200, ""
     if status != 200:
@@ -108,18 +184,22 @@ def run_source(engine, cfg: dict[str, str], *, http_get, sleep, now: datetime) -
         _record_health(engine, source, now, 0, None, True, robots_txt)
         return {"status": "robots_disallowed", "items_new": 0, "offers": 0}
 
-    pacer.wait(feed_url)
-    status, body = http_get(feed_url)
+    r = get(feed_url)
+    if r is None:
+        return {"status": "daily_cap_reached", "items_new": 0, "offers": 0}
+    status, body = r
     items = C.parse_feed(body) if status == 200 else None
     if items is None:
         _record_health(engine, source, now, 0, None, True, robots_txt)
         return {"status": "feed_unavailable", "items_new": 0, "offers": 0}
 
     new = offers = failures = 0
+    capped = False
     for it in items:
         link, title = it.get("link"), (it.get("title") or "").strip()
         if not link or not title or _known(engine, source, link):
             continue
+        link_clean = clean_link(link)
         pub = _pub_date(it.get("pubDate"))
         observed = min(pub, now) if pub is not None else now
         gap = bool(pub is not None and now - pub > timedelta(days=GAP_DAYS))
@@ -128,13 +208,19 @@ def run_source(engine, cfg: dict[str, str], *, http_get, sleep, now: datetime) -
         else:
             if not C.robots_allowed(robots_txt, link):
                 continue
-            pacer.wait(link)
-            st, html = http_get(link)
+            r = get(link)
+            if r is None:
+                capped = True
+                break
+            st, html = r
+            if budget.paused():
+                failures += 1
+                break
             if st != 200 or not html:
                 failures += 1
                 continue
             content = html
-        rid = _store(engine, source, link, content, observed, pub, gap)
+        rid = _store(engine, source, link_clean, content, observed, pub, gap)
         new += 1
         if mode == "titles":
             res = C.process_raw_message(engine, {"content": title, "id": rid, "source": source}, first_seen_at=observed)
@@ -145,17 +231,22 @@ def run_source(engine, cfg: dict[str, str], *, http_get, sleep, now: datetime) -
             offers += _process_snippets(engine, source, rid, content, observed)
     alert = failures > 0 and new == 0
     _record_health(engine, source, now, new, (offers / new) if new else None, alert, robots_txt)
-    return {"status": "ok", "items_new": new, "offers": offers, "failures": failures}
+    return {"status": "daily_cap_reached" if capped else "ok", "items_new": new, "offers": offers,
+            "failures": failures}
 
 
 def run_once(engine, sources: list[dict[str, str]] | None = None, *, http_get=None, sleep=None,
-             now: datetime | None = None, run_pipeline: bool = True) -> dict[str, dict[str, Any]]:
+             now: datetime | None = None, run_pipeline: bool = True,
+             state_path=None) -> dict[str, dict[str, Any]]:
     http_get = http_get or _http_get
     sleep = sleep or time.sleep
     now = now or datetime.now(UTC)
+    path = state_path if state_path is not None else STATE_PATH
+    state = _load_state(path)
     out: dict[str, dict[str, Any]] = {}
     for cfg in (sources if sources is not None else FEEDS):
-        out[cfg["source"]] = run_source(engine, cfg, http_get=http_get, sleep=sleep, now=now)
+        out[cfg["source"]] = run_source(engine, cfg, http_get=http_get, sleep=sleep, now=now, state=state)
+    _save_state(path, state)
     if run_pipeline and any(v.get("offers") for v in out.values()):
         from preditor.jobs.daily_predict import run_daily
 
@@ -208,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     engine = sa.create_engine(url)
     out = run_once(engine, run_pipeline=not args.no_pipeline)
     print(json.dumps(out, ensure_ascii=False, default=str))
-    return 0 if all(v["status"] == "ok" for v in out.values()) else 1
+    return 0 if all(v["status"] in ("ok", "paused", "daily_cap_reached") for v in out.values()) else 1
 
 
 if __name__ == "__main__":

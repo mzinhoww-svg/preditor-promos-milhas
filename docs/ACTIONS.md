@@ -56,3 +56,13 @@ Resíduo de teste (`raw_message` id=1) removido do `preditor_p2`; `tests/conftes
 - Testes de API passam também em banco populado (limpam `offer_evidence` e `source_health`).
 
 **Reprocesso após o follow-up (preditor_p2, head 0005):** 1.239 brutas → 64 ofertas (66 antes; 8 descartadas, entre elas livelo→esfera e smiles→esfera inválidas e 6 de bônus nulo corrigidos). livelo→smiles `transfer_bonus` 55 (7 validadas, 47 meses, 27 sem só-gap, 1 sem bônus), livelo→latam_pass 5, esfera→smiles 3, esfera→azul_fidelidade 1. `published_at` preenchido em 877 de 897 títulos do Pontos pra Voar (0 com gap).
+
+**Ajustes do listener (antes do cron):** URL do link normalizada como no backfill (sem `utm_*`/query, sem `www.`, esquema único; `canonical_url` na checagem de "já coletado", grava `https` sem query); teto de 200 req/dia por domínio e pausa de 1 h após 429/503, persistidos em `data/raw/feed_listener_state.json` (status `daily_cap_reached`/`paused`); `GET /v1/source-health` compara `robots_hash` com o anterior (`robots_changed`).
+
+**Cron (documentado, NÃO agendado em produção):**
+
+```
+*/30 * * * * cd /caminho/preditor-promos-milhas && set -a && . ./.env && set +a && uv run python -m preditor.jobs.feed_listener --once >> logs/feed_listener.log 2>&1
+```
+
+Frequência de 30 min; sai com código 1 se alguma fonte falhar por robots/feed (alerta em `source_health`). Antes de agendar: confirmar `DATABASE_URL` da VPS e criar `logs/`.

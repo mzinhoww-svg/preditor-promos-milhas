@@ -60,8 +60,19 @@ class Net:
         self.sleeps.append(s)
 
 
-def _run(eng, net, cfg=SRC, now=NOW):
-    return FL.run_once(eng, sources=[cfg], http_get=net.get, sleep=net.sleep, now=now, run_pipeline=False)
+@pytest.fixture(autouse=True)
+def _isolated_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(FL, "STATE_PATH", tmp_path / "default_state.json")
+
+
+@pytest.fixture
+def state_path(tmp_path):
+    return tmp_path / "listener_state.json"
+
+
+def _run(eng, net, cfg=SRC, now=NOW, state_path_=None, **kw):
+    return FL.run_once(eng, sources=[cfg], http_get=net.get, sleep=net.sleep, now=now, run_pipeline=False,
+                       state_path=state_path_, **kw)
 
 
 def _count(eng, table):
@@ -148,3 +159,62 @@ def test_api_source_health_reports_status_last_item_and_failures(eng):
     assert src["status"] == "error"          # 3 falhas seguidas
     assert src["last_item_at"] is not None
     assert src["last_success_at"].startswith("2026-10-14T15:00:00")
+
+
+# --- ajustes do Planejador: URL normalizada, teto diario/pausa, robots_changed ------------------
+def test_article_already_collected_by_backfill_is_not_downloaded_again(eng):
+    with eng.begin() as c:  # como o backfill grava: http, www., query
+        c.execute(text("INSERT INTO raw_message(source,url,content,content_hash,collected_at,observed_at) VALUES "
+                       "('passageirodeprimeira.com','http://www.passageirodeprimeira.com/a-1/?utm_source=x',"
+                       "'<html>velho</html>','h-old',now(),now())"))
+    net = Net()
+    out = _run(eng, net)
+    assert not [u for u in net.calls if u.endswith("/a-1/")]
+    assert out["passageirodeprimeira.com"]["items_new"] == 1  # so o a-2
+
+
+def test_canonical_url_strips_scheme_www_query_fragment_trailing_slash():
+    k = FL.canonical_url("HTTP://www.Exemplo.com/Post-1/?utm_source=a&x=1#frag")
+    assert k == FL.canonical_url("https://exemplo.com/post-1")
+
+
+def test_stored_url_has_no_tracking_params(eng):
+    feed = FEED.replace("https://passageirodeprimeira.com/a-1/", "https://passageirodeprimeira.com/a-1/?utm_medium=rss")
+    _run(eng, Net(feed=(200, feed)))
+    with eng.connect() as c:
+        urls = c.execute(text("SELECT url FROM raw_message")).scalars().all()
+    assert all("utm_" not in u for u in urls)
+
+
+def test_daily_cap_200_requests_per_domain(eng, state_path):
+    state_path.write_text('{"passageirodeprimeira.com": {"day": "2026-10-14", "count": 199}}')
+    net = Net()
+    out = _run(eng, net, state_path_=state_path)
+    assert out["passageirodeprimeira.com"]["status"] == "daily_cap_reached"
+    assert len(net.calls) <= 1
+    # no dia seguinte volta
+    out2 = _run(eng, Net(), now=NOW + timedelta(days=1), state_path_=state_path)
+    assert out2["passageirodeprimeira.com"]["status"] == "ok"
+
+
+def test_pause_one_hour_after_429(eng, state_path):
+    net = Net(feed=(429, ""))
+    out = _run(eng, net, state_path_=state_path)
+    assert out["passageirodeprimeira.com"]["status"] == "feed_unavailable"
+    net2 = Net()
+    out2 = _run(eng, net2, now=NOW + timedelta(minutes=30), state_path_=state_path)
+    assert out2["passageirodeprimeira.com"]["status"] == "paused" and net2.calls == []
+    out3 = _run(eng, Net(), now=NOW + timedelta(minutes=61), state_path_=state_path)
+    assert out3["passageirodeprimeira.com"]["status"] == "ok"
+
+
+def test_robots_changed_compares_with_previous_hash(eng):
+    from preditor.api.queries import fetch_source_health
+
+    _run(eng, Net(), now=NOW)
+    _run(eng, Net(), now=NOW + timedelta(hours=1))
+    src = {s["source"]: s for s in fetch_source_health()["sources"]}["passageirodeprimeira.com"]
+    assert src["robots_changed"] is False
+    _run(eng, Net(robots=(200, "User-agent: *\nDisallow: /wp-admin/\n")), now=NOW + timedelta(hours=2))
+    src = {s["source"]: s for s in fetch_source_health()["sources"]}["passageirodeprimeira.com"]
+    assert src["robots_changed"] is True
