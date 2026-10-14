@@ -15,6 +15,13 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Opções de fetch: sem cache de dados. Com `revalidate` a Vercel servia uma resposta
+ * boa por até 5 min depois de a API cair, com badge "API" e sem aviso (ressalva 3 do QA).
+ * O custo é 3–4 chamadas por tela, dentro do limite de 60/min por chave.
+ */
+export const FETCH_INIT: RequestInit = { cache: "no-store" };
+
 /** GET autenticado contra a API da VPS. Header X-API-Key vem só do ambiente. */
 export async function getJson<T>(path: string, query?: Record<string, string | undefined>): Promise<T> {
   const { baseUrl, apiKey } = apiConfig();
@@ -24,9 +31,9 @@ export async function getJson<T>(path: string, query?: Record<string, string | u
   let res: Response;
   try {
     res = await fetch(url, {
+      ...FETCH_INIT,
       headers: { "X-API-Key": apiKey, Accept: "application/json" },
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      next: { revalidate: 300 },
     });
   } catch (err) {
     const name = err instanceof Error ? err.name : "";

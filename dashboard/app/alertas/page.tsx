@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge, SEVERITY_TONE } from "@/components/badge";
 import { DataNotice } from "@/components/data-notice";
+import { Freshness } from "@/components/freshness";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ScrollRegion } from "@/components/scroll-region";
 import { StatusStrip } from "@/components/status-strip";
@@ -38,7 +39,7 @@ export default async function AlertsPage() {
   const acc = accRes.data;
   const sh = shRes.data;
   const discarded = accRes.discarded;
-  const now = new Date(acc.generated_at);
+  const now = new Date();
   const stopActive = statusRes.data?.stop.active ?? false;
   const stopAlert: Alert[] = stopActive
     ? [
@@ -74,6 +75,8 @@ export default async function AlertsPage() {
           { label: "Cruzaram o limiar", value: thr ? thr.items.length : "—", hint: thr ? `limiar ${thr.items[0] ? pct(thr.items[0].threshold) : "—"}` : "rota indisponível" },
         ]}
       />
+
+      <Freshness origin={accRes.origin} fetchedAt={accRes.fetchedAt} generatedAt={acc.generated_at} now={now} />
 
       <StatusStrip status={statusRes} jobFallbackAt={acc.generated_at} now={now} />
 

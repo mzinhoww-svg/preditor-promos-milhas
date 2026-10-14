@@ -35,7 +35,8 @@ export interface PredictionItem {
   type: OfferType;
   segmented: boolean;
   segment_label: string | null;
-  windows: Record<Horizon, WindowProbability>;
+  /** Janela malformada vira null e é sinalizada na tela; o item fica (ressalva 4 do QA). */
+  windows: Record<Horizon, WindowProbability | null>;
   /** Quartis do bônus; null quando o par não tem histórico de bônus. */
   bonus_pct: { p25: number | null; p50: number | null; p75: number | null };
   last_offer: {
@@ -106,6 +107,8 @@ export interface ModelMetricsResponse {
     ci_delta_brier: [number, number] | null;
     decision: ComparisonDecision;
     note: string;
+    /** false quando a API ainda não comparou nada (nota "sem dados", IC [0,0] e Δ 0): a tela diz "sem dados". */
+    has_data: boolean;
   };
   reliability: {
     horizon: number;

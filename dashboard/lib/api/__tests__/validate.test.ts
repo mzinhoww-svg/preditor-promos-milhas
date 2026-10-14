@@ -74,12 +74,28 @@ describe("validatePredictions", () => {
     expect(r.data.items[0].n_campaigns).toBe(23);
     expect(r.data.model.version).toBeNull();
   });
-  it("descarta e conta item com data inválida ou janela faltando", () => {
+  it("descarta item com data inválida; janelas faltando ficam nulas e contadas (ressalva 4)", () => {
     const bad1 = { ...REAL_ITEM, last_offer: { start_at: "2026-02-31", end_at: null, bonus_pct: 80, days_since: 3 } };
-    const bad2 = { ...REAL_ITEM, windows: { "7": REAL_ITEM.windows["7"] } };
-    const r = validatePredictions({ generated_at: "2026-10-14T00:00:00Z", model: { run_id: "mr_3", name: "B1" }, items: [REAL_ITEM, bad1, bad2] });
-    expect(r.discarded).toBe(2);
-    expect(r.data.items).toHaveLength(1);
+    const partial = { ...REAL_ITEM, windows: { "7": REAL_ITEM.windows["7"] } };
+    const r = validatePredictions({ generated_at: "2026-10-14T00:00:00Z", model: { run_id: "mr_3", name: "B1" }, items: [REAL_ITEM, bad1, partial] });
+    expect(r.discarded).toBe(1);
+    expect(r.invalidWindows).toBe(2);
+    expect(r.data.items).toHaveLength(2);
+    expect(r.data.items[1].windows["15"]).toBeNull();
+  });
+  it("ressalva 4: item com uma janela inválida fica na lista com a janela nula e contada", () => {
+    const oneBad = { ...REAL_ITEM, windows: { ...REAL_ITEM.windows, "15": { probability: 1.7, ci_low: 0, ci_high: 1 } } };
+    const r = validatePredictions({ generated_at: "2026-10-14T00:00:00Z", model: { run_id: "mr_3", name: "B1" }, items: [oneBad] });
+    expect(r.discarded).toBe(0);
+    expect(r.invalidWindows).toBe(1);
+    expect(r.data.items[0].windows["15"]).toBeNull();
+    expect(r.data.items[0].windows["30"]?.probability).toBe(0.61118);
+  });
+  it("ressalva 4: item com as três janelas inválidas é descartado", () => {
+    const allBad = { ...REAL_ITEM, windows: { "7": null, "15": "x", "30": { probability: -1 } } };
+    const r = validatePredictions({ generated_at: "2026-10-14T00:00:00Z", model: { run_id: "mr_3", name: "B1" }, items: [allBad] });
+    expect(r.discarded).toBe(1);
+    expect(r.invalidWindows).toBe(0);
   });
   it("rejeita resposta sem items", () => {
     expect(() => validatePredictions({ generated_at: "2026-10-14T00:00:00Z", model: {} })).toThrow(InvalidResponseError);
@@ -101,6 +117,14 @@ describe("validateModelMetrics", () => {
     expect(m.challenger).toBeNull();
     expect(m.comparison.decision).toBe("keep_champion");
     expect(m.reliability.bins).toEqual([]);
+  });
+  it("ressalva 1: comparação zerada com nota 'sem dados suficientes' não tem dados", () => {
+    expect(validateModelMetrics(REAL_METRICS).comparison.has_data).toBe(false);
+    expect(validateModelMetrics(modelMetrics).comparison.has_data).toBe(true);
+    const zeroNoNote = validateModelMetrics({ ...REAL_METRICS, comparison: { ...REAL_METRICS.comparison, note: "" } });
+    expect(zeroNoNote.comparison.has_data).toBe(false);
+    const insufficient = validateModelMetrics({ ...REAL_METRICS, comparison: { horizon: 30, delta_brier: -0.01, delta_log_loss: 0.02, ci_delta_brier: [-0.03, 0.01], decision: "insufficient_data", note: "" } });
+    expect(insufficient.comparison.has_data).toBe(false);
   });
   it("decisão desconhecida vira keep_champion e IC malformado vira null", () => {
     const m = validateModelMetrics({ ...REAL_METRICS, comparison: { ...REAL_METRICS.comparison, decision: "x", ci_delta_brier: [1] } });

@@ -13,7 +13,7 @@ mesmo sem `--prod` (lição registrada no APR-006).
 | Framework | Next.js 16 (App Router), build `next build`, Node 22+ |
 | Rotas | `/`, `/modelo`, `/fontes`, `/alertas` (Server Components, `force-dynamic`) e `/api/explanation` (Route Handler, proxy server-side) |
 | Dados | lidos no servidor da Vercel; o navegador nunca fala com a API da VPS |
-| Cache | `fetch` com `revalidate: 300` (5 min) por endpoint; explicação por item com `Cache-Control: private, max-age=300` |
+| Cache | nenhum (`cache: "no-store"`): falha da API aparece na hora e a tela mostra a idade do dado |
 | O que **não** sobe | nada do Python, banco, coletores ou job; nenhuma chave no bundle (`npm run build` + `grep` em `.next/static` confirmam) |
 
 ## 2. Projeto e ambiente
@@ -61,8 +61,8 @@ mesmo sem `--prod` (lição registrada no APR-006).
 - [ ] Proteção de acesso configurada no projeto Vercel.
 - [ ] Variáveis criadas como Encrypted/Sensitive; nenhuma com `NEXT_PUBLIC_` além da base.
 - [ ] `npm run lint`, `npm test` e `npm run build` verdes no commit a publicar.
-- [ ] Limite da API (60 req/min por chave) compatível com o uso: 3–4 chamadas por tela com
-      cache de 5 min; explicação por item sob demanda.
+- [ ] Limite da API (60 req/min por chave) compatível com o uso: 3–4 chamadas por tela sem
+      cache (cerca de 15 aberturas de tela por minuto); explicação por item sob demanda.
 - [ ] Registro em `docs/ACTIONS.md` com data, URL e `target`.
 
 ## 5. Alternativas consideradas

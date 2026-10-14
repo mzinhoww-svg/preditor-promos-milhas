@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { DataNotice } from "@/components/data-notice";
-import { ModelBadge } from "@/components/model-badge";
+import { Freshness } from "@/components/freshness";
+import { HeaderModelBadge } from "@/components/model-badge";
 import { PageHeader, SummaryPanel } from "@/components/page-header";
 import { PredictionList } from "@/components/prediction-list";
 import { StatusStrip } from "@/components/status-strip";
@@ -27,11 +28,13 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
   const all = predRes.data;
   const items = type ? all.items.filter((i) => i.type === type) : all.items;
   const discarded = predRes.discarded;
+  const invalidWindows = predRes.invalidWindows;
+  const now = new Date();
   const decision = metricsRes.origin === "api" || configured === "mock" ? metricsRes.data.comparison.decision : null;
 
   const top = all.items[0];
-  const likely30 = all.items.filter((i) => i.windows["30"].probability >= 0.5).length;
-  const likely7 = all.items.filter((i) => i.windows["7"].probability >= 0.5).length;
+  const likely30 = all.items.filter((i) => (i.windows["30"]?.probability ?? 0) >= 0.5).length;
+  const likely7 = all.items.filter((i) => (i.windows["7"]?.probability ?? 0) >= 0.5).length;
 
   return (
     <>
@@ -47,19 +50,21 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
           {
             label: "Mais provável em 7 dias",
             value: top ? `${top.pair.origin} → ${top.pair.destination}` : "—",
-            hint: top ? `${pct(top.windows["7"].probability)}${top.bonus_pct.p50 !== null ? ` · mediana ${top.bonus_pct.p50}%` : ""}` : undefined,
+            hint: top ? `${top.windows["7"] ? pct(top.windows["7"].probability) : "janela de 7 d inválida"}${top.bonus_pct.p50 !== null ? ` · mediana ${top.bonus_pct.p50}%` : ""}` : undefined,
           },
           { label: "Pares com ≥ 50% em 7 dias", value: likely7, hint: `de ${all.items.length} acompanhados` },
           { label: "Pares com ≥ 50% em 30 dias", value: likely30, hint: `de ${all.items.length} acompanhados` },
           {
             label: "Modelo em produção",
-            value: <ModelBadge name={all.model.name} decision={decision} />,
+            value: <HeaderModelBadge name={all.model.name} items={all.items} decision={decision} />,
             hint: `execução ${all.model.run_id} · gerado ${dateTime(all.generated_at)}`,
           },
         ]}
       />
 
-      <StatusStrip status={statusRes} jobFallbackAt={all.generated_at} now={new Date(all.generated_at)} />
+      <Freshness origin={predRes.origin} fetchedAt={predRes.fetchedAt} generatedAt={all.generated_at} now={now} />
+
+      <StatusStrip status={statusRes} jobFallbackAt={all.generated_at} now={now} />
 
       <nav aria-label="Filtrar por tipo" className="mb-4 flex flex-wrap gap-2">
         <FilterChip href="/" active={!type}>
@@ -76,6 +81,13 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
         <p role="status" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
           {discarded === 1 ? "1 item da API foi descartado" : `${discarded} itens da API foram descartados`} por formato
           inválido. A lista abaixo mostra só os itens válidos.
+        </p>
+      ) : null}
+
+      {invalidWindows > 0 ? (
+        <p role="status" className="mb-4 rounded-md border border-crit/30 bg-crit-soft px-3 py-2 text-sm text-crit">
+          {invalidWindows === 1 ? "1 janela veio inválida da API" : `${invalidWindows} janelas vieram inválidas da API`} e
+          está marcada no item, sem tirar o par da lista.
         </p>
       ) : null}
 

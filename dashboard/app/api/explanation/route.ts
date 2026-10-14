@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   }
   const res = await getExplanation(origin, destination, type as OfferType);
   if (res.data) {
-    return NextResponse.json({ data: res.data, origin: res.origin }, { headers: { "Cache-Control": "private, max-age=300" } });
+    return NextResponse.json({ data: res.data, origin: res.origin }, { headers: { "Cache-Control": "no-store" } });
   }
   const status = res.unavailable?.status === 404 ? 404 : 502;
   return NextResponse.json({ data: null, origin: res.origin, error: res.unavailable }, { status });

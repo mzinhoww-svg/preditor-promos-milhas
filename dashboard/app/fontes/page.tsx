@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Badge, STATUS_TONE } from "@/components/badge";
 import { DataNotice } from "@/components/data-notice";
+import { Freshness } from "@/components/freshness";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ScrollRegion } from "@/components/scroll-region";
 import { dataSource, getSourceHealth, type SourceStatus } from "@/lib/api";
@@ -15,7 +16,7 @@ export default async function SourcesPage() {
   const configured = dataSource();
   const shRes = await getSourceHealth();
   const { data, discarded } = shRes;
-  const now = new Date(data.generated_at);
+  const now = new Date();
   const sources = [...data.sources].sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
   const count = (s: SourceStatus) => sources.filter((x) => x.status === s).length;
   const new24 = sources.reduce((acc, s) => acc + (s.items_new_24h ?? 0), 0);
@@ -38,6 +39,8 @@ export default async function SourcesPage() {
           { label: "Verificado", value: dateTime(data.generated_at) },
         ]}
       />
+
+      <Freshness origin={shRes.origin} fetchedAt={shRes.fetchedAt} generatedAt={data.generated_at} now={now} />
 
       {discarded > 0 ? (
         <p role="status" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">

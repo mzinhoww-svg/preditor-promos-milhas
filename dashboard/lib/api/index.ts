@@ -51,6 +51,8 @@ export interface Loaded<T> {
   discarded: number;
   origin: DataSource;
   fallback: Fallback | null;
+  /** Instante da consulta (sem cache: a API é chamada a cada requisição). Ressalva 3 do QA. */
+  fetchedAt: string;
 }
 
 /** Endpoint opcional (ainda não existe em toda versão da API): dados ou motivo da ausência. */
@@ -84,17 +86,18 @@ async function load<T>(
   validate: (raw: unknown) => { data: T; discarded: number },
   query?: Record<string, string | undefined>,
 ): Promise<Loaded<T>> {
+  const fetchedAt = new Date().toISOString();
   if (dataSource() === "api") {
     try {
       const v = validate(await getJson<unknown>(path, query));
-      return { ...v, origin: "api", fallback: null };
+      return { ...v, origin: "api", fallback: null, fetchedAt };
     } catch (err) {
       const v = validate(mock);
-      return { ...v, origin: "mock", fallback: toFallback(err) };
+      return { ...v, origin: "mock", fallback: toFallback(err), fetchedAt };
     }
   }
   const v = validate(mock);
-  return { ...v, origin: "mock", fallback: null };
+  return { ...v, origin: "mock", fallback: null, fetchedAt };
 }
 
 async function loadOptional<T>(
@@ -115,8 +118,8 @@ async function loadOptional<T>(
   return { ...v, origin: "mock", unavailable: null };
 }
 
-export async function getPredictions(opts?: { type?: OfferType; limit?: number }): Promise<Loaded<PredictionsResponse>> {
-  const res = await load("/predictions", mockPredictions, validatePredictions, { type: opts?.type, limit: opts?.limit?.toString() });
+export async function getPredictions(opts?: { type?: OfferType; limit?: number }): Promise<Loaded<PredictionsResponse> & { invalidWindows: number }> {
+  const res = (await load("/predictions", mockPredictions, validatePredictions, { type: opts?.type, limit: opts?.limit?.toString() })) as Loaded<PredictionsResponse> & { invalidWindows: number };
   // Em modo mock o filtro é local; a API já filtra, mas repetir não custa.
   const items = res.data.items.filter((i) => !opts?.type || i.type === opts.type).slice(0, opts?.limit ?? 50);
   return { ...res, data: { ...res.data, items } };
@@ -134,15 +137,16 @@ export async function getSourceHealth(): Promise<Loaded<SourceHealthResponse>> {
 export async function getAccuracy(
   opts?: { from?: string; to?: string; horizon?: string },
 ): Promise<Loaded<AccuracyResponse> & { discardedWeekly: number }> {
+  const fetchedAt = new Date().toISOString();
   if (dataSource() === "api") {
     try {
       const v = validateAccuracy(await getJson<unknown>("/prediction-log/accuracy", opts));
-      return { ...v, origin: "api", fallback: null };
+      return { ...v, origin: "api", fallback: null, fetchedAt };
     } catch (err) {
-      return { ...validateAccuracy(mockAccuracy), origin: "mock", fallback: toFallback(err) };
+      return { ...validateAccuracy(mockAccuracy), origin: "mock", fallback: toFallback(err), fetchedAt };
     }
   }
-  return { ...validateAccuracy(mockAccuracy), origin: "mock", fallback: null };
+  return { ...validateAccuracy(mockAccuracy), origin: "mock", fallback: null, fetchedAt };
 }
 
 /** GET /v1/alerts (T10b). Ausente na API da main até o PR #50 entrar: a tela avisa, sem cair. */

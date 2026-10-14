@@ -77,8 +77,9 @@ export function isPredictionItem(v: unknown): v is PredictionItem {
   if (!isStr(v.type) || !OFFER_TYPES.has(v.type)) return false;
   if (typeof v.segmented !== "boolean") return false;
   if (!(v.segment_label === null || v.segment_label === undefined || isStr(v.segment_label))) return false;
+  // Ressalva 4: basta uma janela válida; as inválidas viram null e são sinalizadas.
   const w = v.windows;
-  if (!isObj(w) || !HORIZON_KEYS.every((h) => isWindow(w[h]))) return false;
+  if (!isObj(w) || !HORIZON_KEYS.some((h) => isWindow(w[h]))) return false;
   // bonus_pct: objeto com quartis numéricos ou nulos (par sem histórico de bônus).
   const b = v.bonus_pct;
   if (!isObj(b)) return false;
@@ -96,7 +97,7 @@ export function isPredictionItem(v: unknown): v is PredictionItem {
   return true;
 }
 
-export function validatePredictions(raw: unknown): { data: PredictionsResponse; discarded: number } {
+export function validatePredictions(raw: unknown): { data: PredictionsResponse; discarded: number; invalidWindows: number } {
   if (!isObj(raw) || !isIsoDate(raw.generated_at) || !isObj(raw.model) || !Array.isArray(raw.items)) {
     throw new InvalidResponseError("/predictions", "formato inesperado");
   }
@@ -104,11 +105,19 @@ export function validatePredictions(raw: unknown): { data: PredictionsResponse; 
   if (!isStr(m.run_id) || !isStr(m.name)) {
     throw new InvalidResponseError("/predictions", "campo model inválido");
   }
+  let invalidWindows = 0;
   const items = raw.items.filter(isPredictionItem).map((it) => {
     const extra = it as unknown as Record<string, unknown>;
     const b = it.bonus_pct as Record<string, unknown>;
+    const w = it.windows as unknown as Record<string, unknown>;
+    const windows = {} as PredictionItem["windows"];
+    for (const h of HORIZON_KEYS) {
+      windows[h] = isWindow(w[h]) ? w[h] : null;
+      if (!windows[h]) invalidWindows += 1;
+    }
     return {
       ...it,
+      windows,
       segment_label: it.segment_label ?? null,
       bonus_pct: { p25: numOrNull(b.p25), p50: numOrNull(b.p50), p75: numOrNull(b.p75) },
       last_offer: it.last_offer ? { ...it.last_offer, end_at: it.last_offer.end_at ?? null } : null,
@@ -124,6 +133,7 @@ export function validatePredictions(raw: unknown): { data: PredictionsResponse; 
       items,
     },
     discarded: raw.items.length - items.length,
+    invalidWindows,
   };
 }
 
@@ -187,6 +197,11 @@ export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
   const challenger = raw.challenger === null || raw.challenger === undefined ? null : modelSummary(raw.challenger);
   const c = isObj(raw.comparison) ? raw.comparison : {};
   const decision = c.decision === "promote_challenger" || c.decision === "insufficient_data" ? c.decision : "keep_champion";
+  const note = isStr(c.note) ? c.note : "";
+  const ci = pairOrNull(c.ci_delta_brier);
+  // Ressalva 1: a API sem comparação devolve Δ 0, IC [0,0] e nota "sem dados suficientes"; isso não é medida.
+  const zeroed = (!isNum(c.delta_brier) || c.delta_brier === 0) && (!isNum(c.delta_log_loss) || c.delta_log_loss === 0) && (ci === null || (ci[0] === 0 && ci[1] === 0));
+  const has_data = !(decision === "insufficient_data" || /sem dados/i.test(note) || zeroed || (champion.validation.folds === null && Object.keys(champion.validation.by_horizon).length === 0));
   const r = isObj(raw.reliability) ? raw.reliability : {};
   const bins = (Array.isArray(r.bins) ? r.bins : []).filter(
     (b): b is { p_mean: number; observed: number; n: number } => isObj(b) && isProb(b.p_mean) && isProb(b.observed) && isNum(b.n),
@@ -199,9 +214,10 @@ export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
       horizon: isNum(c.horizon) ? c.horizon : 30,
       delta_brier: isNum(c.delta_brier) ? c.delta_brier : 0,
       delta_log_loss: isNum(c.delta_log_loss) ? c.delta_log_loss : 0,
-      ci_delta_brier: pairOrNull(c.ci_delta_brier),
+      ci_delta_brier: ci,
       decision,
-      note: isStr(c.note) ? c.note : "",
+      note,
+      has_data,
     },
     reliability: { horizon: isNum(r.horizon) ? r.horizon : 30, bins },
   };

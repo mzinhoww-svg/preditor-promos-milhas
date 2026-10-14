@@ -16,8 +16,8 @@ de ambiente, sem mudar a interface de dados.
   (`PREDITOR_API_KEY` no servidor Next.js / na Vercel). Nunca no código, nunca no cliente
   (as chamadas acontecem em Server Components e na rota `/api/explanation`).
 - Limite: 60 req/min por chave e 120 por IP (`RATE_LIMIT_PER_MINUTE_*` na API). O dashboard
-  faz 3 a 4 chamadas por tela, com cache de 5 min (`revalidate: 300`), e carrega a
-  explicação de cada item só quando o leitor abre o bloco.
+  faz 3 a 4 chamadas por tela, sem cache, e carrega a explicação de cada item só quando o
+  leitor abre o bloco.
 - Erros: `401` sem chave, `403` chave inválida, `429` limite excedido, `503` API sem chave
   configurada. Corpo de erro: `{"error": {"code": "string", "message": "string"}}`.
 - Datas e instantes em ISO 8601 UTC (`2026-10-13T06:00:00Z`). O dashboard exige calendário
@@ -31,6 +31,11 @@ de ambiente, sem mudar a interface de dados.
   (`404`) vira aviso "a API ainda não expõe".
 - Fallback: com a API configurada, qualquer falha (rede, timeout de 8 s, HTTP, JSON,
   validação) faz a tela cair para os dados simulados com um aviso em destaque e o motivo.
+- Sem cache de dados: cada requisição ao dashboard consulta a API (`cache: "no-store"`); a
+  tela mostra "API consultada há X" e "dados gerados há Y", com selo "dado velho" acima de
+  36 h. Item com janela malformada fica na lista com a janela marcada como inválida; só sai
+  se as três janelas forem inválidas. `comparison` zerada com nota "sem dados suficientes"
+  (ou `decision: insufficient_data`) aparece como "sem dados", não como Δ 0,000.
 - Idioma dos textos (`reason`, `label`, `message`): português.
 
 Variáveis do dashboard:

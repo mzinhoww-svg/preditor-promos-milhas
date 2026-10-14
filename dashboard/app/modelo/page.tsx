@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Badge } from "@/components/badge";
 import { DataNotice } from "@/components/data-notice";
+import { Freshness } from "@/components/freshness";
 import { ModelBadge } from "@/components/model-badge";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ReliabilityChart } from "@/components/reliability-chart";
@@ -27,6 +28,8 @@ export default async function ModelPage() {
   const prod = c.production;
   const hasValidation = HORIZONS.some((h) => c.validation.by_horizon[h]);
   const nCampaigns = statusRes.data?.n_campaigns_total ?? null;
+  const cmp = m.comparison;
+  const now = new Date();
 
   return (
     <>
@@ -36,6 +39,8 @@ export default async function ModelPage() {
       />
 
       <DataNotice configured={configured} sources={[mRes, accRes]} />
+
+      <Freshness origin={mRes.origin} fetchedAt={mRes.fetchedAt} generatedAt={m.generated_at} now={now} />
 
       <SummaryPanel
         items={[
@@ -56,8 +61,10 @@ export default async function ModelPage() {
           },
           {
             label: "Campeão × desafiante",
-            value: DECISION_LABEL[m.comparison.decision],
-            hint: `Δ Brier ${signed(m.comparison.delta_brier)}${m.comparison.ci_delta_brier ? ` · IC ${num(m.comparison.ci_delta_brier[0])} a ${num(m.comparison.ci_delta_brier[1])}` : " · IC indisponível"}`,
+            value: cmp.has_data ? DECISION_LABEL[cmp.decision] : "Sem dados",
+            hint: cmp.has_data
+              ? `Δ Brier ${signed(cmp.delta_brier)}${cmp.ci_delta_brier ? ` · IC ${num(cmp.ci_delta_brier[0])} a ${num(cmp.ci_delta_brier[1])}` : " · IC indisponível"}`
+              : cmp.note || "a API ainda não comparou campeão e desafiante",
           },
         ]}
       />
@@ -172,27 +179,29 @@ export default async function ModelPage() {
             </div>
             <div>
               <dt className="text-xs text-ink-3">Δ Brier (desafiante − campeão)</dt>
-              <dd className="tnum mt-0.5 font-medium text-ink">{signed(m.comparison.delta_brier)}</dd>
+              <dd className="tnum mt-0.5 font-medium text-ink">{cmp.has_data ? signed(cmp.delta_brier) : "—"}</dd>
             </div>
             <div>
               <dt className="text-xs text-ink-3">IC do Δ Brier</dt>
               <dd className="tnum mt-0.5 font-medium text-ink">
-                {m.comparison.ci_delta_brier
-                  ? `${num(m.comparison.ci_delta_brier[0])} a ${num(m.comparison.ci_delta_brier[1])}`
-                  : "—"}
+                {cmp.has_data && cmp.ci_delta_brier ? `${num(cmp.ci_delta_brier[0])} a ${num(cmp.ci_delta_brier[1])}` : "—"}
               </dd>
             </div>
             <div>
               <dt className="text-xs text-ink-3">Δ Log-loss</dt>
-              <dd className="tnum mt-0.5 font-medium text-ink">{signed(m.comparison.delta_log_loss)}</dd>
+              <dd className="tnum mt-0.5 font-medium text-ink">{cmp.has_data ? signed(cmp.delta_log_loss) : "—"}</dd>
             </div>
             <div className="col-span-full">
               <dt className="text-xs text-ink-3">Decisão</dt>
               <dd className="mt-0.5 flex flex-wrap items-center gap-2 text-ink">
-                <Badge tone={m.comparison.decision === "promote_challenger" ? "ok" : "neutral"}>
-                  {DECISION_LABEL[m.comparison.decision]}
-                </Badge>
-                <span className="min-w-0 break-words text-ink-2">{m.comparison.note}</span>
+                {cmp.has_data ? (
+                  <Badge tone={cmp.decision === "promote_challenger" ? "ok" : "neutral"}>{DECISION_LABEL[cmp.decision]}</Badge>
+                ) : (
+                  <Badge tone="warn">Sem dados</Badge>
+                )}
+                <span className="min-w-0 break-words text-ink-2">
+                  {cmp.has_data ? cmp.note : `${cmp.note ? cmp.note.charAt(0).toUpperCase() + cmp.note.slice(1) : "A API ainda não comparou campeão e desafiante"}. Δ e IC aparecem quando houver predições resolvidas dos dois modelos.`}
+                </span>
               </dd>
             </div>
           </dl>
