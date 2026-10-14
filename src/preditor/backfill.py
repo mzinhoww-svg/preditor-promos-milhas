@@ -325,6 +325,17 @@ def run_backfill(args: argparse.Namespace) -> dict:
     return {"state_path": str(STATE_PATH), "summary": summary}
 
 
+def collect_titles_rss(engine, source: str, feed_url: str) -> dict:
+    """2a fonte (decisao 002, opcao C): so titulo/data/link do RSS; robots fail-closed antes de buscar."""
+    status, robots_txt = fetch_robots_strict(source)
+    if status != "ok":
+        return {"status": "robots_unavailable", "items": 0}
+    if not C.robots_allowed(robots_txt, feed_url):
+        return {"status": "robots_disallowed", "items": 0}
+    ids = C.collect_rss(engine=engine, source=source, url=feed_url, robots_txt=robots_txt)
+    return {"status": "ok", "items": len(ids or [])}
+
+
 def dedupe_extensions(engine) -> int:
     """Funde ofertas iguais (mesmo par, tipo, inicio e bonus) que so diferem no fim: prorrogacao."""
     import sqlalchemy as sa
@@ -402,6 +413,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-size", dest="page_size", type=int, default=500)
     parser.add_argument("--database-url", dest="database_url", default=None)
     parser.add_argument("--refresh-candidates", dest="refresh_candidates", action="store_true")
+    parser.add_argument("--rss-titles", dest="rss_titles", default=None, help="URL do feed (so titulo/data/link)")
     parser.add_argument("--reprocess", action="store_true", help="reextrai de raw_message (sem rede)")
     parser.add_argument("--max-attempts", dest="max_attempts", type=int, default=3)
     parser.add_argument("--slug-mode", dest="slug_mode", choices=["either", "both"], default="either")
@@ -416,6 +428,10 @@ def main(argv: list[str] | None = None) -> int:
         args.sources = list(SOURCES_DEFAULT)
     if isinstance(args.sources, str):
         args.sources = [args.sources]
+    if args.rss_titles:
+        src = args.sources[0]
+        print(json.dumps(collect_titles_rss(_engine(args), src, args.rss_titles), ensure_ascii=False))
+        return 0
     if args.reprocess:
         eng = _engine(args)
         ts_by_url = {u: v.get("timestamp") for src in _load_state().get("sources", {}).values()

@@ -215,3 +215,22 @@ def test_observed_never_after_capture():
     pub = datetime(2024, 5, 1, tzinfo=UTC)
     cap = pub - timedelta(days=3)
     assert B._observed(pub, cap) == cap
+
+
+def test_rss_titles_only_requires_robots_ok(monkeypatch):
+    monkeypatch.setattr(B, "fetch_robots_strict", lambda source: ("robots_unavailable", None))
+    called = []
+    monkeypatch.setattr(B.C, "collect_rss", lambda **k: called.append(k) or [])
+    assert B.collect_titles_rss(object(), "pontospravoar.com", "https://pontospravoar.com/feed/")["status"] == "robots_unavailable"
+    assert called == []
+
+
+def test_rss_titles_only_passes_robots_text_and_url_check(monkeypatch):
+    monkeypatch.setattr(B, "fetch_robots_strict", lambda source: ("ok", "User-agent: *\nDisallow: /feed/\n"))
+    called = []
+    monkeypatch.setattr(B.C, "collect_rss", lambda **k: called.append(k) or [])
+    out = B.collect_titles_rss(object(), "pontospravoar.com", "https://pontospravoar.com/feed/")
+    assert out["status"] == "robots_disallowed" and called == []
+    monkeypatch.setattr(B, "fetch_robots_strict", lambda source: ("ok", ROBOTS_OK))
+    out = B.collect_titles_rss(object(), "pontospravoar.com", "https://pontospravoar.com/feed/")
+    assert out["status"] == "ok" and len(called) == 1 and called[0]["robots_txt"] == ROBOTS_OK
