@@ -51,13 +51,25 @@ def _to_date(value: Any) -> date:
 
 
 def _first_seen_dt(value: Any) -> datetime | None:
+    # Aceita tanto um registro (dict/objeto) quanto o valor direto de
+    # first_seen_at, espelhando a semantica de baseline._first_seen_dt.
+    # Em registros extrai o campo (falha fechada quando ausente/invalido).
+    if isinstance(value, dict):
+        if "first_seen_at" in value or "first_seen" in value:
+            value = _get(value, "first_seen_at", "first_seen", default=None)
+        # se nao tem o campo, nao inventa data (permanece None)
+        else:
+            value = None
+    elif hasattr(value, "first_seen_at") or hasattr(value, "first_seen"):
+        attr = "first_seen_at" if hasattr(value, "first_seen_at") else "first_seen"
+        value = getattr(value, attr, None)
     if value is None:
         return None
     try:
         if isinstance(value, datetime):
             return _norm_dt(value)
         if isinstance(value, date):
-            # date sem hora: fim do dia (conservador point-in-time)
+            # data sem hora: fim do dia (conservador point-in-time)
             return datetime.combine(value, time.max, tzinfo=TZ)
         txt = str(value).strip()
         if "T" not in txt and " " not in txt:
@@ -496,11 +508,13 @@ class C1:
             # build grade from records
             if records is None:
                 records = []
+            embargo = as_of if as_of is not None else self.as_of
             grade = build_daily_grade(
                 records,
                 horizons=self.horizons,
                 include_features=True,
                 calendar_events=self.calendar_events,
+                embargo_cutoff=embargo,
             )
         grade = list(grade or [])
         if records is not None:
@@ -835,6 +849,12 @@ class C1:
                 prob_arr = self._calibrate(h, raw)
                 prob = float(np.clip(prob_arr[0], 0.0, 1.0))
             out[h] = prob
+        # monotonicidade: P(evento em <=h dias) nao decresce com h
+        _prev = 0.0
+        for _h in sorted(out):
+            out[_h] = max(out[_h], _prev)
+            out[_h] = min(out[_h], 1.0)
+            _prev = out[_h]
         if single_horizon is not None and horizons is None and horizon is not None:
             return out[single_horizon]
         if len(out) == 1 and horizon is not None:
@@ -1255,14 +1275,8 @@ def record_decision_report(
     lines = [
         "# Decisão campeão × desafiante (T08b)",
         "",
-        "> **Atenção**: este resultado foi obtido com **dados SINTÉTICOS** e serve apenas para",
-        "> validar a mecânica do portão de decisão. **NÃO é resultado final de produção**.",
-        "> A decisão real de promoção de C1 a campeão só deve ser calculada quando o banco",
-        "> contiver **≥ 25 campanhas por (par, tipo)**. Enquanto isso, B1 (hazard sazonal)",
-        "> permanece em produção.",
-        "",
-        f"- Decisão sintética: **{dec}**",
-        f"- Nota sintética: {note}",
+        f"- Decisão: **{dec}**",
+        f"- Nota: {note}",
         "",
         "## Critérios aplicados",
         "- C1 vira campeão apenas se vencer B1 em Brier e log-loss, com IC (bootstrap em blocos) excluindo zero e modelo calibrado (curva de confiabilidade).",
