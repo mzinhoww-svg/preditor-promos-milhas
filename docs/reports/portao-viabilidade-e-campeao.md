@@ -6,17 +6,19 @@ Data: 2026-10-14. Autor: Planejador. Fonte dos números: banco local `preditor_p
 
 - **O dado é real, mas pouco.** O par livelo→smiles `transfer_bonus` tem 55 campanhas no total e **27 utilizáveis**. Na janela de treino do walk-forward só cabem **23**, abaixo do mínimo de **25** exigido para decidir C1 × B1.
 - **Decisão: `keep_champion`.** O B1 (hazard empírico) segue em produção para o par livelo→smiles. Os demais pares ficam em B0 (taxa-base).
-- **Não haveria promoção mesmo com dados suficientes.** Na mesma avaliação, o C1 perde para o B1 em Brier e em log-loss, com IC excluindo zero **a favor do B1**, e não passa no teste de calibração.
+- **Com estes dados, o C1 perde para o B1** em Brier e em log-loss, com IC excluindo zero **a favor do B1**, e não passa no teste de calibração. Não foi medido como o C1 se sairia com mais campanhas (cada dobra treina com 3 a 29 registros).
 - **Produção:** ainda não existe acurácia de produção: `prediction_log` está vazio no `preditor_p2` (n = 0).
 
 ## 2. Base coletada
 
-| Fonte | `raw_message` | Com gap de publicação (> 7 d antes da captura) | Período observado |
+| Fonte | `raw_message` | Com gap de publicação (> 7 d antes da captura) | Período de `observed_at`¹ |
 |---|---|---|---|
 | passageirodeprimeira.com | 314 | 169 | 2015-02 a 2026-10 |
 | www.melhorescartoes.com.br | 28 | 8 | 2021-02 a 2025-03 |
 | pontospravoar.com (só título, data e link; decisão 002) | 897 | 0 | 2023-08 a 2026-10 |
 | **Total** | **1.239** | **177** | |
+
+¹ `observed_at` é o mínimo entre a data de publicação e a captura Wayback, ou seja, a data das **páginas**, não a cobertura de campanhas. Algumas páginas antigas (desde 2015) não geram campanha. As campanhas extraídas começam em **2020-02** (seção 3).
 
 ## 3. Portão de viabilidade, por par e tipo
 
@@ -68,7 +70,7 @@ Não há predição de produção resolvida. Os números que aparecem nos testes
 
 - **Sintético × real.** A decisão da seção 4 é com dado **real** (`data_source="real"` declarado pelo chamador; derivá-lo da origem continua pendente desde o #27). O relatório antigo `docs/reports/t08b-champion-decision.md` foi feito com dado sintético e não vale como resultado.
 - **Metade das campanhas depende de data de publicação suspeita:** 28 das 55 livelo→smiles são só-gap. Revisá-las à mão pode levar o treino a ≥ 25.
-- **Buraco recente:** nenhuma campanha livelo→smiles depois de 2026-03-11, e só 12 nos últimos 24 meses. O backfill baixou 316 de 9.750 URLs candidatas do PdP, e o listener (#49) passa a cobrir daqui em diante.
+- **Buraco recente:** nenhuma campanha livelo→smiles depois de 2026-03-11, e só 12 nos últimos 24 meses. O backfill do PdP baixou 316 de 9.750 URLs candidatas (314 gravadas como `raw_message`), e o listener (#49) passa a cobrir daqui em diante.
 - **Segunda fonte fraca:** o Pontos pra Voar (só título, decisão 002) validou 0 campanhas, e todas as 7 validadas são PdP + MC.
 - **Tipos ausentes:** não há nenhuma campanha de `purchase_discount` nem de `boosted_accrual`.
 - **Extrator e conjunto de ouro:** a medida contra o ouro é provisória (`gold_provisional`, aguarda conferência de Aurimar). No split dev, a pipeline acha 28/28 campanhas, com direção e bônus 100% e fim 79%.
