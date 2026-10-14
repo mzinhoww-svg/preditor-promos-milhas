@@ -14,5 +14,5 @@
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
 | T05 | Coletor RSS e backfill Wayback | Programador 2 | em_revisao | ciclo2: observed_at migracao 0002 nullable, LEAST, process fail-closed, 110 pytest verdes, 18 testes ataque; PR #19 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
-| T10a | API FastAPI + job diário baseline/accuracy | Programador | em_revisao | PR #25; commit `70c0687`/`b2bfaf8`; B1-B3 corrigidos (job roda com ofertas, unicidade prediction_log, accuracy from/to); ruff/pytest verdes (99) |
+| T10a | API FastAPI + job diário baseline/accuracy | Programador | concluida | QA reteste final bfbc9f3: aprovada (migracao 0003/unicidade ok, 137 testes); ver docs/qa/t10a-api/reteste-final/RELATORIO.md |
 | TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |

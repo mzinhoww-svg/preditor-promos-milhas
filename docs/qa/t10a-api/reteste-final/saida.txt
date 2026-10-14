@@ -1,0 +1,56 @@
+## M1 banco vazio: upgrade head
+0003 (head)
+ CREATE UNIQUE INDEX uq_prediction_log_logical ON public.prediction_log USING btree (model_version, origin, destination, event_type, horizon_days, (((logged_at AT TIME ZONE 'UTC'::text))::date))
+
+## M2 downgrade -1 / upgrade / upgrade (idempotencia)
+     0
+
+     1
+
+## M3 unicidade: mesmo (mv,o,d,e,h,dia UTC) em horas diferentes
+ERROR:  duplicate key value violates unique constraint "uq_prediction_log_logical"
+DETAIL:  Key (model_version, origin, destination, event_type, horizon_days, ((logged_at AT TIME ZONE 'UTC'::text)::date))=(B1, A, B, transfer_bonus, 7, 2026-06-01) already exists.
+## M3b fronteira de fuso: 2026-06-01 22:00-03 == 2026-06-02 01:00 UTC (dia UTC diferente de 06-01)
+## M3c mesmo dia, model_version/horizonte/par distinto: permitido?
+     5
+
+## M4 append-only continua: UPDATE/DELETE
+ERROR:  prediction_log é somente de inserção
+ERROR:  prediction_log é somente de inserção
+## M5 base com duplicatas pre-existentes (estado de 0002) -> upgrade
+                   ((logged_at AT TIME ZONE 'UTC')::date));
+]
+(Background on this error at: https://sqlalche.me/e/21/gkpj)
+0002
+## P pytest
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+137 passed, 1 warning in 42.88s
+/private/tmp/claude-503/-Users-aurimar-nogueira-latam-com-Documents-theloyal-preditor-promos-milhas--maestri-roles-a5fcfdca-25b6-4a50-83b7-ac3972cd4a63/b4b86703-843e-423c-85d4-5501b4b909b4/scratchpad/venv25/bin/python: No module named ruff
+## A ataque (job, reexecucao, concorrencia, API) sem shim
+[A1 run1] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 9}
+[A1 run2 (reexecucao)] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 0}
+[A1 prediction_log linhas apos 2 runs] [{'n': 9}]
+[A1 prediction linhas] [{'n': 6}]
+[A3 concorrencia 6 jobs mesmo dia: grupos duplicados em prediction_log] 0
+[A4 from/to] {"7": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0.0}, "15": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0.0}, "30": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0
+[B4 from=ontem] 500
+[B4 from=2026-01-01 (valido)] 200
+-- rodada 1
+[A1 run1] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 9}
+[A1 run2 (reexecucao)] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 0}
+[A1 prediction_log linhas apos 2 runs] [{'n': 9}]
+[A1 prediction linhas] [{'n': 6}]
+[A3 concorrencia 6 jobs mesmo dia: grupos duplicados em prediction_log] 0
+[A4 from/to] {"7": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0.0}, "15": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0.0}, "30": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0
+[B4 from=ontem] 500
+[B4 from=2026-01-01 (valido)] 200
+-- rodada 2
+[A1 run1] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 9}
+[A1 run2 (reexecucao)] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 0}
+[A1 prediction_log linhas apos 2 runs] [{'n': 9}]
+[A1 prediction linhas] [{'n': 6}]
+[A3 concorrencia 6 jobs mesmo dia: grupos duplicados em prediction_log] 0
+[A4 from/to] {"7": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0.0}, "15": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0.0}, "30": {"n": 0, "hit_rate": 0.0, "brier": 0.0, "log_loss": 0
+[B4 from=ontem] 500
+[B4 from=2026-01-01 (valido)] 200
+-- rodada 3
