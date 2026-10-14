@@ -1,0 +1,35 @@
+[A0 job em banco vazio] {'as_of': '2026-06-01', 'pairs': 0, 'inserted_predictions': 0, 'inserted_logs': 0}
+[A0 model_run criado sem dados] [{'n': 1}]
+[A1 run1] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 9}
+[A1 run2 (reexecucao)] {'as_of': '2026-06-01', 'pairs': 3, 'inserted_predictions': 9, 'inserted_logs': 0}
+[A1 prediction_log linhas apos 2 runs] [{'n': 9}]
+[A1 prediction linhas] [{'n': 6}]
+[A2 logs B1 Livelo->Smiles 7d (com oferta futura presente)] [{'probability': Decimal('0.43240')}]
+[A2 DELETE prediction_log] bloqueado: prediction_log é somente de inserção
+[A3 concorrencia 6 jobs mesmo dia: grupos duplicados em prediction_log] 6
+[A3 model_run champions] [{'n': 1, 'ch': 1}]
+[A4 fetch_prediction_accuracy(from,to)] EXCECAO TypeError: can't compare datetime.datetime to datetime.date
+[A4 accuracy sem filtro (logs de hoje ainda abertos contam como erro)] {"7": {"n": 15, "hit_rate": 0.0, "brier": 0.03019031173333334, "log_loss": 0.10697636133701872}, "15": {"n": 16, "hit_rate": 0.0, "brier": 0.0791112561625, "log_loss": 0.22035153882047345}, "30": {"n": 16, "hit_rate": 0.0, "brier": 0.14255713106874998, "log_loss": 0.44505037313403484}}
+[A5 vazamento: prob com/sem oferta futura (as_of 2026-06-01; futura=2026-06-10)] (True, {7: 0.4323961249318192, 15: 0.7028646482400551, 30: 0.9117105827344938}, {7: 0.4323961249318192, 15: 0.7028646482400551, 30: 0.9117105827344938})
+[A5b oferta com start<=as_of mas first_seen_at>as_of altera a prob? (conhecimento point-in-time)] (True, {7: 0.4323961249318192, 15: 0.7028646482400551, 30: 0.9117105827344938})
+[B1 /predictions] 200
+[B1 item0] {"rank": 1, "pair": {"origin": "Livelo", "destination": "Smiles"}, "type": "transfer_bonus", "segmented": false, "segment_label": null, "windows": {"7": {"probability": 0.4324, "ci_low": 0.4324, "ci_high": 0.4324}, "15": {"probability": 0.70286, "ci_low": 0.70286, "ci_high": 0.70286}, "30": {"probability": 0.91171, "ci_low": 0.91171, "ci_high": 0.91171}}, "bonus_pct": {"p25": 80.0, "p50": 80.0, "p75": 80.0}, "last_offer": null, "reasons": []}
+[B1 modelo] {'run_id': 'mr_1', 'name': 'B1', 'version': '1.0.0', 'role': 'champion', 'champion': {'name': 'B1', 'version': '1.0.0', 'trained_at': '2026-10-14T00:29:33Z', 'run_id': 'mr_1'}, 'challenger': {'name': None, 'version': None, 'trained_at': None, 'run_id': None}}
+[B1 linhas Livelo->Smiles (segmentado deve ser separado)] [(False, None, 0.91171)]
+[B2 type invalido] 200
+[B2 limit=0] 2
+[B2 limit=-1] 200
+[B2 limit=abc] 422
+[B3 metrics comparison] {'horizon': 30, 'delta_brier': 0.0, 'delta_log_loss': 0.0, 'ci_delta_brier': [0.0, 0.0], 'decision': 'keep_champion', 'note': 'sem dados suficientes'}
+[B3 champion] {"name": "B1", "version": "1.0.0", "trained_at": "2026-10-14T00:29:33Z", "horizons": [7, 15, 30], "validation": {"method": "walk-forward", "folds": 0, "period": {"from": null, "to": null}, "by_horizon": {}}, "production": null}
+[B4 from=ontem] 500
+[B4 from=2026-01-01 (valido)] 500
+[B4 horizon=99] {'7': {'n': 0, 'hit_rate': 0.0, 'brier': 0.0, 'log_loss': 0.0}, '15': {'n': 0, 'hit_rate': 0.0, 'brier': 0.0, 'log_loss': 0.0}, '30': {'n': 0, 'hit_rate': 0.0, 'brier': 0.0, 'log_loss': 0.0}}
+[B4 accuracy] {"generated_at": "2026-10-14T00:29:33Z", "period": {"from": "2026-06-01", "to": "2026-10-14"}, "by_horizon": {"7": {"n": 15, "hit_rate": 0.0, "brier": 0.03019031173333334, "log_loss": 0.10697636133701872}, "15": {"n": 16, "hit_rate": 0.0, "brier": 0.0791112561625, "log_loss": 0.22035153882047345}, "30": {"n": 16, "hit_rate": 0.0, "brier": 0.14255713106874998, "log_loss": 0.44505037313403484}}, "weekly": [], "alerts": []}
+[B5 sem chave] 401
+[B5 chave invalida] 403
+[B5 /docs aberto sem chave] 200
+[B5 /openapi.json sem chave] 200
+[B6 rate limit (limite 5)] [429, 429, 429, 429, 429, 429, 429, 429]
+[B6 chaves invalidas diferentes] [403, 403, 403]
+[B6 entradas no limiter por chave arbitraria] 5
