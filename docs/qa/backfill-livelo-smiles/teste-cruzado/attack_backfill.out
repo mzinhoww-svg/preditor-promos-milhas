@@ -1,0 +1,66 @@
+{
+ "A1_robots_disallow_all": "abortou: robots.txt bloqueia a fonte fonte-a.test; fetches=0",
+ "A2_disallow_/p3/_url_proibida_baixada": true,
+ "A3_robots_None_baixou": 6,
+ "A3b_robots_excecao_baixou": 6,
+ "A4_sleep10_antes_de_cada_fetch": [
+  true,
+  6
+ ],
+ "A4_rate_limit_0_aceito": null,
+ "A5_reexec": {
+  "fetches_novos": 0,
+  "antes": {
+   "raw_message": 6,
+   "offer": 1,
+   "offer_evidence": 3
+  },
+  "depois": {
+   "raw_message": 6,
+   "offer": 1,
+   "offer_evidence": 3
+  }
+ },
+ "A5b_sem_state_reexec": {
+  "depois": {
+   "raw_message": 6,
+   "offer": 1,
+   "offer_evidence": 3
+  }
+ },
+ "A6_retomada": {
+  "done_antes": 3,
+  "fetches_na_retomada": 3,
+  "final": {
+   "raw_message": 6,
+   "offer": 1,
+   "offer_evidence": 3
+  }
+ },
+ "A7_tentativas_url_falha": 2,
+ "A8_error_refetch_por_exec": 5,
+ "A9_sem_candidatos": {
+  "fetches": 0,
+  "raw_message": 0,
+  "offer": 0,
+  "offer_evidence": 0
+ },
+ "A9b_conteudo_vazio": {
+  "estado": [
+   "fetch_failed",
+   "done"
+  ],
+  "raw_message": 1,
+  "offer": 1,
+  "offer_evidence": 1
+ },
+ "A9c_published_futuro_first_seen": [
+  "2024-03-10 12:00:00+00:00"
+ ],
+ "A10_urls_duplicadas": {
+  "fetches": 1,
+  "raw_message": 1,
+  "offer": 0,
+  "offer_evidence": 0
+ }
+}

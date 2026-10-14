@@ -15,3 +15,4 @@
 | T05 | Coletor RSS e backfill Wayback | Programador 2 | em_revisao | ciclo2: observed_at migracao 0002 nullable, LEAST, process fail-closed, 110 pytest verdes, 18 testes ataque; PR #19 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
 | TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |
+| QA-BF | Backfill real Livelo→Smiles (PR #36) | QA Cruzado | devolvida | 62f0602: ritmo/idempotencia/retomada ok; robots fail-open (301/403 em http://, 2 fontes sem verificacao), 3 de 12 campanhas falsas (110% card Azul, 58% anuncio hoteis, 100% CSS), relatorio diz '2 tentativas' (real 1); ver docs/qa/backfill-livelo-smiles/teste-cruzado/RELATORIO.md |
