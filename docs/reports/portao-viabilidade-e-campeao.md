@@ -5,7 +5,7 @@ Data: 2026-10-14. Autor: Planejador. Fonte dos números: banco local `preditor_p
 ## 1. Resumo
 
 - **O dado é real, mas pouco.** O par livelo→smiles `transfer_bonus` tem 55 campanhas no total e **27 utilizáveis**. Na janela de treino do walk-forward só cabem **23**, abaixo do mínimo de **25** exigido para decidir C1 × B1.
-- **Decisão: `keep_champion`.** O B1 (hazard empírico) segue em produção para o par livelo→smiles. Os demais pares ficam em B0 (taxa-base).
+- **Decisão: `keep_champion`.** O C1 não é promovido. No job, porém, a série principal de livelo→smiles (sem segmento) tem 23 campanhas em `as_of`, e o B1 exige 25. Por isso **todos os pares saem em B0** (taxa-base), como mostrou a primeira execução real (PR #65). O B1 aparece aqui só como referência de validação histórica.
 - **Com estes dados, o C1 perde para o B1** em Brier e em log-loss, com IC excluindo zero **a favor do B1**, e não passa no teste de calibração. Não foi medido como o C1 se sairia com mais campanhas (cada dobra treina com 3 a 29 registros).
 - **Produção:** ainda não existe acurácia de produção: `prediction_log` está vazio no `preditor_p2` (n = 0).
 
@@ -34,7 +34,7 @@ Data: 2026-10-14. Autor: Planejador. Fonte dos números: banco local `preditor_p
 
 | Critério (decisão 004) | Meta | livelo→smiles | Situação |
 |---|---|---|---|
-| Campanhas para o B1 no job | ≥ 25 utilizáveis | 27 | **atende** (por pouco) |
+| Campanhas para o B1 no job | ≥ 25 na série | 27 no total, **23 na série principal** (as segmentadas formam séries próprias) | **não atende**: o job usa B0 |
 | Campanhas no treino para decidir C1 × B1 | ≥ 25 | **23** | **não atende** |
 | Meses distintos | ≥ 24 | 47 | atende |
 | Cobertura recente (24 meses) | contínua | 12 campanhas, nenhuma depois de 2026-03-11 | **não atende** |
