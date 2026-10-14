@@ -23,7 +23,11 @@ def eng():
         c.execute(text("DELETE FROM offer_evidence"))
         c.execute(text("DELETE FROM offer"))
         c.execute(text("DELETE FROM raw_message"))
-    return e
+    yield e
+    with e.begin() as c:
+        c.execute(text("DELETE FROM offer_evidence"))
+        c.execute(text("DELETE FROM offer"))
+        c.execute(text("DELETE FROM raw_message"))
 
 
 def _raw(e, url, html, obs):
@@ -69,3 +73,26 @@ def test_recompute_gap_flags_old_published_time(eng):
     with eng.connect() as c:
         row = c.execute(text("SELECT published_vs_capture_gap FROM raw_message")).scalar_one()
     assert row is True
+
+
+def test_end_only_becomes_start_inferred_from_first_seen(eng):
+    html = "<html><body><article><p>Livelo para Smiles com 80% de bônus até 31/03.</p></article></body></html>"
+    _raw(eng, "http://a/p", html, datetime(2026, 3, 19, 15, 0, tzinfo=UTC))
+    B.reprocess(eng)
+    with eng.connect() as c:
+        row = c.execute(text("SELECT o.start_at, o.end_at, e.start_inferred FROM offer o "
+                             "JOIN offer_evidence e ON e.offer_id=o.id")).one()
+    assert str(row[0]) == "2026-03-19" and str(row[1]) == "2026-03-31" and row[2] is True
+
+
+def test_end_only_in_the_past_is_not_an_offer(eng):
+    html = "<html><body><article><p>Livelo para Smiles com 80% de bônus até 10/03.</p></article></body></html>"
+    _raw(eng, "http://a/p", html, datetime(2026, 3, 19, 15, 0, tzinfo=UTC))
+    assert B.reprocess(eng)["new_offers"] == 0
+
+
+def test_explicit_start_is_not_marked_inferred(eng):
+    _raw(eng, "http://a/p", FALSE_POS, datetime(2026, 3, 19, tzinfo=UTC))
+    B.reprocess(eng)
+    with eng.connect() as c:
+        assert c.execute(text("SELECT start_inferred FROM offer_evidence")).scalar_one() is False

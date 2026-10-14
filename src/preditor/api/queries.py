@@ -7,6 +7,8 @@ from typing import Any
 
 from sqlalchemy import text
 
+from preditor.offer_filter import GAP_ONLY_SQL
+
 from .db import get_engine
 
 
@@ -149,7 +151,7 @@ def _resolve_prediction_outcomes():
         logs = _rows(conn.execute(text(
             "SELECT id, logged_at, model_version, origin, destination, event_type, horizon_days, probability FROM prediction_log ORDER BY logged_at"
         )))
-        offers = _rows(conn.execute(text("SELECT origin, destination, event_type, start_at FROM offer")))
+        offers = _rows(conn.execute(text(f"SELECT origin, destination, event_type, start_at FROM offer WHERE NOT {GAP_ONLY_SQL}")))
     return logs, offers
 
 

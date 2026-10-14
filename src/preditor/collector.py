@@ -278,13 +278,12 @@ def _insert_offer(engine, origin, destination, etype, start_date, end_date, bonu
 def _insert_evidence(engine, offer_id, raw_message_id, source, seen_start, start_inferred=False):
     if raw_message_id is None:
         return
-    # Note: start_inferred not in schema; skip (spec says mark evidence; no column). 
     with engine.begin() as c:
         from sqlalchemy import text
         c.execute(text(
-            "INSERT INTO offer_evidence(offer_id, raw_message_id, source, seen_start_at) "
-            "VALUES (:o,:r,:s,:d) ON CONFLICT (offer_id, raw_message_id) DO NOTHING"
-        ), {"o": offer_id, "r": raw_message_id, "s": source, "d": seen_start})
+            "INSERT INTO offer_evidence(offer_id, raw_message_id, source, seen_start_at, start_inferred) "
+            "VALUES (:o,:r,:s,:d,:i) ON CONFLICT (offer_id, raw_message_id) DO NOTHING"
+        ), {"o": offer_id, "r": raw_message_id, "s": source, "d": seen_start, "i": bool(start_inferred)})
 
 def _recompute_offer(engine, offer_id):
     with engine.connect() as c:
@@ -350,9 +349,20 @@ def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
             # goes to review, not offer
             continue
         start_iso = off.inicio
+        start_inferred = False
         if start_iso is None:
-            # never convert "only end" to start
-            continue
+            # spec coletor-livelo-smiles 3.1: inicio nulo ("ate DD/MM") => start_at = first_seen_at::date
+            # com start_inferred=true na evidencia. Sem fim, nao ha oferta (nunca inventar).
+            from preditor.extract import _first_seen_sp_date
+
+            fs_day = _first_seen_sp_date(fs)
+            if off.fim is None or fs_day is None:
+                continue
+            end_day = date.fromisoformat(off.fim)
+            if end_day < fs_day or (end_day - fs_day).days > 90:
+                continue  # campanha ja encerrada ou janela implausivel
+            start_iso = fs_day.isoformat()
+            start_inferred = True
         origin = off.origem
         destination = off.destino
         etype = off.tipo
@@ -369,7 +379,7 @@ def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
         if offer_id is None:
             end_iso = off.fim
             offer_id = _insert_offer(engine, origin, destination, etype, start_date, end_iso, bonus, segmented, segment_label, first_seen_val)
-        _insert_evidence(engine, offer_id, rm_id, source, start_date)
+        _insert_evidence(engine, offer_id, rm_id, source, start_date, start_inferred=start_inferred)
         _recompute_offer(engine, offer_id)
         created.append(offer_id)
     return created

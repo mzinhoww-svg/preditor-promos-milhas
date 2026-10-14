@@ -1203,6 +1203,15 @@ def _iso_week(d: date) -> str:
     return f"{y}-W{w:02d}"
 
 
+def _gap_only(rec) -> bool:
+    return bool(_get(rec, "gap_only", "published_vs_capture_gap_only", default=False))
+
+
+def exclude_gap_only(records):
+    """Tira registros cuja unica evidencia tem gap de publicacao (revisao manual pendente)."""
+    return [r for r in (records or []) if not _gap_only(r)]
+
+
 def evaluate_c1_vs_b1(
     records: Iterable[Any],
     *,
@@ -1234,7 +1243,7 @@ def evaluate_c1_vs_b1(
         raise ValueError("horizons vazio")
     if purge_days < max(hs):
         raise ValueError("purge_days deve ser >= max(horizons)")
-    recs = list(records or [])
+    recs = exclude_gap_only(records)
     splits = walk_forward_splits(
         recs,
         train_months=train_months,
@@ -1493,6 +1502,7 @@ __all__ = [
     "daily_grade",
     "decide_champion",
     "evaluate_c1_vs_b1",
+    "exclude_gap_only",
     "grade_diaria",
     "is_calibrated",
     "make_daily_grade",

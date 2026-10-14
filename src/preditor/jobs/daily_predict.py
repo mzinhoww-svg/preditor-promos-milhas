@@ -11,6 +11,7 @@ from sqlalchemy import text
 from preditor.api.db import get_engine
 from preditor.api.queries import fetch_prediction_accuracy
 from preditor.baseline import _available, predict_proba
+from preditor.offer_filter import GAP_ONLY_SQL
 
 HORIZONS = (7, 15, 30)
 MIN_CAMPAIGNS_B1 = 25
@@ -32,7 +33,8 @@ def fetch_offers(engine) -> list[dict]:
     with engine.connect() as conn:
         rows = conn.execute(text(
             "SELECT origin, destination, event_type, start_at, end_at, bonus_pct, segmented, "
-            "segment_label, first_seen_at, bonus_pct AS bp FROM offer"
+            "segment_label, first_seen_at, bonus_pct AS bp FROM offer "
+            f"WHERE NOT {GAP_ONLY_SQL}"
         ))
         return [dict(r._mapping) for r in rows]
 
