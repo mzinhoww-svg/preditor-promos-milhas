@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 import pytest
@@ -234,3 +234,51 @@ def test_rss_titles_only_passes_robots_text_and_url_check(monkeypatch):
     monkeypatch.setattr(B, "fetch_robots_strict", lambda source: ("ok", ROBOTS_OK))
     out = B.collect_titles_rss(object(), "pontospravoar.com", "https://pontospravoar.com/feed/")
     assert out["status"] == "ok" and len(called) == 1 and called[0]["robots_txt"] == ROBOTS_OK
+
+
+# --- RSS arquivado (so titulo/data/link, decisao 002) -------------------------------------
+FEED = """<rss><channel>
+<item><title>Livelo e Smiles: 100% de bônus até 30/09</title><link>https://pontospravoar.com/a/</link>
+<pubDate>Mon, 25 Sep 2023 10:00:00 +0000</pubDate><description>CORPO PROIBIDO</description></item>
+</channel></rss>"""
+
+
+@pytest.fixture
+def feed(monkeypatch, tmp_path):
+    monkeypatch.setattr(B, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(B.time, "sleep", lambda s: None)
+    monkeypatch.setattr(B, "fetch_robots_strict", lambda s: ("ok", ROBOTS_OK))
+    caps = [{"timestamp": f"2023092{i}120000", "original": "https://pontospravoar.com/feed/"} for i in range(1, 10)]
+    monkeypatch.setattr(B, "list_feed_captures", lambda *a, **k: caps)
+    rec = {"fetched": [], "stored": [], "proc": []}
+    monkeypatch.setattr(B, "fetch_snapshot_backoff", lambda ts, u: rec["fetched"].append(ts) or FEED)
+    monkeypatch.setattr(B.C, "store_raw", lambda **k: rec["stored"].append(k) or type("R", (), {"id": len(rec["stored"])})())
+    monkeypatch.setattr(B, "_mark_gap", lambda *a: None)
+    monkeypatch.setattr(B.C, "process_raw_message", lambda e, raw, first_seen_at=None, **k: rec["proc"].append(raw) or [1])
+    return rec
+
+
+def test_archived_feed_stores_only_title_never_description(feed):
+    out = B.collect_archived_feed(object(), "pontospravoar.com", "https://pontospravoar.com/feed/",
+                                  date(2023, 1, 1), rate_limit=10.0, step_days=5)
+    assert out["status"] == "ok"
+    assert feed["stored"] and all("CORPO" not in k["content"] for k in feed["stored"])
+    assert feed["stored"][0]["content"].startswith("Livelo e Smiles")
+    assert feed["stored"][0]["observed_at"] <= datetime(2023, 9, 25, 10, 0, tzinfo=UTC)
+
+
+def test_archived_feed_thins_captures_and_is_resumable(feed):
+    B.collect_archived_feed(object(), "pontospravoar.com", "https://pontospravoar.com/feed/",
+                            date(2023, 1, 1), rate_limit=10.0, step_days=5)
+    n1 = len(feed["fetched"])
+    assert 0 < n1 < 9
+    B.collect_archived_feed(object(), "pontospravoar.com", "https://pontospravoar.com/feed/",
+                            date(2023, 1, 1), rate_limit=10.0, step_days=5)
+    assert len(feed["fetched"]) == n1
+
+
+def test_archived_feed_respects_robots(feed, monkeypatch):
+    monkeypatch.setattr(B, "fetch_robots_strict", lambda s: ("ok", "User-agent: *\nDisallow: /feed/\n"))
+    out = B.collect_archived_feed(object(), "pontospravoar.com", "https://pontospravoar.com/feed/",
+                                  date(2023, 1, 1), rate_limit=10.0, step_days=5)
+    assert out["status"] == "robots_disallowed" and feed["fetched"] == []

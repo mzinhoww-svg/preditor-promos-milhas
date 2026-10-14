@@ -186,6 +186,7 @@ def fetch_cdx_candidates(source: str, from_date: date, to_date: date | None, rat
         captures.extend(page)
         resume = getattr(client, "last_resume_key", None)
         pages += 1
+        print(f"[cdx] {source} pagina {pages}: +{len(page)} capturas (total {len(captures)})", file=sys.stderr, flush=True)
         if not resume:
             break
         time.sleep(rate_limit)
@@ -325,6 +326,97 @@ def run_backfill(args: argparse.Namespace) -> dict:
     return {"state_path": str(STATE_PATH), "summary": summary}
 
 
+def list_feed_captures(feed_url: str, from_date: date, rate_limit: float, page_size: int = 500) -> list[dict]:
+    """Capturas arquivadas do feed (CDX, 1 por dia, so 200)."""
+    client = C.CDXClient(user_agent=C.UA, rate_limit=1.0 / rate_limit if rate_limit > 0 else 0.0,
+                         min_interval=rate_limit, timeout=120.0, max_retries=3)
+    caps: list[dict] = []
+    resume = None
+    for _ in range(200):
+        kw = {"from_": from_date, "matchType": "exact", "filter": ["statuscode:200"],
+              "collapse": "timestamp:8", "limit": page_size, "showResumeKey": True}
+        if resume:
+            kw["resumeKey"] = resume
+        page = client.list_captures(feed_url, **kw)
+        if not page:
+            break
+        caps.extend(page)
+        resume = getattr(client, "last_resume_key", None)
+        if not resume:
+            break
+        time.sleep(rate_limit)
+    return [{"timestamp": str(c.get("timestamp")), "original": c.get("original") or feed_url} for c in caps]
+
+
+def _thin(caps: list[dict], step_days: int) -> list[dict]:
+    out, last = [], None
+    for c in sorted(caps, key=lambda x: x["timestamp"]):
+        d = C._ts_to_datetime(c["timestamp"])
+        if d is None:
+            continue
+        if last is None or (d - last).days >= step_days:
+            out.append(c)
+            last = d
+    return out
+
+
+def _pub_date(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    from email.utils import parsedate_to_datetime
+
+    try:
+        d = parsedate_to_datetime(raw)
+    except (TypeError, ValueError, IndexError):
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=UTC)
+
+
+def collect_archived_feed(engine, source: str, feed_url: str, from_date: date, rate_limit: float = 10.0,
+                          step_days: int = 5) -> dict:
+    """RSS arquivado (decisao 002, opcao C): so titulo, data e link de cada captura; nunca o corpo."""
+    status, robots_txt = fetch_robots_strict(source)
+    if status != "ok":
+        return {"status": "robots_unavailable", "captures": 0, "items": 0}
+    if not C.robots_allowed(robots_txt, feed_url):
+        return {"status": "robots_disallowed", "captures": 0, "items": 0}
+    state = _load_state()
+    fs = state.setdefault("feeds", {}).setdefault(feed_url, {"done": {}})
+    done = fs["done"]
+    caps = _thin(list_feed_captures(feed_url, from_date, rate_limit), step_days)
+    items_total = 0
+    for cap in caps:
+        ts = cap["timestamp"]
+        if ts in done:
+            continue
+        time.sleep(rate_limit)
+        xml = fetch_snapshot_backoff(ts, cap["original"])
+        capture_dt = C._ts_to_datetime(ts)
+        parsed = C.parse_feed(xml) if xml else None
+        if parsed is None or capture_dt is None:
+            done[ts] = {"status": "fetch_failed"}
+            _save_state(state)
+            continue
+        n = 0
+        for it in parsed:
+            title = (it.get("title") or "").strip()
+            if not title:
+                continue
+            pub = _pub_date(it.get("pubDate"))
+            observed = _observed(pub, capture_dt)
+            raw = C.store_raw(engine=engine, source=source, url=it["link"], content=title,
+                              collected_at=None, observed_at=observed)
+            rid = getattr(raw, "id", None)
+            gap = bool(pub is not None and capture_dt - pub > timedelta(days=GAP_DAYS))
+            _mark_gap(engine, rid, pub, gap)
+            C.process_raw_message(engine, {"content": title, "id": rid, "source": source}, first_seen_at=observed)
+            n += 1
+        items_total += n
+        done[ts] = {"status": "done", "items": n}
+        _save_state(state)
+    return {"status": "ok", "captures": len(caps), "items": items_total}
+
+
 def collect_titles_rss(engine, source: str, feed_url: str) -> dict:
     """2a fonte (decisao 002, opcao C): so titulo/data/link do RSS; robots fail-closed antes de buscar."""
     status, robots_txt = fetch_robots_strict(source)
@@ -413,6 +505,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-size", dest="page_size", type=int, default=500)
     parser.add_argument("--database-url", dest="database_url", default=None)
     parser.add_argument("--refresh-candidates", dest="refresh_candidates", action="store_true")
+    parser.add_argument("--rss-archive", dest="rss_archive", default=None,
+                        help="URL do feed; lista capturas pela CDX e le so titulo/data/link")
     parser.add_argument("--rss-titles", dest="rss_titles", default=None, help="URL do feed (so titulo/data/link)")
     parser.add_argument("--reprocess", action="store_true", help="reextrai de raw_message (sem rede)")
     parser.add_argument("--max-attempts", dest="max_attempts", type=int, default=3)
@@ -428,6 +522,12 @@ def main(argv: list[str] | None = None) -> int:
         args.sources = list(SOURCES_DEFAULT)
     if isinstance(args.sources, str):
         args.sources = [args.sources]
+    if args.rss_archive:
+        src = args.sources[0]
+        out = collect_archived_feed(_engine(args), src, args.rss_archive, C._parse_date_text(args.from_),
+                                    rate_limit=args.rate_limit)
+        print(json.dumps(out, ensure_ascii=False))
+        return 0
     if args.rss_titles:
         src = args.sources[0]
         print(json.dumps(collect_titles_rss(_engine(args), src, args.rss_titles), ensure_ascii=False))
