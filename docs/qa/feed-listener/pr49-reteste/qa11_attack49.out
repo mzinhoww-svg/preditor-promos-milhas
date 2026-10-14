@@ -1,0 +1,105 @@
+{
+ "U1_canonica_conhecidos": {
+  "novos": 2,
+  "buscou_A": false,
+  "gravadas": [
+   "http://www.passageirodeprimeira.com/Artigo-A/?utm_source=x#frag",
+   "https://passageirodeprimeira.com/artigo-b/",
+   "https://passageirodeprimeira.com/artigo-c"
+  ]
+ },
+ "U2_variantes_nao_duplicam": {
+  "novos": 0,
+  "total_raw": 3
+ },
+ "U3_links_com_query_p=ID": {
+  "novos": 1,
+  "gravadas": [
+   "https://passageirodeprimeira.com/"
+  ]
+ },
+ "U4_caixa_distinta": {
+  "novos": 1,
+  "gravadas": [
+   "https://passageirodeprimeira.com/Promo-ABC/"
+  ]
+ },
+ "D1_teto_198_de_200": {
+  "status": "daily_cap_reached",
+  "req": 2,
+  "novos": 0,
+  "state": {
+   "passageirodeprimeira.com": {
+    "day": "2026-10-14",
+    "count": 200
+   }
+  }
+ },
+ "D1_health_registrado": 2,
+ "D2_mesmo_dia_apos_teto": {
+  "status": "daily_cap_reached",
+  "req": 0
+ },
+ "D3_dia_seguinte_reseta": {
+  "status": "ok",
+  "req": 8,
+  "novos": 6
+ },
+ "P1_429_no_artigo": {
+  "status": {
+   "status": "ok",
+   "items_new": 1,
+   "offers": 1,
+   "failures": 1
+  },
+  "req": 4,
+  "gravadas": 1,
+  "pause_until": "2026-10-14T13:00:00+00:00"
+ },
+ "P2_30min_depois": {
+  "status": "paused",
+  "req": 0
+ },
+ "P3_61min_depois": {
+  "status": "ok",
+  "req": 5,
+  "novos": 3
+ },
+ "P4_503_no_robots": {
+  "status": "robots_unavailable",
+  "req": 1
+ },
+ "P5_10min_depois_pausada": {
+  "status": "paused",
+  "req": 0
+ },
+ "P5_health_durante_pausa": 1,
+ "P6_429_no_feed": {
+  "status": "feed_unavailable",
+  "pause_gravada": true
+ },
+ "S1_estado_corrompido": {
+  "status": "ok",
+  "req": 6,
+  "reescreveu": "{\n  \"passageirodeprimeira.com\": {\n    \"d"
+ },
+ "S2_crash_meio": {
+  "exc": "RuntimeError",
+  "estado_gravado": "{}"
+ },
+ "X4_excecao_interna": "EXC RuntimeError: falha interna simulada -> aborta o ciclo; MC visitado=False",
+ "PC_primeira_requisicao_sem_espera": {
+  "sleeps_1a_exec": [
+   10.0,
+   10.0
+  ],
+  "req": 3
+ },
+ "RC": {
+  "h0,h0": false,
+  "h0,h1 (acabou de mudar)": true,
+  "h0,h1,h1 (1 check depois)": false,
+  "h0,h1,h1,h1": false,
+  "h0,None,h1": true
+ }
+}

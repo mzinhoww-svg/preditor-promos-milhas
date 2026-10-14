@@ -17,3 +17,4 @@
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
 | T10a | API FastAPI + job diário baseline/accuracy | Programador | em_revisao | PR #25; commit `70c0687`/`b2bfaf8`; B1-B3 corrigidos (job roda com ofertas, unicidade prediction_log, accuracy from/to); ruff/pytest verdes (99); ciclo 3: vazamento corrigido (P1 última predição na API, J1b par e J1c método point-in-time), `tests/test_t10a_leakage.py`, pytest 140 verdes |
 | TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |
+| QA-PR49b | Listener de feeds, reteste 50c7227 (PR #49) | QA Cruzado | aprovada c/ ressalvas | 255 passed; URL canonica, teto 200/dia, pausa 1h 429/503, robots_changed ok; ressalvas: excecao interna ainda aborta ciclo, clean_link colapsa ?p=ID, estado relativo ao cwd; conflito com #50 em queries.py; ver docs/qa/feed-listener/pr49-reteste/RELATORIO.md |
