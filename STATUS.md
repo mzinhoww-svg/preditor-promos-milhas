@@ -1,6 +1,6 @@
 # STATUS final do MVP
 
-Data: 2026-10-14. Código: `main` em `edff94a`. Escrito pelo Planejador para Aurimar. Todo número abaixo vem do banco local `preditor_p2` (lido só com SELECT) ou do relatório `docs/reports/portao-viabilidade-e-campeao.md`. Nada foi estimado.
+Data: 2026-10-14. Código: `main` em `970612b` (inclui o PR #65). Escrito pelo Planejador para Aurimar. Todo número abaixo vem do banco local `preditor_p2` (lido só com SELECT) ou do relatório `docs/reports/portao-viabilidade-e-campeao.md`. Nada foi estimado.
 
 ## 1. Em uma frase
 
@@ -24,7 +24,7 @@ O sistema roda de ponta a ponta **em máquina local**, com dado **real** de Live
 | Saúde das fontes | funciona | `GET /v1/source-health` |
 | Dashboard Next.js (selo B0/B1 por par, "Modelo não decidido", probabilidade **estimada**, bônus **das campanhas anteriores**) | funciona em local, com fallback "Dados simulados" | `dashboard/` |
 
-Verificação em 2026-10-14, num Postgres descartável migrado até `0008`: **300 testes Python passam**, `ruff` limpo e **38 testes do dashboard passam**. Gasto com LLM: `budget_ledger` vazio no `preditor_p2` (o pipeline não usa LLM pago).
+Verificação em 2026-10-14, num Postgres descartável migrado até `0008`: **303 testes Python passam**, `ruff` limpo e **38 testes do dashboard passam**. Gasto com LLM: `budget_ledger` vazio no `preditor_p2` (o pipeline não usa LLM pago).
 
 ## 3. Real × sintético
 
@@ -88,7 +88,7 @@ docker compose up -d --wait
 set -a; . ./.env; set +a
 uv sync --python 3.12
 uv run alembic upgrade head
-uv run pytest                        # 300 testes
+uv run pytest                        # 303 testes
 uv run python -m preditor.jobs.feed_listener --once      # coleta
 uv run python -m preditor.jobs.daily_predict daily       # predições do dia
 PREDITOR_API_KEY=... uv run uvicorn preditor.api.app:app --port 8055
