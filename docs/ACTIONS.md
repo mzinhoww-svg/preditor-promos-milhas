@@ -51,3 +51,5 @@ Resíduo de teste (`raw_message` id=1) removido do `preditor_p2`; `tests/conftes
 - `recompute_gap` não zera mais `published_at` de títulos de RSS (897 linhas do Pontos pra Voar ficaram com `published_at` nulo; `--rss-archive` reexecutado).
 - Extrator: "inclusive Livelo e Esfera – para a Smiles" → livelo→smiles; "exceto Esfera" não vira origem/destino; "milhas bônus"/"pontos bônus" contam como bônus (ofertas LATAM Pass tinham bônus nulo).
 - Testes de API passam também em banco populado (limpam `offer_evidence` e `source_health`).
+
+**Reprocesso após o follow-up (preditor_p2, head 0005):** 1.239 brutas → 64 ofertas (66 antes; 8 descartadas, entre elas livelo→esfera e smiles→esfera inválidas e 6 de bônus nulo corrigidos). livelo→smiles `transfer_bonus` 55 (7 validadas, 47 meses, 27 sem só-gap, 1 sem bônus), livelo→latam_pass 5, esfera→smiles 3, esfera→azul_fidelidade 1. `published_at` preenchido em 877 de 897 títulos do Pontos pra Voar (0 com gap).
