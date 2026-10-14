@@ -1,0 +1,62 @@
+{
+ "reprocess_1": {
+  "raw_messages": 1239,
+  "old_offers": 66,
+  "new_offers": 66,
+  "merged_extensions": 3,
+  "discarded_vs_old": 0
+ },
+ "reprocess_2_idempotente": [
+  true,
+  66,
+  66
+ ],
+ "mesmo_que_banco_do_autor": {
+  "autor": 66,
+  "meu_reprocess": 66,
+  "so_no_autor": 0,
+  "so_no_meu": 0
+ },
+ "ouro_cobertura": {
+  "campanhas": 49,
+  "encontradas": 47,
+  "bonus_correto": 45,
+  "faltantes": [
+   [
+    "c-0028",
+    "2023-12-18",
+    "dev"
+   ],
+   [
+    "c-0050",
+    "2026-09-17",
+    "test"
+   ]
+  ],
+  "por_split": {
+   "dev:n": 20,
+   "dev:found": 19,
+   "dev:bonus": 19,
+   "test:n": 29,
+   "test:found": 28,
+   "test:bonus": 26
+  }
+ },
+ "loader": {
+  "n": 66,
+  "gap_only": 33,
+  "campo_presente": true,
+  "apos_exclude": 33
+ },
+ "evaluate_com_dados_reais": {
+  "linhas": 500,
+  "campanhas_treino": {
+   "esfera|azul_fidelidade|transfer_bonus": 1,
+   "livelo|latam_pass|transfer_bonus": 3,
+   "livelo|smiles|transfer_bonus": 23,
+   "smiles|esfera|transfer_bonus": 0
+  },
+  "decisao": "keep_champion"
+ },
+ "evaluate_sem_filtro_linhas": 1338
+}
