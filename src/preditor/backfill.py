@@ -481,12 +481,17 @@ def recompute_gap(engine, ts_by_url: dict[str, str]) -> int:
     import sqlalchemy as sa
 
     with engine.connect() as c:
-        rows = c.execute(sa.text("SELECT id, url, content FROM raw_message")).all()
+        rows = c.execute(sa.text(
+            "SELECT id, url, content, published_at, published_vs_capture_gap FROM raw_message")).all()
     flagged = 0
-    for rid, url, content in rows:
+    for rid, url, content, old_pub, old_gap in rows:
         pub = C._extract_published_time(content)
         cap = C._ts_to_datetime(ts_by_url.get(url)) if ts_by_url.get(url) else None
-        gap = bool(pub is not None and cap is not None and cap - pub > timedelta(days=GAP_DAYS))
+        if pub is None or cap is None:
+            # sem HTML/captura nao ha como recalcular: preserva o que ja foi gravado (ex.: titulo de RSS)
+            flagged += int(bool(old_gap))
+            continue
+        gap = cap - pub > timedelta(days=GAP_DAYS)
         _mark_gap(engine, rid, pub, gap)
         flagged += int(gap)
     return flagged

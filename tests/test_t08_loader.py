@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import UTC, date
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -47,5 +47,43 @@ def test_loader_marks_gap_only_and_exclude_drops_them(db_at_head):
         by_month = {r["start_at"].month: r["gap_only"] for r in recs}
         assert by_month == {1: True, 2: False, 3: False}
         assert len(M.exclude_gap_only(recs)) == 2
+    finally:
+        _clean(e)
+
+
+def test_mixed_offer_first_seen_uses_only_non_gap_evidence(db_at_head):
+    from datetime import datetime
+
+    e = create_engine(URL_DB)
+    _clean(e)
+    try:
+        with e.begin() as c:
+            oid = c.execute(text(
+                "INSERT INTO offer(origin,destination,event_type,start_at,end_at,bonus_pct,segmented,segment_label,"
+                "first_seen_at,n_sources,validated,date_conflict,weight) VALUES "
+                "('livelo','smiles','transfer_bonus','2024-03-01',null,80,false,'','2020-01-01',2,true,false,1) RETURNING id"
+            )).scalar_one()
+            for k, (gap, obs) in enumerate([(True, "2020-01-01T00:00:00+00:00"), (False, "2024-03-01T12:00:00+00:00")]):
+                rid = c.execute(text(
+                    "INSERT INTO raw_message(source,url,content,content_hash,collected_at,observed_at,"
+                    "published_vs_capture_gap) VALUES ('s',:u,'c',:h,now(),:o,:g) RETURNING id"),
+                    {"u": f"m{k}", "h": f"m{k}", "o": obs, "g": gap}).scalar_one()
+                c.execute(text("INSERT INTO offer_evidence(offer_id,raw_message_id,source,seen_start_at) "
+                               "VALUES (:o,:r,'s','2024-03-01')"), {"o": oid, "r": rid})
+        rec = load_offer_records(e)[0]
+        assert rec["gap_only"] is False
+        assert rec["first_seen_at"] == datetime(2024, 3, 1, 12, tzinfo=UTC)
+    finally:
+        _clean(e)
+
+
+def test_loader_does_not_expose_final_state_fields(db_at_head):
+    e = create_engine(URL_DB)
+    _clean(e)
+    try:
+        with e.begin() as c:
+            _mk(c, 1, [False])
+        rec = load_offer_records(e)[0]
+        assert "validated" not in rec and "n_sources" not in rec
     finally:
         _clean(e)

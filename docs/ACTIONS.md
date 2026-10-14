@@ -15,7 +15,8 @@ Base: **1.239 `raw_message`** (passageirodeprimeira.com 314, melhorescartoes.com
 
 | Critério | Meta | Medido | Status |
 |---|---|---|---|
-| Campanhas | ≥ 25 | **54** | atende |
+| Campanhas | ≥ 25 | **54** (27 utilizáveis sem só-gap) | atende **só para o B1 no job** (27 ≥ 25); **não** para C1×B1 |
+| Campanhas no treino do walk-forward (purge 30) | ≥ 25 | **23** | **reprova**: `keep_champion` por dados insuficientes |
 | Validadas (≥ 2 fontes) | relevante | **7 (13%)**; 4 delas sem gap | fraco |
 | Meses distintos (2020-02 a 2026-03) | ≥ 24 | **47** | atende |
 | Últimos 24 meses (desde 2024-10-14) | ≥ 24 meses | 12 campanhas em 10 meses; nenhuma depois de 2026-03 | **não atende** |
@@ -42,3 +43,13 @@ Outros pares/tipos: livelo→latam_pass 5, esfera→smiles 3, smiles→esfera 2,
 - Gold ainda é `gold_provisional`; revisão humana pendente.
 
 Resíduo de teste (`raw_message` id=1) removido do `preditor_p2`; `tests/conftest.py` protege o banco.
+
+### Follow-up do PR #36 (feat/backfill-followup)
+
+- **Portão corrigido:** "atende" vale para o B1 no job (27 utilizáveis), não para a decisão C1×B1 (23 no treino com purge 30 < 25). O B1 segue em produção; o C1 só tem chance com revisão manual das campanhas só-gap ou mais coleta.
+- `records.load_offer_records`: `first_seen_at` calculado só pelas evidências sem gap (11 ofertas mistas); não expõe `validated`, `n_sources` nem `weight` (estado final, sem versão point-in-time); teste garante que `model.py`, `baseline.py` e `walkforward.py` não os leem.
+- `recompute_gap` não zera mais `published_at` de títulos de RSS (897 linhas do Pontos pra Voar ficaram com `published_at` nulo; `--rss-archive` reexecutado).
+- Extrator: "inclusive Livelo e Esfera – para a Smiles" → livelo→smiles; "exceto Esfera" não vira origem/destino; "milhas bônus"/"pontos bônus" contam como bônus (ofertas LATAM Pass tinham bônus nulo).
+- Testes de API passam também em banco populado (limpam `offer_evidence` e `source_health`).
+
+**Reprocesso após o follow-up (preditor_p2, head 0005):** 1.239 brutas → 64 ofertas (66 antes; 8 descartadas, entre elas livelo→esfera e smiles→esfera inválidas e 6 de bônus nulo corrigidos). livelo→smiles `transfer_bonus` 55 (7 validadas, 47 meses, 27 sem só-gap, 1 sem bônus), livelo→latam_pass 5, esfera→smiles 3, esfera→azul_fidelidade 1. `published_at` preenchido em 877 de 897 títulos do Pontos pra Voar (0 com gap).
