@@ -1,0 +1,115 @@
+{
+ "L3_reprocess_meio_6_campanhas": {
+  "res": "StopRequested",
+  "ofertas_antes": 6,
+  "ofertas_apos": 4,
+  "evidencias": 4,
+  "estado": "BANCO PARCIAL: ofertas apagadas e nao reconstruidas"
+ },
+ "C1_campeao": {
+  "champion_id": 3,
+  "runs": [
+   [
+    1,
+    "B0",
+    "daily",
+    false
+   ],
+   [
+    3,
+    "C1",
+    "experiment",
+    true
+   ],
+   [
+    4,
+    "B0",
+    "daily",
+    false
+   ],
+   [
+    5,
+    "B0",
+    "daily",
+    false
+   ]
+  ],
+  "campeao_intacto": true,
+  "daily_nunca_champion": true,
+  "n_champions": 1
+ },
+ "C2_api_champion": {
+  "name": "B1",
+  "version": "1.0.0",
+  "esperado_do_T08b": "C1"
+ },
+ "C3_run_legado_do_job_antigo": [
+  [
+   "B0",
+   "experiment",
+   true
+  ]
+ ],
+ "K_concorrencia": [
+  {
+   "rodada": 0,
+   "ids_distintos": [
+    7
+   ],
+   "erros": [],
+   "grupos_duplicados": 0,
+   "champions": 2,
+   "pred_dup": 0,
+   "log_dup": 0,
+   "alertas_dup": 0
+  },
+  {
+   "rodada": 1,
+   "ids_distintos": [
+    15
+   ],
+   "erros": [],
+   "grupos_duplicados": 0,
+   "champions": 2,
+   "pred_dup": 0,
+   "log_dup": 0,
+   "alertas_dup": 0
+  },
+  {
+   "rodada": 2,
+   "ids_distintos": [
+    24
+   ],
+   "erros": [],
+   "grupos_duplicados": 0,
+   "champions": 2,
+   "pred_dup": 0,
+   "log_dup": 0,
+   "alertas_dup": 0
+  },
+  {
+   "rodada": 3,
+   "ids_distintos": [
+    31
+   ],
+   "erros": [],
+   "grupos_duplicados": 0,
+   "champions": 2,
+   "pred_dup": 0,
+   "log_dup": 0,
+   "alertas_dup": 0
+  },
+  {
+   "rodada": 4,
+   "ids_distintos": [
+    39
+   ],
+   "erros": [],
+   "grupos_duplicados": 0,
+   "champions": 2,
+   "pred_dup": 0,
+   "log_dup": 0,
+   "alertas_dup": 0
+  }
+ ]
+}

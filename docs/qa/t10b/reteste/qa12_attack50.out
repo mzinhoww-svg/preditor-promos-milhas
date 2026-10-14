@@ -1,0 +1,65 @@
+{
+ "L1_run_daily_meio": {
+  "res": "StopRequested",
+  "grupos_processados": 2,
+  "predicoes_no_STOP": 3,
+  "predicoes_final": 6,
+  "gravou_apos_STOP": true
+ },
+ "L2_run_backfill_meio": {
+  "res": "StopRequested",
+  "downloads": 2,
+  "raw_no_STOP": 1,
+  "raw_final": 1,
+  "estado_valido": true
+ },
+ "L3_reprocess_meio": {
+  "res": "StopRequested",
+  "ofertas_antes": 1,
+  "ofertas_apos_STOP_no_meio": 1,
+  "evidencias_apos": 3,
+  "dado_destruido": false
+ },
+ "L3b_reprocess_STOP_antes": {
+  "abortou": true,
+  "ofertas_intactas": true
+ },
+ "L4_archived_feed_meio": {
+  "res": "StopRequested",
+  "capturas_buscadas": 2,
+  "raw_no_STOP": 1,
+  "raw_final": 1
+ },
+ "L5_collect_rss_meio": {
+  "res": "StopRequested",
+  "store_raw_chamadas": 2,
+  "raw_no_STOP": 1,
+  "raw_final": 2
+ },
+ "L6_run_once_meio": {
+  "res": "StopRequested",
+  "requisicoes_apos_STOP": 0,
+  "mc_visitado": false,
+  "raw_no_STOP": 3,
+  "raw_final": 4,
+  "estado_salvo": true
+ },
+ "L7_CLIs_exit_com_STOP": {
+  "backfill": [
+   3,
+   "STOP: STOP presente: execução abortada sem gravar"
+  ],
+  "backfill_reprocess": [
+   3,
+   "STOP: STOP presente: execução abortada sem gravar"
+  ],
+  "feed_listener": [
+   3,
+   "STOP: STOP presente: execução abortada sem gravar"
+  ],
+  "daily": [
+   3,
+   "STOP: STOP presente: execução abortada sem gravar"
+  ]
+ }
+}
