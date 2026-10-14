@@ -96,3 +96,14 @@ def test_explicit_start_is_not_marked_inferred(eng):
     B.reprocess(eng)
     with eng.connect() as c:
         assert c.execute(text("SELECT start_inferred FROM offer_evidence")).scalar_one() is False
+
+
+def test_recompute_gap_keeps_published_at_of_title_only_rows(eng):
+    pub = datetime(2024, 1, 2, 10, tzinfo=UTC)
+    _raw(eng, "http://ppv/a", "Livelo e Smiles: 100% de bônus", datetime(2024, 1, 2, 10, tzinfo=UTC))
+    with eng.begin() as c:
+        c.execute(text("UPDATE raw_message SET published_at=:p, published_vs_capture_gap=true"), {"p": pub})
+    B.recompute_gap(eng, {})
+    with eng.connect() as c:
+        row = c.execute(text("SELECT published_at, published_vs_capture_gap FROM raw_message")).one()
+    assert row[0] == pub and row[1] is True
