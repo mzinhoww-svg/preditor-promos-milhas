@@ -8,7 +8,8 @@
 |---|---|
 | `campaigns.jsonl` | 50 campanhas: 30 `test` e 20 `dev` |
 | `messages.jsonl` | 95 mensagens: 75 positivas (47 `test`, 28 `dev`) e 20 distratores (12 `test`, 8 `dev`) |
-| `schema/*.schema.json` | JSON Schema 2020-12. `expected` referencia o `oferta-v1` de `docs/plans/coletor-livelo-smiles.md` §3.1 |
+| `schema/*.schema.json` | JSON Schema 2020-12, autocontido: `expected` aponta para `#/$defs/oferta_v1`, uma cópia de `oferta-v1` (`docs/plans/coletor-livelo-smiles.md` §3.1). Se o original mudar, a cópia muda junto |
+| `duvidas.md` | Campanhas duvidosas (direção, bônus condicional, só-gap, data) para priorizar a conferência |
 | `review.md` | Tabela para a conferência de Aurimar |
 | `MANIFEST.sha256` | Vazio até a primeira linha `gold_verified` |
 | `CHANGELOG.md` | Histórico de alterações |
@@ -25,10 +26,10 @@
 - **Só texto e `observed_at`.** Nada vem de outra fonte nem da data real conhecida depois. O regex T07a não define o `expected`: só ajudou a montar o quadro de candidatas.
 - **`inicio`:** só quando o texto dá um início explícito ("válida de X a Y", "iniciou hoje (23)", "a partir de amanhã", "cadastre-se de 18/02 até 19/02"). "Até hoje", "somente hoje", "até amanhã (11)" preenchem **só o `fim`**, com `inicio=null`. Na campanha, `start_at = first_seen_at::date` com `start_inferred=true`.
 - **Dia sem mês ou ano:** é resolvido pelo `observed_at` em SP.
-- **`bonus_pct`:** é o máximo anunciado. `segmentada=true` quando o máximo exige um grupo; `segmento` é `clube` (Clube Livelo/Smiles, Diamante, plano), `cartao` ou `elegiveis`, e `null` quando o texto não nomeia o grupo.
+- **`bonus_pct`:** é o maior bônus que um participante consegue na mesma transferência. **Regra da soma condicional:** se o texto anuncia uma base mais um extra condicional (plano do Clube, resgate de passagem), o bônus é a soma. Exemplos: m-0035, "80% + 10% extra para quem fizer um resgate" = 90; m-0054/0055, "90% (80% + 10% do Plano)" = 90; m-0058, 90 + 10 = 100. Essas linhas têm a tag `bonus_condicional`. O extra não ganha campo próprio no schema, para não divergir do `oferta-v1` do extrator. Os pontos de volta na origem (bumerangue) **não** entram na soma. `segmentada=true` quando o máximo exige um grupo; `segmento` é `clube` (Clube Livelo/Smiles, Diamante, plano), `cartao` ou `elegiveis`, e `null` quando o texto não nomeia o grupo.
 - **Bumerangue:** os pontos de volta da Livelo vão em `bumerangue_pct` (20), **fora** do bônus (decisão 004).
 - **Prorrogação:** é evidência da mesma campanha (tag `extension`). A nova oferta depois do encerramento é `relation=renewal` (c-0027: 16/11/2023 após a de 13–14/11).
-- **Distratores:** `expected = {"ofertas": []}`. Também contam como distrator as ofertas com programa fora dos 5 (BB, Sicredi, Itaú, Sem Parar, ALL Accor), conforme a spec §2.
+- **Distratores:** `expected = {"ofertas": []}`. Em 2026-10-14 (QA #44), 5 artefatos de coleta do PdP (bloqueio Cloudflare, página vazia, cards laterais) foram trocados por 5 títulos de notícia sem oferta do RSS do Pontos pra Voar (m-0081/0082/0083/0087/0088). No universo **não restam** artigos do PdP sem oferta: das 36 mensagens sem trecho de oferta, 9 são captcha, ~10 são ofertas com origem não nomeada ("todos os bancos", "cartões"), que ficam fora dos distratores, e as demais já estão no ouro. Também contam como distrator as ofertas com programa fora dos 5 (BB, Sicredi, Itaú, Sem Parar, ALL Accor), conforme a spec §2.
 
 ## Desvios da spec e déficits declarados (§4 e §10)
 
@@ -40,7 +41,7 @@
 | `purchase_discount` / `boosted_accrual` | 4 / 3 | **0 / 0** | Os 3 casos de compra de pontos Livelo são de 2018–2019 (ver F1) |
 | 2026 | 8 | 4 | |
 | Validadas (≥ 2 fontes) | 20 | 18 | Só PdP + MC; o RSS do PPV é só o vivo |
-| `titulo_rss` | 8 | 7 (distratores) | O RSS vivo não tem ofertas Livelo/Smiles |
+| `titulo_rss` | 8 | 12 (distratores) | O RSS vivo não tem ofertas Livelo/Smiles |
 | `virada_ano` / `decimal` / `relampago` | 2 / 2 / 2 | 0 | Sem casos no universo |
 
 Campanhas cujas evidências são **todas** de gap: 23 de 50 (`all_evidence_gap=true`). A data delas depende de `published_time` mais de 7 dias anterior à captura e exige atenção na conferência.
