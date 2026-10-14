@@ -1,0 +1,44 @@
+{
+ "desktop /": {
+  "axe": [],
+  "overflowX": false
+ },
+ "desktop /modelo": {
+  "axe": [],
+  "overflowX": false
+ },
+ "desktop /fontes": {
+  "axe": [],
+  "overflowX": false
+ },
+ "desktop /alertas": {
+  "axe": [],
+  "overflowX": false
+ },
+ "desktop explicacao": {
+  "summaries": 3,
+  "texto": "Por que está na lista ocultar B0 · taxa-base Baseado em 23 campanhas históricas · abaixo das 25 que o B1 exige, por isso taxa-base Última campanha 03 de ago. de 2026 · há 72 dias Intervalo mediano entre campanhas 27 dias Probabilidade vem de taxa-base histórica do par Calculado em 14 de out. de 2026",
+  "console": []
+ },
+ "mobile /": {
+  "axe": [],
+  "overflowX": false
+ },
+ "mobile /modelo": {
+  "axe": [],
+  "overflowX": false
+ },
+ "mobile /fontes": {
+  "axe": [],
+  "overflowX": false
+ },
+ "mobile /alertas": {
+  "axe": [],
+  "overflowX": false
+ },
+ "mobile explicacao": {
+  "summaries": 3,
+  "texto": "Por que está na lista ocultar B0 · taxa-base Baseado em 23 campanhas históricas · abaixo das 25 que o B1 exige, por isso taxa-base Última campanha 03 de ago. de 2026 · há 72 dias Intervalo mediano entre campanhas 27 dias Probabilidade vem de taxa-base histórica do par Calculado em 14 de out. de 2026",
+  "console": []
+ }
+}

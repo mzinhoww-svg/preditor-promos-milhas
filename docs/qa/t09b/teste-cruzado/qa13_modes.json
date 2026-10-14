@@ -1,0 +1,702 @@
+{
+ "ok": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 3
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "401": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": "B1 · hazard ",
+   "linhas": 10
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "500": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": "B1 · hazard ",
+   "linhas": 10
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "429": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": "B1 · hazard ",
+   "linhas": 10
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu erro ",
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "slow": {
+  "/": {
+   "http": 200,
+   "s": 8.1,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API não respondeu a tempo ",
+   "selo": "B1 · hazard ",
+   "linhas": 10
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 8.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API não respondeu a tempo ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 8.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API não respondeu a tempo ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 8.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API não respondeu a tempo ",
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "badjson": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu um corpo que não é JSON ",
+   "selo": "B1 · hazard ",
+   "linhas": 10
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu um corpo que não é JSON ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu um corpo que não é JSON ",
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": true,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": "Dados simulados A API está configurada, mas a API devolveu um corpo que não é JSON ",
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "c1_keep": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": true,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "Modelo não decidido execução mr_3 · g",
+   "linhas": 3
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": true,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "c1_promote": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "C1 execução mr_3 · g",
+   "linhas": 3
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "prob_invalid": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 0
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "xss": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 1
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "empty": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 0
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "nulls": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 3
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "big": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 51
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ },
+ "missing_field": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 2
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0
+  }
+ }
+}

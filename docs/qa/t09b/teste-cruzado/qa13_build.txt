@@ -1,0 +1,25 @@
+
+> dashboard@0.1.0 lint
+> eslint
+
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  02:55:58
+   Duration  143ms (transform 73%, import 18%, tests 7%, worker 2%)
+
+  Generating static pages using 9 workers (0/3) ...
+✓ Generating static pages using 9 workers (3/3) in 234ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /alertas
+├ ƒ /api/explanation
+├ ƒ /fontes
+└ ƒ /modelo
+
+
+ƒ  (Dynamic)  server-rendered on demand
+
