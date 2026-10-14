@@ -1,0 +1,200 @@
+{
+  "Livelo|Smiles|transfer_bonus": {
+    "pair": {
+      "origin": "Livelo",
+      "destination": "Smiles"
+    },
+    "type": "transfer_bonus",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.62,
+      "15": 0.81,
+      "30": 0.94
+    },
+    "factors": {
+      "method": "b0",
+      "probability_driven_by": "base_rate",
+      "n_campaigns": 23,
+      "last_campaign_start": "2026-09-12",
+      "days_since_last": 31,
+      "median_interval_days": 27,
+      "min_campaigns_b1": 25
+    }
+  },
+  "Esfera|Smiles|transfer_bonus": {
+    "pair": {
+      "origin": "Esfera",
+      "destination": "Smiles"
+    },
+    "type": "transfer_bonus",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.48,
+      "15": 0.7,
+      "30": 0.88
+    },
+    "factors": {
+      "method": "b0",
+      "probability_driven_by": "base_rate",
+      "n_campaigns": 24,
+      "last_campaign_start": "2026-09-05",
+      "days_since_last": 38,
+      "median_interval_days": 26,
+      "min_campaigns_b1": 25
+    }
+  },
+  "Livelo|LATAM Pass|transfer_bonus": {
+    "pair": {
+      "origin": "Livelo",
+      "destination": "LATAM Pass"
+    },
+    "type": "transfer_bonus",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.21,
+      "15": 0.44,
+      "30": 0.72
+    },
+    "factors": {
+      "method": "b1",
+      "probability_driven_by": "seasonal_hazard",
+      "n_campaigns": 27,
+      "last_campaign_start": "2026-10-10",
+      "days_since_last": 3,
+      "median_interval_days": 30,
+      "min_campaigns_b1": 25
+    }
+  },
+  "Livelo|Azul Fidelidade|transfer_bonus": {
+    "pair": {
+      "origin": "Livelo",
+      "destination": "Azul Fidelidade"
+    },
+    "type": "transfer_bonus",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.19,
+      "15": 0.41,
+      "30": 0.69
+    },
+    "factors": {
+      "method": "b1",
+      "probability_driven_by": "seasonal_hazard",
+      "n_campaigns": 38,
+      "last_campaign_start": "2026-08-28",
+      "days_since_last": 46,
+      "median_interval_days": 32,
+      "min_campaigns_b1": 25
+    }
+  },
+  "Esfera|LATAM Pass|transfer_bonus": {
+    "pair": {
+      "origin": "Esfera",
+      "destination": "LATAM Pass"
+    },
+    "type": "transfer_bonus",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.14,
+      "15": 0.3,
+      "30": 0.58
+    },
+    "factors": {
+      "method": "b0",
+      "probability_driven_by": "base_rate",
+      "n_campaigns": 22,
+      "last_campaign_start": "2026-09-20",
+      "days_since_last": 23,
+      "median_interval_days": 38,
+      "min_campaigns_b1": 25
+    }
+  },
+  "Livelo|Livelo|purchase_discount": {
+    "pair": {
+      "origin": "Livelo",
+      "destination": "Livelo"
+    },
+    "type": "purchase_discount",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.12,
+      "15": 0.27,
+      "30": 0.55
+    },
+    "factors": {
+      "method": "b1",
+      "probability_driven_by": "seasonal_hazard",
+      "n_campaigns": 29,
+      "last_campaign_start": "2026-09-24",
+      "days_since_last": 19,
+      "median_interval_days": 41,
+      "min_campaigns_b1": 25
+    }
+  },
+  "Esfera|Azul Fidelidade|transfer_bonus": {
+    "pair": {
+      "origin": "Esfera",
+      "destination": "Azul Fidelidade"
+    },
+    "type": "transfer_bonus",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.11,
+      "15": 0.25,
+      "30": 0.52
+    },
+    "factors": {
+      "method": "b1",
+      "probability_driven_by": "seasonal_hazard",
+      "n_campaigns": 36,
+      "last_campaign_start": "2026-08-22",
+      "days_since_last": 52,
+      "median_interval_days": 44,
+      "min_campaigns_b1": 25
+    }
+  },
+  "Smiles|Smiles|boosted_accrual": {
+    "pair": {
+      "origin": "Smiles",
+      "destination": "Smiles"
+    },
+    "type": "boosted_accrual",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.08,
+      "15": 0.18,
+      "30": 0.37
+    },
+    "factors": {
+      "method": "b0",
+      "probability_driven_by": "base_rate",
+      "n_campaigns": 13,
+      "last_campaign_start": "2026-09-02",
+      "days_since_last": 13,
+      "median_interval_days": 47,
+      "min_campaigns_b1": 25
+    }
+  },
+  "LATAM Pass|LATAM Pass|purchase_discount": {
+    "pair": {
+      "origin": "LATAM Pass",
+      "destination": "LATAM Pass"
+    },
+    "type": "purchase_discount",
+    "as_of": "2026-10-13",
+    "windows": {
+      "7": 0.06,
+      "15": 0.15,
+      "30": 0.31
+    },
+    "factors": {
+      "method": "b0",
+      "probability_driven_by": "base_rate",
+      "n_campaigns": 20,
+      "last_campaign_start": "2026-10-01",
+      "days_since_last": 12,
+      "median_interval_days": 50,
+      "min_campaigns_b1": 25
+    }
+  }
+}

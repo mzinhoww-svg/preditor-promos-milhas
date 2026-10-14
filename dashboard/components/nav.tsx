@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import type { DataSource } from "@/lib/api/source";
 
@@ -39,6 +40,7 @@ export function Nav({ source }: { source: DataSource }) {
                 }
               >
                 {l.label}
+                <PendingDot />
               </Link>
             );
           })}
@@ -46,6 +48,21 @@ export function Nav({ source }: { source: DataSource }) {
         <SourceBadge source={source} className="hidden sm:inline-block" />
       </div>
     </header>
+  );
+}
+
+/**
+ * Estado de carregamento da navegação: a tela de destino é renderizada no
+ * servidor, então o link mostra um ponto pulsante enquanto a resposta não chega.
+ */
+function PendingDot() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <span role="status" className="ml-1.5 inline-flex items-center">
+      <span className="sr-only">Carregando</span>
+      <span aria-hidden="true" className="inline-block size-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
+    </span>
   );
 }
 
@@ -58,9 +75,9 @@ function SourceBadge({ source, className }: { source: DataSource; className?: st
         (mock ? "border-warn/40 bg-warn-soft text-warn " : "border-ok/40 bg-ok-soft text-ok ") +
         (className ?? "")
       }
-      title={mock ? "Dados de exemplo em dashboard/mock" : "Dados da API da VPS"}
+      title={mock ? "Nenhuma API configurada: dados de exemplo de dashboard/mock" : "Lendo a API do preditor (com fallback para dados simulados se ela falhar)"}
     >
-      {mock ? "Dados de exemplo" : "API"}
+      {mock ? "Dados simulados" : "API"}
     </span>
   );
 }

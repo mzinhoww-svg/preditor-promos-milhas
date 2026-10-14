@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Badge } from "@/components/badge";
+import { DataNotice } from "@/components/data-notice";
+import { ModelBadge } from "@/components/model-badge";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ReliabilityChart } from "@/components/reliability-chart";
 import { ScrollRegion } from "@/components/scroll-region";
-import { getAccuracy, getModelMetrics, HORIZONS, type ModelSummary } from "@/lib/api";
+import { dataSource, getAccuracy, getModelMetrics, getStatus, HORIZONS, type ModelSummary } from "@/lib/api";
 import { dateLong, dateTime, int, num, pct, signed } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Modelo" };
@@ -16,11 +18,15 @@ const DECISION_LABEL = {
 } as const;
 
 export default async function ModelPage() {
-  const [m, accRes] = await Promise.all([getModelMetrics(), getAccuracy()]);
+  const configured = dataSource();
+  const [mRes, accRes, statusRes] = await Promise.all([getModelMetrics(), getAccuracy(), getStatus()]);
+  const m = mRes.data;
   const acc = accRes.data;
   const discardedWeekly = accRes.discardedWeekly;
   const c = m.champion;
   const prod = c.production;
+  const hasValidation = HORIZONS.some((h) => c.validation.by_horizon[h]);
+  const nCampaigns = statusRes.data?.n_campaigns_total ?? null;
 
   return (
     <>
@@ -29,18 +35,24 @@ export default async function ModelPage() {
         description="Validação histórica (walk-forward) e precisão real em produção ficam lado a lado, mas nunca misturadas. A produção conta só predições registradas em prediction_log e já resolvidas."
       />
 
+      <DataNotice configured={configured} sources={[mRes, accRes]} />
+
       <SummaryPanel
         items={[
-          { label: "Em produção", value: `${c.name} ${c.version}`, hint: `treinado ${dateLong(c.trained_at)}` },
+          {
+            label: "Em produção",
+            value: <ModelBadge name={c.name} decision={m.comparison.decision} />,
+            hint: `${c.name} ${c.version} · treinado ${dateLong(c.trained_at)}${nCampaigns !== null ? ` · ${int(nCampaigns)} campanhas` : ""}`,
+          },
           {
             label: "Brier em produção · 30 d",
-            value: prod ? num(prod.by_horizon["30"].brier) : "—",
-            hint: prod ? `validação: ${num(c.validation.by_horizon["30"].brier)}` : "sem predições resolvidas",
+            value: acc.by_horizon["30"].n > 0 ? num(acc.by_horizon["30"].brier) : "—",
+            hint: c.validation.by_horizon["30"] ? `validação: ${num(c.validation.by_horizon["30"].brier)}` : "sem validação histórica registrada",
           },
           {
             label: "Acerto em produção · 30 d",
-            value: prod ? pct(prod.by_horizon["30"].hit_rate) : "—",
-            hint: prod ? `${int(prod.n_resolved)} de ${int(prod.n_predictions)} resolvidas` : undefined,
+            value: acc.by_horizon["30"].n > 0 ? pct(acc.by_horizon["30"].hit_rate) : "—",
+            hint: acc.by_horizon["30"].n > 0 ? `${int(acc.by_horizon["30"].n)} predições resolvidas` : "sem predições resolvidas",
           },
           {
             label: "Campeão × desafiante",
@@ -53,19 +65,29 @@ export default async function ModelPage() {
       <div className="grid min-w-0 gap-x-10 gap-y-10 lg:grid-cols-2">
         <Section
           title="Validação histórica"
-          description={`${c.validation.method}, ${c.validation.folds === null ? "número de dobras não informado" : `${c.validation.folds} dobras`}, ${dateLong(c.validation.period.from)} a ${dateLong(c.validation.period.to)}. Mede o que o modelo teria acertado no passado.`}
+          description={
+            hasValidation
+              ? `${c.validation.method}, ${c.validation.folds === null ? "número de dobras não informado" : `${c.validation.folds} dobras`}, ${dateLong(c.validation.period.from)} a ${dateLong(c.validation.period.to)}. Mede o que o modelo teria acertado no passado.`
+              : "O modelo em produção ainda não tem walk-forward registrado na API."
+          }
         >
-          <MetricTable
-            label="Tabela de validação histórica por janela"
-            rows={HORIZONS.map((h) => {
-              const v = c.validation.by_horizon[h];
-              return {
-                horizon: h,
-                cells: [num(v.brier), v.ci_brier ? `${num(v.ci_brier[0])}–${num(v.ci_brier[1])}` : "—", num(v.log_loss), num(v.auc, 2)],
-              };
-            })}
-            headers={["Brier", "IC Brier", "Log-loss", "AUC"]}
-          />
+          {hasValidation ? (
+            <MetricTable
+              label="Tabela de validação histórica por janela"
+              rows={HORIZONS.map((h) => {
+                const v = c.validation.by_horizon[h];
+                return {
+                  horizon: h,
+                  cells: v ? [num(v.brier), v.ci_brier ? `${num(v.ci_brier[0])}–${num(v.ci_brier[1])}` : "—", num(v.log_loss), num(v.auc, 2)] : ["—", "—", "—", "—"],
+                };
+              })}
+              headers={["Brier", "IC Brier", "Log-loss", "AUC"]}
+            />
+          ) : (
+            <p className="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">
+              Sem métricas de validação. Quando o treino registrar o walk-forward em model_run, esta tabela se preenche.
+            </p>
+          )}
         </Section>
 
         <Section
@@ -73,7 +95,9 @@ export default async function ModelPage() {
           description={
             prod
               ? `${dateLong(prod.period.from)} a ${dateLong(prod.period.to)}. Predições servidas pelo painel, conferidas com o que aconteceu.`
-              : "Ainda sem predições resolvidas em produção."
+              : acc.period.from
+                ? `${dateLong(acc.period.from)} a ${dateLong(acc.period.to)}, de prediction_log. Predições registradas pelo job, conferidas com o que aconteceu.`
+                : "Ainda sem predições resolvidas em produção."
           }
         >
           {prod ? (
@@ -82,11 +106,26 @@ export default async function ModelPage() {
               rows={HORIZONS.map((h) => {
                 const p = prod.by_horizon[h];
                 const v = c.validation.by_horizon[h];
-                const delta = p.brier - v.brier;
+                if (!p) return { horizon: h, cells: ["—", "—", "—", "—", "—"] };
+                const delta = v ? p.brier - v.brier : null;
                 return {
                   horizon: h,
-                  cells: [num(p.brier), signed(delta), num(p.log_loss), pct(p.hit_rate), int(p.n)],
-                  flag: v.ci_brier ? delta > v.ci_brier[1] - v.brier : false,
+                  cells: [num(p.brier), delta === null ? "—" : signed(delta), num(p.log_loss), pct(p.hit_rate), int(p.n)],
+                  flag: v && v.ci_brier && delta !== null ? delta > v.ci_brier[1] - v.brier : false,
+                };
+              })}
+              headers={["Brier", "Δ vs. validação", "Log-loss", "Acerto", "n"]}
+            />
+          ) : acc.by_horizon["30"].n > 0 || acc.by_horizon["7"].n > 0 || acc.by_horizon["15"].n > 0 ? (
+            <MetricTable
+              label="Tabela de precisão em produção por janela (prediction_log)"
+              rows={HORIZONS.map((h) => {
+                const p = acc.by_horizon[h];
+                const v = c.validation.by_horizon[h];
+                const delta = v ? p.brier - v.brier : null;
+                return {
+                  horizon: h,
+                  cells: p.n > 0 ? [num(p.brier), delta === null ? "—" : signed(delta), num(p.log_loss), pct(p.hit_rate), int(p.n)] : ["—", "—", "—", "—", "0"],
                 };
               })}
               headers={["Brier", "Δ vs. validação", "Log-loss", "Acerto", "n"]}
@@ -105,7 +144,13 @@ export default async function ModelPage() {
           title={`Curva de confiabilidade · ${m.reliability.horizon} dias`}
           description="Quando o modelo diz 70%, acontece em cerca de 70% das vezes? Pontos na diagonal dizem que sim."
         >
-          <ReliabilityChart bins={m.reliability.bins} horizon={m.reliability.horizon} />
+          {m.reliability.bins.length > 0 ? (
+            <ReliabilityChart bins={m.reliability.bins} horizon={m.reliability.horizon} />
+          ) : (
+            <p className="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center text-sm text-ink-2">
+              Sem predições resolvidas em número suficiente para a curva. Ela aparece quando a API devolver bins.
+            </p>
+          )}
         </Section>
 
         <Section
@@ -265,15 +310,15 @@ function ModelCard({ model, role }: { model: ModelSummary; role: string }) {
       <dl className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 text-sm">
         <div>
           <dt className="text-xs text-ink-3">Brier 30 d</dt>
-          <dd className="tnum font-medium text-ink">{num(v30.brier)}</dd>
+          <dd className="tnum font-medium text-ink">{v30 ? num(v30.brier) : "—"}</dd>
         </div>
         <div>
           <dt className="text-xs text-ink-3">Log-loss</dt>
-          <dd className="tnum font-medium text-ink">{num(v30.log_loss)}</dd>
+          <dd className="tnum font-medium text-ink">{v30 ? num(v30.log_loss) : "—"}</dd>
         </div>
         <div>
           <dt className="text-xs text-ink-3">AUC</dt>
-          <dd className="tnum font-medium text-ink">{num(v30.auc, 2)}</dd>
+          <dd className="tnum font-medium text-ink">{v30 ? num(v30.auc, 2) : "—"}</dd>
         </div>
       </dl>
       <p className="mt-3 text-xs text-ink-3">Treinado {dateLong(model.trained_at)}</p>

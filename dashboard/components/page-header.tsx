@@ -38,7 +38,7 @@ export function SummaryPanel({
           <div key={`${i}-${it.label}`} className="min-w-0">
             <dt className="break-words text-xs text-panel-ink-2">{it.label}</dt>
             <dd
-              className="tnum mt-1 truncate text-xl font-semibold leading-tight tracking-tight sm:text-2xl"
+              className="tnum mt-1 min-w-0 break-words text-xl font-semibold leading-tight tracking-tight sm:text-2xl"
               title={typeof it.value === "string" ? it.value : undefined}
             >
               {it.value}

@@ -2,13 +2,20 @@ import "server-only";
 import type {
   AccuracyResponse,
   Alert,
+  Explanation,
   Horizon,
+  Method,
   ModelMetricsResponse,
   ModelSummary,
   PredictionItem,
   PredictionsResponse,
+  ProductionMetrics,
   SourceHealth,
   SourceHealthResponse,
+  StatusResponse,
+  ThresholdAlert,
+  ThresholdAlertsResponse,
+  ValidationMetrics,
   WindowProbability,
 } from "./types";
 
@@ -30,13 +37,15 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isProb = (v: unknown): v is number => isNum(v) && v >= 0 && v <= 1;
+const numOrNull = (v: unknown): number | null => (isNum(v) ? v : null);
+const strOrNull = (v: unknown): string | null => (isStr(v) ? v : null);
 const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):?(\d{2}))?)?$/;
 /**
  * N1/F1: data ISO 8601 (YYYY-MM-DD ou instante) com calendário válido. O Date
  * aceita 2026-02-31 e rola para 03/03; aqui o dia precisa existir no mês e
  * hora, minuto, segundo e fuso precisam estar na faixa.
  */
-const isIsoDate = (v: unknown): v is string => {
+export const isIsoDate = (v: unknown): v is string => {
   if (!isStr(v)) return false;
   const m = ISO_RE.exec(v);
   if (!m) return false;
@@ -47,9 +56,11 @@ const isIsoDate = (v: unknown): v is string => {
   return +hh < 24 && +mi < 60 && +ss < 60 && +tzh < 24 && +tzm < 60;
 };
 const isIsoDateOrNull = (v: unknown): v is string | null | undefined => v === null || v === undefined || isIsoDate(v);
+const isoOrNull = (v: unknown): string | null => (isIsoDate(v) ? v : null);
 /** N2: par [num, num] opcional; ausente ou malformado vira null. */
 const pairOrNull = (v: unknown): [number, number] | null =>
   Array.isArray(v) && v.length === 2 && v.every(isNum) ? [v[0], v[1]] : null;
+const methodOrNull = (v: unknown): Method | null => (v === "b0" || v === "b1" ? v : isStr(v) && /^b[01]$/i.test(v) ? (v.toLowerCase() as Method) : null);
 
 const OFFER_TYPES = new Set(["transfer_bonus", "purchase_discount", "boosted_accrual"]);
 const REASON_KINDS = new Set(["days_since_last", "month", "sibling_pairs", "source_signal", "other"]);
@@ -68,15 +79,17 @@ export function isPredictionItem(v: unknown): v is PredictionItem {
   if (!(v.segment_label === null || v.segment_label === undefined || isStr(v.segment_label))) return false;
   const w = v.windows;
   if (!isObj(w) || !HORIZON_KEYS.every((h) => isWindow(w[h]))) return false;
+  // bonus_pct: objeto com quartis numéricos ou nulos (par sem histórico de bônus).
   const b = v.bonus_pct;
-  if (!isObj(b) || !isNum(b.p25) || !isNum(b.p50) || !isNum(b.p75)) return false;
+  if (!isObj(b)) return false;
+  for (const k of ["p25", "p50", "p75"]) if (!(b[k] === null || b[k] === undefined || isNum(b[k]))) return false;
   const lo = v.last_offer;
   if (!(lo === null || lo === undefined)) {
     if (!isObj(lo) || !isIsoDate(lo.start_at) || !isNum(lo.bonus_pct) || !isNum(lo.days_since)) return false;
     if (!isIsoDateOrNull(lo.end_at)) return false;
   }
-  if (!Array.isArray(v.reasons)) return false;
-  for (const r of v.reasons) {
+  if (!(v.reasons === undefined || Array.isArray(v.reasons))) return false;
+  for (const r of (v.reasons ?? []) as unknown[]) {
     if (!isObj(r) || !isStr(r.kind) || !REASON_KINDS.has(r.kind) || !isStr(r.label) || !isNum(r.weight)) return false;
     if (!(r.detail === null || r.detail === undefined || isStr(r.detail))) return false;
   }
@@ -88,73 +101,109 @@ export function validatePredictions(raw: unknown): { data: PredictionsResponse; 
     throw new InvalidResponseError("/predictions", "formato inesperado");
   }
   const m = raw.model;
-  if (!isStr(m.run_id) || !isStr(m.name) || !isStr(m.version)) {
+  if (!isStr(m.run_id) || !isStr(m.name)) {
     throw new InvalidResponseError("/predictions", "campo model inválido");
   }
-  const items = raw.items.filter(isPredictionItem).map((it) => ({
-    ...it,
-    segment_label: it.segment_label ?? null,
-    last_offer: it.last_offer ? { ...it.last_offer, end_at: it.last_offer.end_at ?? null } : null,
-    reasons: it.reasons.map((r) => ({ ...r, detail: r.detail ?? null })),
-  }));
+  const items = raw.items.filter(isPredictionItem).map((it) => {
+    const extra = it as unknown as Record<string, unknown>;
+    const b = it.bonus_pct as Record<string, unknown>;
+    return {
+      ...it,
+      segment_label: it.segment_label ?? null,
+      bonus_pct: { p25: numOrNull(b.p25), p50: numOrNull(b.p50), p75: numOrNull(b.p75) },
+      last_offer: it.last_offer ? { ...it.last_offer, end_at: it.last_offer.end_at ?? null } : null,
+      reasons: (it.reasons ?? []).map((r) => ({ ...r, detail: r.detail ?? null })),
+      method: methodOrNull(extra.method),
+      n_campaigns: numOrNull(extra.n_campaigns),
+    };
+  });
   return {
-    data: { generated_at: raw.generated_at, model: m as PredictionsResponse["model"], items },
+    data: {
+      generated_at: raw.generated_at,
+      model: { run_id: m.run_id, name: m.name, version: strOrNull(m.version), role: m.role === "challenger" ? "challenger" : "champion" },
+      items,
+    },
     discarded: raw.items.length - items.length,
   };
 }
 
-function hasHorizonMetrics(v: unknown, keys: string[]): boolean {
-  return isObj(v) && HORIZON_KEYS.every((h) => isObj(v[h]) && keys.every((k) => isNum((v[h] as Record<string, unknown>)[k])));
+function horizonMetrics<T>(v: unknown, keys: (keyof T & string)[]): Partial<Record<Horizon, T>> {
+  const out: Partial<Record<Horizon, T>> = {};
+  if (!isObj(v)) return out;
+  for (const h of HORIZON_KEYS) {
+    const m = v[h];
+    if (isObj(m) && keys.every((k) => isNum(m[k]))) out[h] = m as unknown as T;
+  }
+  return out;
 }
 
-function isModelSummary(v: unknown): boolean {
-  if (!isObj(v) || !isStr(v.name) || !isStr(v.version) || !isIsoDate(v.trained_at)) return false;
-  const val = v.validation;
-  if (!isObj(val) || !isStr(val.method) || !hasHorizonMetrics(val.by_horizon, ["brier", "log_loss", "auc"])) return false;
-  if (!isObj(val.period) || !isIsoDate(val.period.from) || !isIsoDate(val.period.to)) return false;
-  const prod = v.production;
-  if (prod === null || prod === undefined) return true;
-  if (!isObj(prod) || !isObj(prod.period) || !isIsoDate(prod.period.from) || !isIsoDate(prod.period.to)) return false;
-  return hasHorizonMetrics(prod.by_horizon, ["brier", "log_loss", "hit_rate", "n"]) && isNum(prod.n_predictions) && isNum(prod.n_resolved);
+function periodOrNull(v: unknown): { from: string | null; to: string | null } {
+  return isObj(v) ? { from: isoOrNull(v.from), to: isoOrNull(v.to) } : { from: null, to: null };
 }
 
 /** F2: folds precisa ser inteiro positivo; qualquer outra coisa vira null. */
 const foldsOrNull = (v: unknown): number | null => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : null);
 
-/** Normaliza um ModelSummary já validado: ci_brier ausente vira null (N2); folds inválido vira null (F2). */
-function normalizeModelSummary(v: ModelSummary): ModelSummary {
-  const by = { ...v.validation.by_horizon };
-  for (const h of HORIZON_KEYS) by[h] = { ...by[h], ci_brier: pairOrNull(by[h].ci_brier) };
+/**
+ * ModelSummary tolerante: a API de produção devolve validação vazia
+ * (period null, by_horizon {}) enquanto o modelo não tem walk-forward registrado.
+ */
+function modelSummary(v: unknown): ModelSummary | null {
+  if (!isObj(v) || !isStr(v.name) || !isIsoDate(v.trained_at)) return null;
+  const val = isObj(v.validation) ? v.validation : {};
+  const by = horizonMetrics<ValidationMetrics>(val.by_horizon, ["brier", "log_loss", "auc"]);
+  for (const h of HORIZON_KEYS) if (by[h]) by[h] = { ...by[h]!, ci_brier: pairOrNull((by[h] as unknown as Record<string, unknown>).ci_brier) };
+  let production: ModelSummary["production"] = null;
+  const prod = v.production;
+  if (isObj(prod)) {
+    production = {
+      period: periodOrNull(prod.period),
+      n_predictions: isNum(prod.n_predictions) ? prod.n_predictions : 0,
+      n_resolved: isNum(prod.n_resolved) ? prod.n_resolved : 0,
+      by_horizon: horizonMetrics<ProductionMetrics>(prod.by_horizon, ["brier", "log_loss", "hit_rate", "n"]),
+    };
+  }
   return {
-    ...v,
-    validation: { ...v.validation, folds: foldsOrNull(v.validation.folds), by_horizon: by },
-    production: v.production ?? null,
+    name: v.name,
+    version: isStr(v.version) ? v.version : "—",
+    trained_at: v.trained_at,
+    horizons: Array.isArray(v.horizons) ? v.horizons.filter(isNum) : [7, 15, 30],
+    validation: {
+      method: isStr(val.method) && val.method ? val.method : "walk-forward",
+      folds: foldsOrNull(val.folds),
+      period: periodOrNull(val.period),
+      by_horizon: by,
+    },
+    production,
   };
 }
 
 export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
-  if (!isObj(raw) || !isIsoDate(raw.generated_at) || !isModelSummary(raw.champion)) {
+  if (!isObj(raw) || !isIsoDate(raw.generated_at)) {
     throw new InvalidResponseError("/model/metrics", "formato inesperado");
   }
-  if (!(raw.challenger === null || raw.challenger === undefined || isModelSummary(raw.challenger))) {
-    throw new InvalidResponseError("/model/metrics", "challenger inválido");
-  }
-  const c = raw.comparison;
-  if (!isObj(c) || !isNum(c.horizon) || !isNum(c.delta_brier) || !isNum(c.delta_log_loss) || !isStr(c.decision)) {
-    throw new InvalidResponseError("/model/metrics", "comparison inválido");
-  }
-  const r = raw.reliability;
-  if (!isObj(r) || !isNum(r.horizon) || !Array.isArray(r.bins)) {
-    throw new InvalidResponseError("/model/metrics", "reliability inválido");
-  }
-  const bins = r.bins.filter((b): b is { p_mean: number; observed: number; n: number } => isObj(b) && isProb(b.p_mean) && isProb(b.observed) && isNum(b.n));
-  const out = raw as unknown as ModelMetricsResponse;
+  const champion = modelSummary(raw.champion);
+  if (!champion) throw new InvalidResponseError("/model/metrics", "champion inválido");
+  const challenger = raw.challenger === null || raw.challenger === undefined ? null : modelSummary(raw.challenger);
+  const c = isObj(raw.comparison) ? raw.comparison : {};
+  const decision = c.decision === "promote_challenger" || c.decision === "insufficient_data" ? c.decision : "keep_champion";
+  const r = isObj(raw.reliability) ? raw.reliability : {};
+  const bins = (Array.isArray(r.bins) ? r.bins : []).filter(
+    (b): b is { p_mean: number; observed: number; n: number } => isObj(b) && isProb(b.p_mean) && isProb(b.observed) && isNum(b.n),
+  );
   return {
-    ...out,
-    challenger: out.challenger ? normalizeModelSummary(out.challenger) : null,
-    champion: normalizeModelSummary(out.champion),
-    comparison: { ...out.comparison, note: isStr(c.note) ? c.note : "", ci_delta_brier: pairOrNull(c.ci_delta_brier) },
-    reliability: { horizon: r.horizon, bins },
+    generated_at: raw.generated_at,
+    champion,
+    challenger,
+    comparison: {
+      horizon: isNum(c.horizon) ? c.horizon : 30,
+      delta_brier: isNum(c.delta_brier) ? c.delta_brier : 0,
+      delta_log_loss: isNum(c.delta_log_loss) ? c.delta_log_loss : 0,
+      ci_delta_brier: pairOrNull(c.ci_delta_brier),
+      decision,
+      note: isStr(c.note) ? c.note : "",
+    },
+    reliability: { horizon: isNum(r.horizon) ? r.horizon : 30, bins },
   };
 }
 
@@ -167,7 +216,6 @@ function isSource(v: unknown): v is SourceHealth {
     isStr(v.source) &&
     isStr(v.kind) && SOURCE_KIND.has(v.kind) &&
     isStr(v.status) && SOURCE_STATUS.has(v.status) &&
-    isNum(v.items_new_24h) && isNum(v.items_new_7d) && isNum(v.extraction_rate_7d) && isNum(v.error_rate_24h) &&
     typeof v.robots_changed === "boolean"
   );
 }
@@ -178,10 +226,14 @@ export function validateSourceHealth(raw: unknown): { data: SourceHealthResponse
   }
   const sources = raw.sources.filter(isSource).map((s) => ({
     ...s,
-    last_success_at: isIsoDate(s.last_success_at) ? s.last_success_at : null,
-    last_item_at: isIsoDate(s.last_item_at) ? s.last_item_at : null,
-    robots_hash: isStr(s.robots_hash) ? s.robots_hash : null,
-    message: isStr(s.message) ? s.message : null,
+    last_success_at: isoOrNull(s.last_success_at),
+    last_item_at: isoOrNull(s.last_item_at),
+    items_new_24h: numOrNull(s.items_new_24h),
+    items_new_7d: numOrNull(s.items_new_7d),
+    extraction_rate_7d: isProb(s.extraction_rate_7d) ? s.extraction_rate_7d : null,
+    error_rate_24h: isProb(s.error_rate_24h) ? s.error_rate_24h : 0,
+    robots_hash: strOrNull(s.robots_hash),
+    message: strOrNull(s.message),
   }));
   return { data: { generated_at: raw.generated_at, sources }, discarded: raw.sources.length - sources.length };
 }
@@ -195,17 +247,15 @@ function isAlert(v: unknown): v is Alert {
   );
 }
 
+const EMPTY_H = { n: 0, hit_rate: 0, brier: 0, log_loss: 0 };
+
 export function validateAccuracy(raw: unknown): { data: AccuracyResponse; discarded: number; discardedWeekly: number } {
-  if (
-    !isObj(raw) ||
-    !isIsoDate(raw.generated_at) ||
-    !isObj(raw.period) ||
-    !isIsoDate(raw.period.from) ||
-    !isIsoDate(raw.period.to) ||
-    !hasHorizonMetrics(raw.by_horizon, ["n", "hit_rate", "brier", "log_loss"])
-  ) {
+  if (!isObj(raw) || !isIsoDate(raw.generated_at)) {
     throw new InvalidResponseError("/prediction-log/accuracy", "formato inesperado");
   }
+  // Janelas sem predições resolvidas podem faltar na API; viram n = 0.
+  const got = horizonMetrics<AccuracyResponse["by_horizon"][Horizon]>(raw.by_horizon, ["n", "hit_rate", "brier", "log_loss"]);
+  const by_horizon = { "7": got["7"] ?? EMPTY_H, "15": got["15"] ?? EMPTY_H, "30": got["30"] ?? EMPTY_H };
   // F3: semana malformada é descartada e contada, como itens e alertas.
   const rawWeekly = Array.isArray(raw.weekly) ? raw.weekly : [];
   const weekly = rawWeekly.filter(
@@ -222,10 +272,68 @@ export function validateAccuracy(raw: unknown): { data: AccuracyResponse; discar
         }
       : { horizon: null, source: null, pair: null },
   }));
-  const out = raw as unknown as AccuracyResponse;
   return {
-    data: { generated_at: out.generated_at, period: out.period, by_horizon: out.by_horizon, weekly, alerts },
+    data: { generated_at: raw.generated_at, period: periodOrNull(raw.period), by_horizon, weekly, alerts },
     discarded: rawAlerts.length - alerts.length,
     discardedWeekly: rawWeekly.length - weekly.length,
+  };
+}
+
+function isThresholdAlert(v: unknown): v is ThresholdAlert {
+  return (
+    isObj(v) &&
+    isIsoDate(v.made_at) &&
+    isObj(v.pair) && isStr(v.pair.origin) && isStr(v.pair.destination) &&
+    isStr(v.type) && OFFER_TYPES.has(v.type) &&
+    isNum(v.horizon_days) &&
+    isProb(v.probability) &&
+    (v.previous_probability === null || v.previous_probability === undefined || isProb(v.previous_probability)) &&
+    isProb(v.threshold)
+  );
+}
+
+export function validateThresholdAlerts(raw: unknown): { data: ThresholdAlertsResponse; discarded: number } {
+  if (!isObj(raw) || !isIsoDate(raw.generated_at) || !Array.isArray(raw.items)) {
+    throw new InvalidResponseError("/alerts", "formato inesperado");
+  }
+  const items = raw.items.filter(isThresholdAlert).map((a) => ({ ...a, previous_probability: a.previous_probability ?? null }));
+  return { data: { generated_at: raw.generated_at, items }, discarded: raw.items.length - items.length };
+}
+
+export function validateExplanation(raw: unknown): Explanation {
+  if (!isObj(raw) || !isObj(raw.pair) || !isStr(raw.pair.origin) || !isStr(raw.pair.destination) || !isStr(raw.type) || !OFFER_TYPES.has(raw.type)) {
+    throw new InvalidResponseError("/predictions/explanation", "formato inesperado");
+  }
+  const f = isObj(raw.factors) ? raw.factors : {};
+  const w = isObj(raw.windows) ? raw.windows : {};
+  const windows: Explanation["windows"] = {};
+  for (const h of HORIZON_KEYS) if (isProb(w[h])) windows[h] = w[h];
+  return {
+    pair: { origin: raw.pair.origin, destination: raw.pair.destination },
+    type: raw.type as Explanation["type"],
+    as_of: isIsoDate(raw.as_of) ? raw.as_of : "",
+    windows,
+    factors: {
+      method: methodOrNull(f.method),
+      probability_driven_by: strOrNull(f.probability_driven_by),
+      n_campaigns: Number.isInteger(f.n_campaigns) && (f.n_campaigns as number) >= 0 ? (f.n_campaigns as number) : null,
+      last_campaign_start: isoOrNull(f.last_campaign_start),
+      days_since_last: numOrNull(f.days_since_last),
+      median_interval_days: numOrNull(f.median_interval_days),
+      min_campaigns_b1: numOrNull(f.min_campaigns_b1),
+    },
+  };
+}
+
+export function validateStatus(raw: unknown): StatusResponse {
+  if (!isObj(raw) || !isIsoDate(raw.generated_at) || !isObj(raw.stop) || typeof raw.stop.active !== "boolean") {
+    throw new InvalidResponseError("/status", "formato inesperado");
+  }
+  const lj = isObj(raw.last_job) ? raw.last_job : null;
+  return {
+    generated_at: raw.generated_at,
+    stop: { active: raw.stop.active, source: strOrNull(raw.stop.source), since: isoOrNull(raw.stop.since) },
+    last_job: lj ? { run_at: isoOrNull(lj.run_at), model_run_id: strOrNull(lj.model_run_id), status: strOrNull(lj.status) } : null,
+    n_campaigns_total: Number.isInteger(raw.n_campaigns_total) ? (raw.n_campaigns_total as number) : null,
   };
 }

@@ -1,34 +1,46 @@
 # Contrato da API do dashboard (v1)
 
-Data: 2026-10-13. Status: proposto pela T09a; a API ainda não existe. O dashboard consome
-`dashboard/mock/*.json` com exatamente este formato e troca para a API real por variável de
-ambiente, sem mudar a interface de dados.
+Data: 2026-10-14. Status: **implementado** pela T10a (`/predictions`, `/model/metrics`,
+`/source-health`, `/prediction-log/accuracy`), **em revisão** na T10b (`/alerts`,
+`/predictions/{origin}/{destination}/explanation`, PR #50) e **proposto** pelo dashboard
+(`/status`, campos `method` e `n_campaigns` em `/predictions`). O dashboard consome
+`dashboard/mock/*.json` com exatamente este formato e troca para a API real por variável
+de ambiente, sem mudar a interface de dados.
 
 ## Transporte e autenticação
 
-- Base: `https://<host-da-vps>/v1` (HTTPS obrigatório; Caddy termina TLS).
+- Base: `https://<host-da-vps>/v1` (HTTPS obrigatório; Caddy termina TLS). Enquanto a VPS
+  não tem host público, o dashboard fica em dados simulados (ver `docs/deploy-vercel.md`).
 - Todas as rotas são `GET` e devolvem `application/json; charset=utf-8`.
 - Autenticação: header `X-API-Key: <chave>`. A chave vive só em variável de ambiente
   (`PREDITOR_API_KEY` no servidor Next.js / na Vercel). Nunca no código, nunca no cliente
-  (as chamadas acontecem em Server Components ou Route Handlers).
-- Erros: `401` sem chave, `403` chave inválida, `429` limite excedido, `503` modelo sem
-  predições publicadas. Corpo de erro: `{"error": {"code": "string", "message": "string"}}`.
+  (as chamadas acontecem em Server Components e na rota `/api/explanation`).
+- Limite: 60 req/min por chave e 120 por IP (`RATE_LIMIT_PER_MINUTE_*` na API). O dashboard
+  faz 3 a 4 chamadas por tela, com cache de 5 min (`revalidate: 300`), e carrega a
+  explicação de cada item só quando o leitor abre o bloco.
+- Erros: `401` sem chave, `403` chave inválida, `429` limite excedido, `503` API sem chave
+  configurada. Corpo de erro: `{"error": {"code": "string", "message": "string"}}`.
 - Datas e instantes em ISO 8601 UTC (`2026-10-13T06:00:00Z`). O dashboard exige calendário
   válido (dia existente no mês, hora/minuto/segundo na faixa); `2026-02-31` é rejeitado,
   não rolado para março. Percentuais como número inteiro ou decimal em pontos percentuais
   (`90` = 90% de bônus). Probabilidades em `[0, 1]`.
-- Tolerância do dashboard: item, alerta, fonte ou semana de `weekly` malformados são
-  descartados e contados na tela; `validation.folds` que não for inteiro positivo e
-  intervalos de confiança ausentes viram `null` em vez de derrubar a tela.
+- Tolerância do dashboard: item, alerta, fonte, semana de `weekly` ou registro de `/alerts`
+  malformados são descartados e contados na tela; `validation.folds` que não for inteiro
+  positivo, intervalos de confiança ausentes, `bonus_pct` sem histórico, contadores de fonte
+  e `period` sem dados viram `null` em vez de derrubar a tela. Endpoint opcional ausente
+  (`404`) vira aviso "a API ainda não expõe".
+- Fallback: com a API configurada, qualquer falha (rede, timeout de 8 s, HTTP, JSON,
+  validação) faz a tela cair para os dados simulados com um aviso em destaque e o motivo.
 - Idioma dos textos (`reason`, `label`, `message`): português.
 
 Variáveis do dashboard:
 
 | Variável | Onde | Uso |
 |---|---|---|
-| `PREDITOR_API_BASE_URL` | servidor | base `https://host/v1`; ausente = modo mock |
-| `PREDITOR_API_KEY` | servidor | valor do header `X-API-Key` |
-| `PREDITOR_DATA_SOURCE` | servidor | `mock` (padrão) ou `api`; força a origem |
+| `PREDITOR_API_BASE_URL` | servidor | base `https://host/v1`; ausente = modo simulado |
+| `NEXT_PUBLIC_API_BASE_URL` | servidor | alternativa à anterior (também lida só no servidor; a URL base não é segredo) |
+| `PREDITOR_API_KEY` | servidor | valor do header `X-API-Key`; **nunca** com prefixo `NEXT_PUBLIC_` |
+| `PREDITOR_DATA_SOURCE` | servidor | `mock` força dados simulados; `api` força a API; ausente = API se houver base |
 
 ## GET /v1/predictions
 
@@ -39,8 +51,8 @@ Query opcional: `type` (`transfer_bonus|purchase_discount|boosted_accrual`), `li
 
 ```json
 {
-  "generated_at": "2026-10-13T06:00:00Z",
-  "model": { "run_id": "mr_2026-10-13", "name": "B1", "version": "1.3.0", "role": "champion" },
+  "generated_at": "2026-10-14T00:00:00Z",
+  "model": { "run_id": "mr_3", "name": "B1", "version": "1.0.0", "role": "champion" },
   "items": [
     {
       "rank": 1,
@@ -49,17 +61,15 @@ Query opcional: `type` (`transfer_bonus|purchase_discount|boosted_accrual`), `li
       "segmented": false,
       "segment_label": null,
       "windows": {
-        "7":  { "probability": 0.62, "ci_low": 0.55, "ci_high": 0.69 },
-        "15": { "probability": 0.81, "ci_low": 0.75, "ci_high": 0.86 },
-        "30": { "probability": 0.94, "ci_low": 0.90, "ci_high": 0.97 }
+        "7":  { "probability": 0.198, "ci_low": 0.198, "ci_high": 0.198 },
+        "15": { "probability": 0.376, "ci_low": 0.376, "ci_high": 0.376 },
+        "30": { "probability": 0.611, "ci_low": 0.611, "ci_high": 0.611 }
       },
       "bonus_pct": { "p25": 70, "p50": 80, "p75": 100 },
-      "last_offer": { "start_at": "2026-09-12", "end_at": "2026-09-18", "bonus_pct": 80, "days_since": 31 },
-      "reasons": [
-        { "kind": "days_since_last", "label": "31 dias desde a última oferta", "detail": "intervalo mediano histórico: 27 dias", "weight": 0.42 },
-        { "kind": "month", "label": "Outubro concentra 11% das ofertas do par", "detail": "3º mês mais ativo", "weight": 0.21 },
-        { "kind": "sibling_pairs", "label": "Livelo → LATAM Pass ativo desde 10/10", "detail": "pares irmãos costumam abrir em até 5 dias", "weight": 0.18 }
-      ]
+      "last_offer": null,
+      "reasons": [],
+      "method": "b0",
+      "n_campaigns": 23
     }
   ]
 }
@@ -74,10 +84,44 @@ Campos:
 | `type` | enum | `transfer_bonus`, `purchase_discount`, `boosted_accrual` |
 | `segmented`, `segment_label` | bool, string\|null | oferta restrita (clube, cartão) tem par próprio |
 | `windows.{7,15,30}.probability` | number 0–1 | probabilidade calibrada de início da oferta na janela |
-| `windows.*.ci_low`, `ci_high` | number 0–1 | intervalo (bootstrap em blocos) |
-| `bonus_pct.p25/p50/p75` | number | faixa prevista do bônus em pontos percentuais |
-| `last_offer` | objeto\|null | última oferta conhecida e `days_since` até `generated_at` |
-| `reasons[]` | lista | `kind` em `days_since_last`, `month`, `sibling_pairs`, `source_signal`, `other`; `weight` soma ≤ 1 |
+| `windows.*.ci_low`, `ci_high` | number 0–1 | intervalo (bootstrap em blocos). **Hoje a API manda igual à probabilidade**: o dashboard mostra "IC indisponível" quando `ci_low == ci_high` |
+| `bonus_pct.p25/p50/p75` | number\|null | faixa prevista do bônus em pontos percentuais; `null` sem histórico |
+| `last_offer` | objeto\|null | última oferta e `days_since`; **a API de hoje manda `null`** (a recência está em `/explanation`) |
+| `reasons[]` | lista | `kind` em `days_since_last`, `month`, `sibling_pairs`, `source_signal`, `other`; `weight` soma ≤ 1; **a API de hoje manda `[]`** |
+| `method` | `b0`\|`b1`\|ausente | **proposto**: método do item (o job já grava em `prediction.explanation.method`); evita uma chamada de explicação por item só para mostrar o selo |
+| `n_campaigns` | int\|ausente | **proposto**: nº de campanhas conhecidas em `as_of` (idem) |
+
+`model.name` é o modelo da execução (`B0` se nenhum par atingiu 25 campanhas, senão `B1`).
+O dashboard mostra selo só para `B0` e `B1`; qualquer outro nome (ex. `C1`) aparece como
+"modelo não decidido" até `comparison.decision` em `/model/metrics` ser `promote_challenger`.
+
+## GET /v1/predictions/{origin}/{destination}/explanation (T10b)
+
+Fatores point-in-time gravados pelo job na predição mais recente do par. Query: `type`
+(padrão `transfer_bonus`). `404` quando não há predição para o item.
+
+```json
+{
+  "pair": { "origin": "Livelo", "destination": "Smiles" },
+  "type": "transfer_bonus",
+  "as_of": "2026-10-14",
+  "windows": { "7": 0.198, "15": 0.376, "30": 0.611 },
+  "factors": {
+    "method": "b0",
+    "probability_driven_by": "base_rate",
+    "n_campaigns": 23,
+    "last_campaign_start": "2026-08-03",
+    "days_since_last": 72,
+    "median_interval_days": 27.0,
+    "min_campaigns_b1": 25
+  }
+}
+```
+
+O dashboard mostra "Baseado em N campanhas históricas", a última campanha e a recência,
+o intervalo mediano e o motivo do método (`B1` exige `min_campaigns_b1`). Qualquer fator
+ausente vira "—". A chamada sai da rota interna `/api/explanation` do dashboard (proxy
+server-side, chave no servidor, parâmetros validados), só quando o leitor abre o bloco.
 
 ## GET /v1/model/metrics
 
@@ -101,12 +145,7 @@ separada da precisão real em produção (`prediction_log` conferido com o que a
       "by_horizon": { "7": { "brier": 0.151, "log_loss": 0.46, "hit_rate": 0.71, "n": 280 }, "15": { "...": 0 }, "30": { "...": 0 } }
     }
   },
-  "challenger": {
-    "name": "C1", "version": "0.4.2", "trained_at": "2026-10-06T03:40:00Z",
-    "horizons": [7, 15, 30],
-    "validation": { "...": "mesmo formato do campeão" },
-    "production": null
-  },
+  "challenger": null,
   "comparison": {
     "horizon": 30,
     "delta_brier": -0.004, "delta_log_loss": 0.011,
@@ -123,7 +162,11 @@ separada da precisão real em produção (`prediction_log` conferido com o que a
 
 `comparison.decision` ∈ `keep_champion | promote_challenger | insufficient_data`.
 `reliability.bins` são os pontos da curva de confiabilidade (previsto × observado) do campeão.
-`production` é `null` quando o modelo nunca serviu predições.
+`production` é `null` quando o modelo nunca serviu predições. **A API de hoje** devolve
+`validation` vazia (`folds: 0`, `period` nulo, `by_horizon: {}`), `production: null`,
+`comparison` zerado com `note: "sem dados suficientes"` e `bins: []`; o dashboard mostra os
+estados vazios correspondentes e preenche a precisão em produção com
+`/prediction-log/accuracy`.
 
 ## GET /v1/source-health
 
@@ -150,12 +193,13 @@ Saúde de cada fonte coletada (tabela `source_health`).
 ```
 
 `status` ∈ `ok | degraded | stale | blocked | error`. `stale` = 7 dias sem item novo.
-`kind` ∈ `rss | html | wayback | official`.
+`kind` ∈ `rss | html | wayback | official`. `items_new_*` e `extraction_rate_7d` podem ser
+`null` (fonte sem checagem bem-sucedida); o dashboard mostra "—".
 
 ## GET /v1/prediction-log/accuracy
 
 Acurácia real das predições registradas em `prediction_log` (só inserção), já resolvidas
-contra o que aconteceu. Alimenta a parte "produção" da tela de métricas e os alertas de drift.
+contra o que aconteceu. Alimenta a parte "produção" da tela de métricas.
 
 Query opcional: `from`, `to` (datas), `horizon`.
 
@@ -185,8 +229,53 @@ Query opcional: `from`, `to` (datas), `horizon`.
 }
 ```
 
-`alerts[].severity` ∈ `info | warning | critical`; `kind` ∈ `drift | source | budget | pipeline | model`.
-O dashboard junta esses alertas com os derivados de `source-health` (`status != ok`) na tela de alertas.
+`period.from` é `null` sem predições resolvidas. Janelas ausentes em `by_horizon` viram
+`n = 0`. `alerts[].severity` ∈ `info | warning | critical`; `kind` ∈
+`drift | source | budget | pipeline | model`. **A API de hoje** devolve `weekly: []` e
+`alerts: []`. O dashboard junta esses alertas com os derivados de `source-health`
+(`status != ok`) e com o STOP ativo na tela de alertas.
+
+## GET /v1/alerts (T10b)
+
+Cruzamentos de limiar de probabilidade registrados pelo job diário (tabela `alert`), sem
+canal externo. Query: `limit` (1–500, padrão 100).
+
+```json
+{
+  "generated_at": "2026-10-14T06:29:24Z",
+  "items": [
+    {
+      "made_at": "2026-10-14T00:00:00Z",
+      "pair": { "origin": "Livelo", "destination": "Smiles" },
+      "type": "transfer_bonus",
+      "horizon_days": 30,
+      "probability": 0.611,
+      "previous_probability": null,
+      "threshold": 0.5
+    }
+  ]
+}
+```
+
+## GET /v1/status (proposto pelo dashboard)
+
+Estado de operação. Hoje o STOP é um arquivo (`STOP` na raiz ou `PREDITOR_STOP_FILE`) ou a
+flag `PREDITOR_STOP=1`, conhecidos só pelo job e pelos coletores; o dashboard não tem como
+saber. Proposta mínima (a API já tem `stop_requested()` em `preditor.stop`):
+
+```json
+{
+  "generated_at": "2026-10-14T06:29:24Z",
+  "stop": { "active": false, "source": null, "since": null },
+  "last_job": { "run_at": "2026-10-14T00:00:00Z", "model_run_id": "mr_3", "status": "ok" },
+  "n_campaigns_total": 56
+}
+```
+
+`stop.source` ∈ `file | env | null`. `last_job` vem do `model_run` mais recente.
+`n_campaigns_total` é o nº de ofertas não só-gap conhecidas em `as_of`. Enquanto a rota não
+existir, o dashboard mostra "STOP: desconhecido (a API não expõe /v1/status)" e usa
+`generated_at` de `/predictions` como última execução.
 
 ## Versionamento
 

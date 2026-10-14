@@ -1,8 +1,11 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { DataNotice } from "@/components/data-notice";
+import { ModelBadge } from "@/components/model-badge";
 import { PageHeader, SummaryPanel } from "@/components/page-header";
 import { PredictionList } from "@/components/prediction-list";
-import { getPredictions, type OfferType } from "@/lib/api";
+import { StatusStrip } from "@/components/status-strip";
+import { dataSource, getModelMetrics, getPredictions, getStatus, type OfferType } from "@/lib/api";
 import { OFFER_TYPE_LABEL, dateTime, pct } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Previsões" };
@@ -19,10 +22,12 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
   const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
   const type = isOfferType(rawType) ? rawType : undefined;
 
-  const [allRes, dataRes] = await Promise.all([getPredictions(), getPredictions({ type })]);
-  const all = allRes.data;
-  const data = dataRes.data;
-  const discarded = allRes.discarded;
+  const configured = dataSource();
+  const [predRes, metricsRes, statusRes] = await Promise.all([getPredictions(), getModelMetrics(), getStatus()]);
+  const all = predRes.data;
+  const items = type ? all.items.filter((i) => i.type === type) : all.items;
+  const discarded = predRes.discarded;
+  const decision = metricsRes.origin === "api" || configured === "mock" ? metricsRes.data.comparison.decision : null;
 
   const top = all.items[0];
   const likely30 = all.items.filter((i) => i.windows["30"].probability >= 0.5).length;
@@ -35,22 +40,26 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
         description="Lista ranqueada por probabilidade de uma nova oferta começar nos próximos 30 dias. Cada item traz a probabilidade calibrada por janela, a faixa prevista do bônus e os fatores que o colocaram ali."
       />
 
+      <DataNotice configured={configured} sources={[predRes, metricsRes]} />
+
       <SummaryPanel
         items={[
           {
             label: "Mais provável em 7 dias",
             value: top ? `${top.pair.origin} → ${top.pair.destination}` : "—",
-            hint: top ? `${pct(top.windows["7"].probability)} · mediana ${top.bonus_pct.p50}%` : undefined,
+            hint: top ? `${pct(top.windows["7"].probability)}${top.bonus_pct.p50 !== null ? ` · mediana ${top.bonus_pct.p50}%` : ""}` : undefined,
           },
           { label: "Pares com ≥ 50% em 7 dias", value: likely7, hint: `de ${all.items.length} acompanhados` },
           { label: "Pares com ≥ 50% em 30 dias", value: likely30, hint: `de ${all.items.length} acompanhados` },
           {
             label: "Modelo em produção",
-            value: `${all.model.name} ${all.model.version}`,
-            hint: `gerado ${dateTime(all.generated_at)}`,
+            value: <ModelBadge name={all.model.name} decision={decision} />,
+            hint: `execução ${all.model.run_id} · gerado ${dateTime(all.generated_at)}`,
           },
         ]}
       />
+
+      <StatusStrip status={statusRes} jobFallbackAt={all.generated_at} now={new Date(all.generated_at)} />
 
       <nav aria-label="Filtrar por tipo" className="mb-4 flex flex-wrap gap-2">
         <FilterChip href="/" active={!type}>
@@ -70,13 +79,13 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
         </p>
       ) : null}
 
-      <PredictionList items={data.items} />
+      <PredictionList items={items} />
 
       <p className="mt-6 max-w-prose text-xs leading-5 text-ink-3">
         Probabilidade é a chance calibrada de uma oferta do par e tipo começar dentro da janela, contada a partir de{" "}
-        {dateTime(all.generated_at)}. O intervalo abaixo da barra vem de bootstrap em blocos. P25, P50 e P75 são
-        os quartis do bônus previsto em pontos percentuais. Ofertas segmentadas (clube, cartão) têm linha própria e
-        não se misturam com a oferta geral.
+        {dateTime(all.generated_at)}. O intervalo abaixo da barra, quando existe, vem de bootstrap em blocos. P25, P50 e
+        P75 são os quartis do bônus previsto em pontos percentuais. Pares com menos de 25 campanhas usam a taxa-base (B0);
+        com 25 ou mais, o hazard empírico (B1). Ofertas segmentadas (clube, cartão) têm linha própria.
       </p>
     </>
   );

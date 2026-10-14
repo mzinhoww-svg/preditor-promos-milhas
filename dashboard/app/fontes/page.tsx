@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Badge, STATUS_TONE } from "@/components/badge";
+import { DataNotice } from "@/components/data-notice";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ScrollRegion } from "@/components/scroll-region";
-import { getSourceHealth, type SourceStatus } from "@/lib/api";
+import { dataSource, getSourceHealth, type SourceStatus } from "@/lib/api";
 import { SOURCE_KIND_LABEL, SOURCE_STATUS_LABEL, dateTime, int, pct, relativeFrom } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Fontes" };
@@ -11,12 +12,14 @@ export const dynamic = "force-dynamic";
 const ORDER: SourceStatus[] = ["blocked", "error", "degraded", "stale", "ok"];
 
 export default async function SourcesPage() {
-  const { data, discarded } = await getSourceHealth();
+  const configured = dataSource();
+  const shRes = await getSourceHealth();
+  const { data, discarded } = shRes;
   const now = new Date(data.generated_at);
   const sources = [...data.sources].sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
   const count = (s: SourceStatus) => sources.filter((x) => x.status === s).length;
-  const new24 = sources.reduce((acc, s) => acc + s.items_new_24h, 0);
-  const new7 = sources.reduce((acc, s) => acc + s.items_new_7d, 0);
+  const new24 = sources.reduce((acc, s) => acc + (s.items_new_24h ?? 0), 0);
+  const new7 = sources.reduce((acc, s) => acc + (s.items_new_7d ?? 0), 0);
 
   return (
     <>
@@ -24,6 +27,8 @@ export default async function SourcesPage() {
         title="Saúde das fontes"
         description="Cada fonte coletada, com a última coleta bem-sucedida, itens novos, taxa de extração e mudanças no robots.txt. Uma fonte parada há 7 dias ou com robots alterado vira alerta."
       />
+
+      <DataNotice configured={configured} sources={[shRes]} />
 
       <SummaryPanel
         items={[
@@ -77,10 +82,10 @@ export default async function SourcesPage() {
                     {relativeFrom(s.last_item_at, now)}
                     <div className="text-xs text-ink-3">{dateTime(s.last_item_at)}</div>
                   </td>
-                  <td className="tnum py-3 pr-4 text-right text-ink">{int(s.items_new_24h)}</td>
-                  <td className="tnum py-3 pr-4 text-right text-ink-2">{int(s.items_new_7d)}</td>
-                  <td className={`tnum py-3 pr-4 text-right ${s.extraction_rate_7d < 0.8 && s.items_new_7d > 0 ? "font-medium text-warn" : "text-ink-2"}`}>
-                    {s.items_new_7d > 0 ? pct(s.extraction_rate_7d) : "—"}
+                  <td className="tnum py-3 pr-4 text-right text-ink">{s.items_new_24h === null ? "—" : int(s.items_new_24h)}</td>
+                  <td className="tnum py-3 pr-4 text-right text-ink-2">{s.items_new_7d === null ? "—" : int(s.items_new_7d)}</td>
+                  <td className={`tnum py-3 pr-4 text-right ${s.extraction_rate_7d !== null && s.extraction_rate_7d < 0.8 && (s.items_new_7d ?? 0) > 0 ? "font-medium text-warn" : "text-ink-2"}`}>
+                    {s.extraction_rate_7d !== null && (s.items_new_7d ?? 0) > 0 ? pct(s.extraction_rate_7d) : "—"}
                   </td>
                   <td className={`tnum py-3 pr-4 text-right ${s.error_rate_24h > 0.2 ? "font-medium text-crit" : "text-ink-2"}`}>
                     {pct(s.error_rate_24h)}
