@@ -3,28 +3,225 @@
   "$id": "https://github.com/mzinhoww-svg/preditor-promos-milhas/data/gold/schema/message.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["gold_id", "split", "status", "kind", "source", "url", "wayback_ts", "raw_message_id", "content_sha256",
-               "observed_at", "published_vs_capture_gap", "text", "expected", "campaign_ids", "tags", "notes",
-               "annotated_by", "verified_by", "verified_at"],
+  "required": [
+    "gold_id",
+    "split",
+    "status",
+    "kind",
+    "source",
+    "url",
+    "wayback_ts",
+    "raw_message_id",
+    "content_sha256",
+    "observed_at",
+    "published_vs_capture_gap",
+    "text",
+    "expected",
+    "campaign_ids",
+    "tags",
+    "notes",
+    "annotated_by",
+    "verified_by",
+    "verified_at"
+  ],
   "properties": {
-    "gold_id": {"type": "string", "pattern": "^m-[0-9]{4}$"},
-    "split": {"enum": ["dev", "test"]},
-    "status": {"enum": ["gold_provisional", "gold_verified"]},
-    "kind": {"enum": ["positive", "distractor"]},
-    "source": {"type": "string"},
-    "url": {"type": "string", "format": "uri"},
-    "wayback_ts": {"type": ["string", "null"], "pattern": "^[0-9]{14}$"},
-    "raw_message_id": {"type": "integer"},
-    "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "observed_at": {"type": "string", "format": "date-time"},
-    "published_vs_capture_gap": {"type": "boolean"},
-    "text": {"type": "string", "minLength": 1, "maxLength": 600},
-    "expected": {"$ref": "https://github.com/mzinhoww-svg/preditor-promos-milhas/schemas/oferta-v1.json"},
-    "campaign_ids": {"type": "array", "items": {"type": "string", "pattern": "^c-[0-9]{4}$"}},
-    "tags": {"type": "array", "items": {"type": "string"}},
-    "notes": {"type": "string"},
-    "annotated_by": {"type": "string"},
-    "verified_by": {"type": ["string", "null"]},
-    "verified_at": {"type": ["string", "null"], "format": "date-time"}
+    "gold_id": {
+      "type": "string",
+      "pattern": "^m-[0-9]{4}$"
+    },
+    "split": {
+      "enum": [
+        "dev",
+        "test"
+      ]
+    },
+    "status": {
+      "enum": [
+        "gold_provisional",
+        "gold_verified"
+      ]
+    },
+    "kind": {
+      "enum": [
+        "positive",
+        "distractor"
+      ]
+    },
+    "source": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "wayback_ts": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{14}$"
+    },
+    "raw_message_id": {
+      "type": "integer"
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "published_vs_capture_gap": {
+      "type": "boolean"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600
+    },
+    "expected": {
+      "$ref": "#/$defs/oferta_v1"
+    },
+    "campaign_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^c-[0-9]{4}$"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "annotated_by": {
+      "type": "string"
+    },
+    "verified_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "verified_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "oferta_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ofertas"
+      ],
+      "properties": {
+        "ofertas": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "origem",
+              "destino",
+              "tipo",
+              "bonus_pct",
+              "inicio",
+              "fim",
+              "segmentada",
+              "segmento"
+            ],
+            "properties": {
+              "origem": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "livelo",
+                  "esfera",
+                  "latam_pass",
+                  "smiles",
+                  "azul_fidelidade",
+                  null
+                ]
+              },
+              "destino": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "livelo",
+                  "esfera",
+                  "latam_pass",
+                  "smiles",
+                  "azul_fidelidade",
+                  null
+                ]
+              },
+              "tipo": {
+                "type": "string",
+                "enum": [
+                  "transfer_bonus",
+                  "purchase_discount",
+                  "boosted_accrual"
+                ]
+              },
+              "bonus_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 1,
+                "maximum": 300
+              },
+              "inicio": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^20[2-3][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+              },
+              "fim": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^20[2-3][0-9]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+              },
+              "segmentada": {
+                "type": "boolean"
+              },
+              "segmento": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 60
+              },
+              "bumerangue_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 1,
+                "maximum": 300
+              }
+            }
+          }
+        }
+      },
+      "$comment": "Copia de oferta-v1 (docs/plans/coletor-livelo-smiles.md §3.1, $id .../schemas/oferta-v1.json). Mudou la, mudar aqui; tests/test_gold.py deve comparar."
+    }
   }
 }
