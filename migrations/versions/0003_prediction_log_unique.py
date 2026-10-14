@@ -1,8 +1,8 @@
 """unicidade idempotente em prediction_log por dia logico"""
 from alembic import op
 
-revision = "0002"
-down_revision = "0001"
+revision = "0003"
+down_revision = "0002"
 UP = """
 CREATE UNIQUE INDEX IF NOT EXISTS uq_prediction_log_logical
 ON prediction_log (model_version, origin, destination, event_type, horizon_days,

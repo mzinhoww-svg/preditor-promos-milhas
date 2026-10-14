@@ -1,0 +1,11 @@
+{
+  "updated_at": "2026-10-13T20:00:00Z",
+  "budget": {
+    "provider": "openrouter",
+    "cap_brl": 100.0,
+    "spent_brl": 0.0,
+    "spent": 0.0
+  },
+  "spent_brl": 0.0,
+  "cap_brl": 100.0
+}
