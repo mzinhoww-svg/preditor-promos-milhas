@@ -19,3 +19,17 @@ _url = os.environ.get("DATABASE_URL")
 if _url and _db_name(_url) in _PROTECTED:
     warnings.warn(f"DATABASE_URL aponta para banco protegido {_db_name(_url)!r}; testes com banco serao pulados", stacklevel=1)
     os.environ.pop("DATABASE_URL", None)
+
+
+import subprocess
+import sys
+
+import pytest
+
+
+@pytest.fixture
+def db_at_head():
+    """Garante o schema no head (outros testes de schema podem ter feito downgrade)."""
+    if os.environ.get("DATABASE_URL"):
+        subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True, env=dict(os.environ))
+    yield

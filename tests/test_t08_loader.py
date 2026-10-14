@@ -35,7 +35,7 @@ def _mk(c, i, gaps):
                   {"o": oid, "r": rid, "d": date(2024, i, 1)})
 
 
-def test_loader_marks_gap_only_and_exclude_drops_them():
+def test_loader_marks_gap_only_and_exclude_drops_them(db_at_head):
     e = create_engine(URL_DB)
     _clean(e)
     try:

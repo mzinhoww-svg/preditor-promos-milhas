@@ -17,7 +17,7 @@ FALSE_POS = ('<html><body><aside><p>Azul Fidelidade para Smiles com 110% de bôn
 
 
 @pytest.fixture
-def eng():
+def eng(db_at_head):
     e = create_engine(URL_DB)
     with e.begin() as c:
         c.execute(text("DELETE FROM offer_evidence"))

@@ -39,7 +39,7 @@ URL_DB = os.environ.get("DATABASE_URL")
 
 
 @pytest.mark.skipif(not URL_DB, reason="DATABASE_URL ausente")
-def test_daily_job_fetch_offers_skips_gap_only_offers():
+def test_daily_job_fetch_offers_skips_gap_only_offers(db_at_head):
     from preditor.jobs.daily_predict import fetch_offers
 
     e = create_engine(URL_DB)
