@@ -1,0 +1,239 @@
+{
+  "updated_at": "2026-10-13",
+  "items": [
+    {
+      "id": "T01-schema-ci",
+      "title": "Schema Postgres + Alembic + Compose local + CI gitleaks",
+      "fase": "Setup",
+      "peso": 3,
+      "estado": "Feito",
+      "evidencia": "migrations/, docker-compose.yml, .github/workflows/ci.yml",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-glossario-decisoes",
+      "title": "Glossário e decisões 001-004",
+      "fase": "Setup",
+      "peso": 2,
+      "estado": "Feito",
+      "evidencia": "docs/glossario.md, docs/decisions/",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T02-campaigns",
+      "title": "Módulo campaigns (dedup, validated, peso)",
+      "fase": "Portao de viabilidade/coleta",
+      "peso": 2,
+      "estado": "Em revisao",
+      "evidencia": "src/preditor/campaigns.py; teste cruzado pendente",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T05-spec",
+      "title": "Spec do coletor Livelo → Smiles",
+      "fase": "Portao de viabilidade/coleta",
+      "peso": 2,
+      "estado": "Feito",
+      "evidencia": "docs/plans/coletor-livelo-smiles.md; PR #2",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T05a-ingest",
+      "title": "Cliente Wayback CDX e ingest idempotente",
+      "fase": "Portao de viabilidade/coleta",
+      "peso": 3,
+      "estado": "Feito",
+      "evidencia": "PR #1 (CI verde)",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T05-coletor",
+      "title": "Coletor RSS + backfill Wayback (≥24 meses) + listener",
+      "fase": "Portao de viabilidade/coleta",
+      "peso": 4,
+      "estado": "Em andamento",
+      "evidencia": "Codigo mergeado (PR #19, vazamento aprovado); backfill real de 24+ meses e listener de feed ainda nao executados",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T06-gold",
+      "title": "Conjunto de ouro (50 campanhas)",
+      "fase": "Estruturacao/extrator",
+      "peso": 3,
+      "estado": "Pendente",
+      "evidencia": "data/gold",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T07a-extrator",
+      "title": "Extrator determinístico regex + pydantic",
+      "fase": "Estruturacao/extrator",
+      "peso": 3,
+      "estado": "Feito",
+      "evidencia": "PR #5 (CI rodando)",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T07b-limites",
+      "title": "Extrator acima dos limites contra conjunto de ouro",
+      "fase": "Estruturacao/extrator",
+      "peso": 3,
+      "estado": "Pendente",
+      "evidencia": "thresholds decision 004",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T08a-baseline",
+      "title": "Baseline B0/B1",
+      "fase": "Modelo",
+      "peso": 3,
+      "estado": "Feito",
+      "evidencia": "PR #3 mergeado",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T08a-walkforward",
+      "title": "Walk-forward sem vazamento",
+      "fase": "Modelo",
+      "peso": 3,
+      "estado": "Feito",
+      "evidencia": "PR #3 mergeado",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-modelo-campeao",
+      "title": "Modelo campeão x desafiante decidido",
+      "fase": "Modelo",
+      "peso": 4,
+      "estado": "Em andamento",
+      "evidencia": "T08b com dados sinteticos; decisao real so com >= 25 campanhas por par e tipo",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-job-diario",
+      "title": "Job diário gravando prediction",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 3,
+      "estado": "Em revisao",
+      "evidencia": "MVP",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-api",
+      "title": "API respondendo",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 3,
+      "estado": "Em revisao",
+      "evidencia": "PR #25 aberto (FastAPI, X-API-Key, rate limit), em teste cruzado",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-dashboard-vercel",
+      "title": "Dashboard na Vercel com lista e métricas",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 4,
+      "estado": "Em andamento",
+      "evidencia": "Dashboard v0 mergeado com dados de exemplo; deploy na Vercel e API real pendentes",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-alertas",
+      "title": "Alertas",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 2,
+      "estado": "Pendente",
+      "evidencia": "MVP",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-stop",
+      "title": "STOP",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 2,
+      "estado": "Pendente",
+      "evidencia": "MVP",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-actions",
+      "title": "ACTIONS.md",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 1,
+      "estado": "Em andamento",
+      "evidencia": "docs/ACTIONS.md",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-model-run",
+      "title": "model_run",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 2,
+      "estado": "Pendente",
+      "evidencia": "MVP",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-source-health",
+      "title": "source_health",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 2,
+      "estado": "Em andamento",
+      "evidencia": "MVP",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-explicacao",
+      "title": "Explicação por item",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 2,
+      "estado": "Pendente",
+      "evidencia": "MVP",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-prediction-log",
+      "title": "prediction_log ativo",
+      "fase": "Produto/dashboard/API/deploy",
+      "peso": 3,
+      "estado": "Em revisao",
+      "evidencia": "MVP",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-firewall-backups",
+      "title": "Firewall/backups/gitleaks",
+      "fase": "Seguranca e custo",
+      "peso": 3,
+      "estado": "Em andamento",
+      "evidencia": "gitleaks CI pronto; firewall/backups pendentes",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-orcamento",
+      "title": "Contador de orçamento",
+      "fase": "Seguranca e custo",
+      "peso": 3,
+      "estado": "Em revisao",
+      "evidencia": "src/preditor/budget.py; em_revisao",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-testes-ci",
+      "title": "Testes e CI verdes com testes cruzados registrados",
+      "fase": "Seguranca e custo",
+      "peso": 4,
+      "estado": "Em revisao",
+      "evidencia": "pytest + gitleaks",
+      "updated_at": "2026-10-13"
+    },
+    {
+      "id": "T-status-final",
+      "title": "STATUS.md final",
+      "fase": "Seguranca e custo",
+      "peso": 2,
+      "estado": "Pendente",
+      "evidencia": "docs finais",
+      "updated_at": "2026-10-13"
+    }
+  ]
+}
