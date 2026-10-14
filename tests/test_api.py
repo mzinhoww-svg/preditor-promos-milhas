@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import time as _time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,13 @@ def client():
         [sys.executable, "-m", "alembic", "upgrade", "head"], check=True, env=env
     )
     os.environ["PREDITOR_API_KEY"] = "test-key"
+    # re-executavel em banco usado (prediction_log e imutavel; so o resto e limpo aqui)
+    from sqlalchemy import create_engine as _ce
+    from sqlalchemy import text as _tx
+
+    with _ce(os.environ["DATABASE_URL"]).begin() as _c:
+        for _t in ("prediction", "offer_evidence", "offer", "source_health"):
+            _c.execute(_tx(f"DELETE FROM {_t}"))
     from preditor.api import create_app
 
     with TestClient(create_app()) as c:
@@ -56,6 +64,12 @@ def test_model_metrics_empty(client):
 
 
 def test_source_health_empty(client):
+    from sqlalchemy import text as _t
+
+    from preditor.api.db import get_engine as _ge
+
+    with _ge().begin() as c:
+        c.execute(_t("DELETE FROM source_health"))
     r = client.get("/v1/source-health", headers=HEADERS)
     assert r.status_code == 200
     assert r.json()["sources"] == []
@@ -111,6 +125,7 @@ def test_job_daily_runs_with_offers():
     engine = get_engine()
     with engine.begin() as c:
         c.execute(text("DELETE FROM prediction"))
+        c.execute(text("DELETE FROM offer_evidence"))
         c.execute(text("DELETE FROM offer"))
 
     base = _dt.date(2025, 1, 1)
@@ -126,12 +141,14 @@ def test_job_daily_runs_with_offers():
         first_seen=datetime.combine(future, datetime.min.time(), tzinfo=UTC),
     )
 
-    result = run_daily(as_of="2029-05-01", engine=engine)
+    # prediction_log e imutavel e unico por dia: usa um as_of distinto a cada execucao
+    as_of = (_dt.date(2029, 5, 1) + _dt.timedelta(days=int(_time.time()) % 3000)).isoformat()
+    result = run_daily(as_of=as_of, engine=engine)
     assert result["pairs"] == 1
     assert result["inserted_predictions"] == 3
     assert result["inserted_logs"] == 3
 
-    again = run_daily(as_of="2029-05-01", engine=engine)
+    again = run_daily(as_of=as_of, engine=engine)
     assert again["inserted_logs"] == 0
 
     with engine.connect() as c:
@@ -147,6 +164,7 @@ def test_prediction_accuracy_with_data_no_500():
     engine = get_engine()
     with engine.begin() as c:
         c.execute(text("DELETE FROM prediction"))
+        c.execute(text("DELETE FROM offer_evidence"))
         c.execute(text("DELETE FROM offer"))
 
     base = _dt.date(2025, 1, 1)

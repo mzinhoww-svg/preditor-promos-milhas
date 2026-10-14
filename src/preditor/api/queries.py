@@ -123,39 +123,53 @@ def _iso(dt) -> str | None:
 
 
 def fetch_source_health() -> dict[str, Any]:
-    """Saúde por fonte, agregada da tabela source_health (checagens do listener/coletor)."""
+    """Saúde por fonte: agregados 24h/7d da tabela source_health + status do listener (error/stale)."""
+    from preditor.jobs.feed_listener import source_status
+
     engine = get_engine()
     with engine.connect() as conn:
         rows = _rows(conn.execute(text(
             "SELECT source, checked_at, items_new, extraction_rate, alert, robots_hash "
             "FROM source_health ORDER BY checked_at DESC"
         )))
+    status_by_source = source_status(engine)
     now = datetime.now(UTC)
     by_source: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
-        by_source[r["source"]].append(r)  # já em ordem decrescente de checked_at
+        by_source[r["source"]].append(r)  # ordem decrescente de checked_at
     sources = []
     for source, checks in by_source.items():
         latest = checks[0]
+        st = status_by_source.get(source, {})
         d24 = [c for c in checks if now - c["checked_at"] <= timedelta(hours=24)]
         d7 = [c for c in checks if now - c["checked_at"] <= timedelta(days=7)]
         ok = next((c for c in checks if not c["alert"]), None)
         with_items = next((c for c in checks if (c["items_new"] or 0) > 0), None)
         prev_hash = next((c["robots_hash"] for c in checks[1:] if c["robots_hash"]), None)
         rates = [float(c["extraction_rate"]) for c in d7 if c["extraction_rate"] is not None]
+        fails = st.get("consecutive_failures", 1 if latest["alert"] else 0)
+        delay = st.get("delay_hours")
+        if fails >= 3:
+            status = "error"
+        elif fails >= 1:
+            status = "degraded"
+        elif delay is not None and delay > 24 * 7:
+            status = "stale"
+        else:
+            status = "ok"
         sources.append({
             "source": source,
             "kind": "rss",
-            "status": "degraded" if latest["alert"] else "ok",
-            "last_success_at": _iso(ok["checked_at"]) if ok else None,
-            "last_item_at": _iso(with_items["checked_at"]) if with_items else None,
+            "status": status,
+            "last_success_at": _iso(st.get("last_success_at")) or (_iso(ok["checked_at"]) if ok else None),
+            "last_item_at": _iso(st.get("last_item_at")) or (_iso(with_items["checked_at"]) if with_items else None),
             "items_new_24h": sum(c["items_new"] or 0 for c in d24),
             "items_new_7d": sum(c["items_new"] or 0 for c in d7),
             "extraction_rate_7d": round(sum(rates) / len(rates), 4) if rates else None,
             "error_rate_24h": round(sum(1 for c in d24 if c["alert"]) / len(d24), 4) if d24 else 0.0,
             "robots_hash": latest["robots_hash"],
             "robots_changed": bool(latest["robots_hash"] and prev_hash and latest["robots_hash"] != prev_hash),
-            "message": "sem itens novos ou falha na última checagem" if latest["alert"] else None,
+            "message": f"{fails} falha(s) consecutiva(s)" if fails else None,
         })
     return {"generated_at": _now(), "sources": sources}
 

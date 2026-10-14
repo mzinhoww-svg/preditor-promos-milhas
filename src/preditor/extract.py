@@ -32,7 +32,7 @@ PAR_RE = re.compile(PAR, re.IGNORECASE | re.DOTALL)
 BONUS_CTX = r"b[ôo]nus|bonificad[ao]|transfer[êe]ncia"
 BONUS_CTX_RE = re.compile(BONUS_CTX, re.IGNORECASE)
 
-BONUS_PCT = r"(?:at[ée]\s+)?(?<!\d)(\d{1,3}(?:,\d+)?)\s?%(?=\s*(?:de\s+)?(?:b[ôo]nus|bonifica|na\s+transfer))|b[ôo]nus\s+de\s+(?:at[ée]\s+)?(\d{1,3}(?:,\d+)?)\s?%"
+BONUS_PCT = r"(?:at[ée]\s+)?(?<!\d)(\d{1,3}(?:,\d+)?)\s?%(?=\s*(?:de\s+)?(?:(?:pontos|milhas)\s+)?(?:b[ôo]nus|bonifica|na\s+transfer))|b[ôo]nus\s+de\s+(?:at[ée]\s+)?(\d{1,3}(?:,\d+)?)\s?%"
 BONUS_PCT_RE = re.compile(BONUS_PCT, re.IGNORECASE)
 
 DATA_NUM = r"(?<!\d)([0-3]?\d)/([01]?\d)(?:/(20\d{2}|\d{2}))?(?!\d)"
@@ -333,6 +333,8 @@ def _directional_pair(sentence: str) -> tuple[str | None, str | None]:
         "smiles": r"smiles",
         "azul_fidelidade": r"azul\s*fidelidade|azul_fidelidade",
     }
+    # "exceto Esfera": programa excluido nao e origem nem destino
+    sentence = re.sub(r"\b(?:exceto|menos|salvo)\b\s+[^.;,]*", "", sentence, flags=re.IGNORECASE)
     progs = _programs_in(sentence)
     if len(progs) < 2:
         # N4: so vira destino em compra/desconto; demais casos sao None (N1 sem inventar)
@@ -364,6 +366,9 @@ def _directional_pair(sentence: str) -> tuple[str | None, str | None]:
             re.IGNORECASE | re.DOTALL)
         if pat_from.search(low_s):
             others = [p for p in progs if p != origin]
+            for cand in others:  # "... inclusive Livelo e Esfera – para a Smiles": o destino vem do "para"
+                if re.search(rf"para\s+(?:[ao]\s+)?{aliases[cand]}", low_s, re.IGNORECASE):
+                    return origin, cand
             if others:
                 return origin, others[0]
     # "transferirem/transferir pontos para a DEST": DEST e o destino; a origem e o outro programa citado
