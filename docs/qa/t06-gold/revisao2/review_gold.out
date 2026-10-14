@@ -1,0 +1,77 @@
+{
+ "n_campanhas": 50,
+ "n_mensagens": 95,
+ "status_campanhas": {
+  "gold_provisional": 50
+ },
+ "status_mensagens": {
+  "gold_provisional": 95
+ },
+ "split_campanhas": {
+  "dev": 20,
+  "test": 30
+ },
+ "split_distratores": {
+  "dev": 8,
+  "test": 12
+ },
+ "kinds": {
+  "positive": 75,
+  "distractor": 20
+ },
+ "blocos": {
+  "A": 49,
+  "B": 1
+ },
+ "pares": {
+  "livelo->smiles:transfer_bonus": 49,
+  "esfera->azul_fidelidade:transfer_bonus": 1
+ },
+ "anos_inicio": {
+  "2020": 7,
+  "2021": 4,
+  "2022": 8,
+  "2023": 9,
+  "2024": 11,
+  "2025": 7,
+  "2026": 4
+ },
+ "validadas": 18,
+ "fonte_unica": 32,
+ "texto_max_chars": 597,
+ "texto_total_chars": 34899,
+ "texto_>600": 0,
+ "texto_com_html": 0,
+ "campos_proibidos": [],
+ "url_em_todos": true,
+ "evidence_ids_orfaos": [],
+ "msgs_sem_campanha(positivas)": [],
+ "inconsistencias_campanha_msg": [],
+ "first_seen_nao_minimo": [],
+ "all_evidence_gap_inconsistente": [],
+ "all_evidence_gap_n": 23,
+ "tags": {
+  "gap": 44,
+  "segmentada": 66,
+  "ate_ddmm": 65,
+  "extension": 12,
+  "direcao_invertida_regex": 7,
+  "regex_sem_par": 22,
+  "sem_ano": 31,
+  "data_inconsistente": 3,
+  "bumerangue": 16,
+  "bonus_condicional": 4,
+  "renewal": 1,
+  "outro_par": 1,
+  "titulo": 2,
+  "distrator": 20,
+  "noticia_sem_oferta": 5,
+  "titulo_rss": 12
+ },
+ "schema_erros": {
+  "campanhas": [],
+  "mensagens": [],
+  "n": 0
+ },
+ "datas_<2023": 19
+}
