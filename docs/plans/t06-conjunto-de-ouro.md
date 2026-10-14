@@ -183,6 +183,13 @@ Temporal: o extrator recebe `text` e `observed_at` como `first_seen_at`, nada al
 7. Status `gold_provisional` em todas as linhas até a conferência. `review.md` gerado para Aurimar.
 8. Entrega e evidência registradas em `TASKS.md`.
 
+## 9. Divisão de trabalho sugerida
+
+- Programador: `scripts/gold_candidates.py`, schemas, `tests/test_gold.py`, `preditor.gold.eval`.
+- Anotador (agente, papel a definir pelo Maestro): seleção e anotação provisória, `review.md`.
+- Planejador: revisa a amostragem, o vazamento de rótulo em `expected` e as métricas.
+- Aurimar: conferência e passagem para `gold_verified`.
+
 ## 10. Composição das 50 campanhas (universo real em 2026-10-14)
 
 Universo: os 172 `raw_message` do backfill (PR #36, banco `preditor_p2`): Passageiro de Primeira 144, Melhores Cartões 28, mais 20 títulos do RSS vivo do Pontos pra Voar. O quadro de candidatas vem das sentenças do corpo do artigo (`article.snippets`), agrupadas pela chave do glossário (±3 dias). **O extrator só gera candidatas; o `expected` é anotado a partir do texto.**
@@ -201,10 +208,3 @@ Déficits já conhecidos, a registrar no `data/gold/README.md` sem inventar caso
 - Mensagens com `published_vs_capture_gap=true` (83 de 172) **entram** no ouro com a tag `gap`. Elas servem justamente para revisar a data, mas o `expected.inicio` delas vem só do texto.
 
 Splits: o bloco A é dividido 17 `test` / 11 `dev` e o bloco B 13 `test` / 9 `dev`, totalizando 30/20, como manda a decisão 005. Os distratores ficam 12/8.
-
-## 9. Divisão de trabalho sugerida
-
-- Programador: `scripts/gold_candidates.py`, schemas, `tests/test_gold.py`, `preditor.gold.eval`.
-- Anotador (agente, papel a definir pelo Maestro): seleção e anotação provisória, `review.md`.
-- Planejador: revisa a amostragem, o vazamento de rótulo em `expected` e as métricas.
-- Aurimar: conferência e passagem para `gold_verified`.
