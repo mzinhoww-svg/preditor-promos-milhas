@@ -56,6 +56,12 @@ def test_model_metrics_empty(client):
 
 
 def test_source_health_empty(client):
+    from sqlalchemy import text as _t
+
+    from preditor.api.db import get_engine as _ge
+
+    with _ge().begin() as c:
+        c.execute(_t("DELETE FROM source_health"))
     r = client.get("/v1/source-health", headers=HEADERS)
     assert r.status_code == 200
     assert r.json()["sources"] == []
@@ -111,6 +117,7 @@ def test_job_daily_runs_with_offers():
     engine = get_engine()
     with engine.begin() as c:
         c.execute(text("DELETE FROM prediction"))
+        c.execute(text("DELETE FROM offer_evidence"))
         c.execute(text("DELETE FROM offer"))
 
     base = _dt.date(2025, 1, 1)
@@ -147,6 +154,7 @@ def test_prediction_accuracy_with_data_no_500():
     engine = get_engine()
     with engine.begin() as c:
         c.execute(text("DELETE FROM prediction"))
+        c.execute(text("DELETE FROM offer_evidence"))
         c.execute(text("DELETE FROM offer"))
 
     base = _dt.date(2025, 1, 1)
