@@ -69,14 +69,56 @@ def fetch_predictions(type_filter: str | None = None, limit: int = 50) -> dict[s
             "bonus_pct": {"p25": b25, "p50": b50, "p75": b75},
             "last_offer": None,
             "reasons": [],
+            "model_run_id": f"mr_{g['mr']}",
         })
     items.sort(key=lambda x: (-(x["windows"]["30"]["probability"]), -(x["windows"]["7"]["probability"])))
     for i, it in enumerate(items, start=1):
         it["rank"] = i
     if limit:
         items = items[:limit]
-    model = fetch_model_info()
-    return {"generated_at": generated_at, "model": model, "items": items}
+    serving = fetch_serving_run()
+    champion = fetch_champion_run()
+    model = fetch_model_info()  # compatível: run_id/name/version/role + champion/challenger
+    if serving is not None:
+        model = {**model, **_run_ref(serving)}
+    return {"generated_at": generated_at, "model": model, "champion": _run_ref(champion, "champion"),
+            "items": items}
+
+
+def _run_ref(run: dict | None, role: str | None = None) -> dict[str, Any] | None:
+    """Referência curta de um model_run (nome, versão, role) para a API."""
+    if not run:
+        return None
+    hv = run.get("hyperparams") or {}
+    return {
+        "run_id": f"mr_{run['id']}",
+        "name": hv.get("name") or run.get("model_version"),
+        "version": hv.get("version") or "1.0.0",
+        "role": role or ("champion" if run.get("is_champion") else (run.get("role") or "experiment")),
+        "trained_at": _iso(run.get("trained_at")),
+    }
+
+
+def fetch_serving_run() -> dict | None:
+    """model_run que gerou as predições mais recentes (não é necessariamente o campeão)."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT m.id, m.model_version, m.trained_at, m.hyperparams, m.metrics, m.is_champion, m.role "
+            "FROM model_run m WHERE m.id = (SELECT model_run_id FROM prediction "
+            "ORDER BY made_at DESC, model_run_id DESC LIMIT 1)"
+        )))
+    return rows[0] if rows else None
+
+
+def fetch_champion_run() -> dict | None:
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT id, model_version, trained_at, hyperparams, metrics, is_champion, role FROM model_run "
+            "WHERE is_champion ORDER BY trained_at DESC, id DESC LIMIT 1"
+        )))
+    return rows[0] if rows else None
 
 
 def fetch_model_info() -> dict[str, Any]:
@@ -271,7 +313,9 @@ def fetch_prediction_accuracy(date_from=None, date_to=None, horizon=None) -> dic
 
 def fetch_model_metrics() -> dict[str, Any]:
     info = fetch_model_info()
-    champion = info.get("champion", {})
+    serving = fetch_serving_run()
+    # campeão decidido (is_champion); sem decisão, o run que serve as predições
+    champion = fetch_champion_run() or serving or info.get("champion", {})
     cinfo = info.get("challenger", {}) or {}
     now = _now()
     def empty_model(run, name_default):
@@ -292,6 +336,7 @@ def fetch_model_metrics() -> dict[str, Any]:
     return {
         "generated_at": now,
         "champion": empty_model(champion, "B1"),
+        "serving": _run_ref(serving),
         "challenger": (empty_model(cinfo, "C1") if (cinfo and cinfo.get("run_id")) else None),
         "comparison": {
             "horizon": 30,

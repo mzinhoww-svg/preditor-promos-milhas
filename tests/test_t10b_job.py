@@ -280,3 +280,63 @@ def test_model_run_concorrente_nao_duplica(engine):
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM model_run WHERE role='daily'")).scalar() == 1
         assert c.execute(text("SELECT count(*) FROM model_run WHERE is_champion")).scalar() == 0
+
+
+# ---- ciclo 2: o modelo que gerou cada predicao e o campeao sao reportados separadamente --
+def _client():
+    from fastapi.testclient import TestClient
+
+    from preditor.api import create_app
+
+    os.environ["PREDITOR_API_KEY"] = "test-key"
+    return TestClient(create_app())
+
+
+def test_predictions_reporta_run_que_gerou_e_campeao_separado(engine):
+    from preditor.jobs.daily_predict import run_daily
+
+    with engine.begin() as c:
+        champ = c.execute(text(
+            "INSERT INTO model_run (model_version, trained_at, dataset_version, feature_version, hyperparams, metrics, code_hash, is_champion) "
+            "VALUES ('C1', now(), 'dd','1','{\"name\":\"C1\",\"version\":\"0.4.2\"}'::jsonb,'{}'::jsonb,'hh',TRUE) RETURNING id"
+        )).scalar()
+    _seed(engine)
+    res = run_daily(as_of="2026-06-01", engine=engine)
+    with _client() as cl:
+        body = cl.get("/v1/predictions", headers=H).json()
+    assert body["model"]["run_id"] == f"mr_{res['model_run_id']}"
+    assert body["model"]["name"] in {"B0", "B1"}
+    assert body["model"]["role"] == "daily"
+    assert body["champion"]["run_id"] == f"mr_{champ}"
+    assert body["champion"]["name"] == "C1"
+    it = body["items"][0]
+    assert it["model_run_id"] == f"mr_{res['model_run_id']}"
+
+
+def test_model_metrics_traz_serving_e_campeao_separados(engine):
+    from preditor.jobs.daily_predict import run_daily
+
+    with engine.begin() as c:
+        champ = c.execute(text(
+            "INSERT INTO model_run (model_version, trained_at, dataset_version, feature_version, hyperparams, metrics, code_hash, is_champion) "
+            "VALUES ('C1', now(), 'dd','1','{\"name\":\"C1\",\"version\":\"0.4.2\"}'::jsonb,'{}'::jsonb,'hh',TRUE) RETURNING id"
+        )).scalar()
+    _seed(engine)
+    res = run_daily(as_of="2026-06-01", engine=engine)
+    with _client() as cl:
+        m = cl.get("/v1/model/metrics", headers=H).json()
+    assert m["champion"]["name"] == "C1"
+    assert m["serving"]["run_id"] == f"mr_{res['model_run_id']}"
+    assert m["serving"]["name"] in {"B0", "B1"}
+    assert champ != res["model_run_id"]
+
+
+def test_predictions_sem_campeao_decidido_serving_e_o_run_diario(engine):
+    from preditor.jobs.daily_predict import run_daily
+
+    _seed(engine)
+    res = run_daily(as_of="2026-06-01", engine=engine)
+    with _client() as cl:
+        body = cl.get("/v1/predictions", headers=H).json()
+    assert body["model"]["run_id"] == f"mr_{res['model_run_id']}"
+    assert body["champion"] is None

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import re
@@ -509,11 +510,56 @@ def recompute_gap(engine, ts_by_url: dict[str, str]) -> int:
     return flagged
 
 
+class _TxEngine:
+    """Engine-like sobre UMA conexão/transação: begin() vira savepoint, connect() reusa a conexão.
+
+    Permite que o código baseado em `engine.begin()/connect()` rode atomicamente: erro ou STOP no
+    meio desfaz tudo (o DELETE inicial inclusive), sem deixar ofertas parciais.
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    @contextlib.contextmanager
+    def begin(self):
+        with self._conn.begin_nested():
+            yield self._conn
+
+    @contextlib.contextmanager
+    def connect(self):
+        yield self._conn
+
+
+@contextlib.contextmanager
+def atomic(engine):
+    """Executa o bloco numa única transação; rollback em qualquer exceção (incl. StopRequested)."""
+    if isinstance(engine, _TxEngine):
+        yield engine
+        return
+    with engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            yield _TxEngine(conn)
+        except BaseException:
+            tx.rollback()
+            raise
+        else:
+            tx.commit()
+
+
 def reprocess(engine) -> dict:
-    """Apaga ofertas/evidencias e reextrai de raw_message so do corpo do artigo (sem rede)."""
+    """Apaga ofertas/evidencias e reextrai de raw_message so do corpo do artigo (sem rede).
+
+    Atômico: DELETE + reconstrução numa transação; STOP/erro no meio mantém o estado anterior.
+    """
+    check_stop()  # antes de qualquer escrita
+    with atomic(engine) as tx_engine:
+        return _reprocess(tx_engine)
+
+
+def _reprocess(engine) -> dict:
     import sqlalchemy as sa
 
-    check_stop()  # antes do DELETE
 
     with engine.connect() as c:
         old = {tuple(str(x) for x in r) for r in c.execute(sa.text(
@@ -589,8 +635,9 @@ def _main(args: argparse.Namespace) -> int:
         eng = _engine(args)
         ts_by_url = {u: v.get("timestamp") for src in _load_state().get("sources", {}).values()
                      for u, v in src.get("processed", {}).items() if v.get("timestamp")}
-        out = reprocess(eng)
-        out["gap_flagged"] = recompute_gap(eng, ts_by_url)
+        with atomic(eng) as tx_engine:  # reprocess + gap na mesma transação
+            out = reprocess(tx_engine)
+            out["gap_flagged"] = recompute_gap(tx_engine, ts_by_url)
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
     result = run_backfill(args)
