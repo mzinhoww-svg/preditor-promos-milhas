@@ -6,17 +6,24 @@ import hashlib
 import json
 import sys
 import time
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+import httpx
+
 try:
+    from preditor import article as A
     from preditor import collector as C
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+    from preditor import article as A
     from preditor import collector as C
 
 STATE_PATH = Path("data/raw/backfill/state.json")
 RATE_LIMIT_DEFAULT = 10.0
+GAP_DAYS = 7
+BACKOFF_BASE = 30.0
+BACKOFF_TRIES = 3
 SOURCES_DEFAULT = ["passageirodeprimeira.com", "www.melhorescartoes.com.br", "pontospravoar.com"]
 
 
@@ -63,7 +70,86 @@ def _normalize_candidate(cap: dict) -> tuple[str | None, str | None]:
     return surl, ts
 
 
-def fetch_cdx_candidates(source: str, from_date: date, to_date: date | None, rate_limit: float, page_size: int) -> list[dict]:
+def _new_client() -> httpx.Client:
+    return httpx.Client(headers={"User-Agent": C.UA}, timeout=30.0, follow_redirects=True)
+
+
+def fetch_robots_strict(source: str) -> tuple[str, str | None]:
+    """robots.txt fail-closed: segue redirects; so 200 (texto) ou 404/410 (sem restricoes) liberam."""
+    host = source if not str(source).startswith("http") else str(source).split("//", 1)[1].split("/", 1)[0]
+    last: tuple[str, str | None] = ("robots_unavailable", None)
+    for scheme in ("https", "http"):
+        try:
+            with _new_client() as client:
+                resp = client.get(f"{scheme}://{host}/robots.txt")
+        except (httpx.HTTPError, OSError, ValueError):
+            continue
+        if resp.status_code == 200:
+            return "ok", resp.text
+        if resp.status_code in (404, 410):
+            return "ok", ""
+        last = ("robots_unavailable", None)
+    return last
+
+
+def fetch_snapshot_backoff(timestamp: str, original: str) -> str | None:
+    """HTML original da Wayback; backoff exponencial em 429/503."""
+    url = f"https://web.archive.org/web/{timestamp}id_/{original}"
+    delay = BACKOFF_BASE
+    for attempt in range(BACKOFF_TRIES):
+        try:
+            with _new_client() as client:
+                resp = client.get(url)
+        except (httpx.HTTPError, OSError, ValueError):
+            return None
+        if resp.status_code == 200:
+            return resp.text
+        if resp.status_code in (429, 503) and attempt < BACKOFF_TRIES - 1:
+            time.sleep(delay)
+            delay *= 2
+            continue
+        return None
+    return None
+
+
+def _observed(pub_dt: datetime | None, capture_dt: datetime | None) -> datetime | None:
+    cands = [x for x in (pub_dt, capture_dt) if x is not None]
+    return min(cands) if cands else None
+
+
+def _mark_gap(engine, raw_id, published_at, gap: bool) -> None:
+    import sqlalchemy
+
+    with engine.begin() as c:
+        c.execute(sqlalchemy.text(
+            "UPDATE raw_message SET published_at=:p, published_vs_capture_gap=:g WHERE id=:i"
+        ), {"p": published_at, "g": gap, "i": raw_id})
+
+
+def _process_snippets(engine, source, raw_id, content, observed) -> int:
+    n = 0
+    for snip in A.snippets(A.article_text(content)):
+        res = C.process_raw_message(engine, {"content": snip, "id": raw_id, "source": source}, first_seen_at=observed)
+        n += len(res)
+    return n
+
+
+def ingest_page(engine, source: str, url: str, ts: str, content: str) -> dict:
+    pub_dt = C._extract_published_time(content)
+    capture_dt = C._ts_to_datetime(ts)
+    observed = _observed(pub_dt, capture_dt)
+    if observed is None:
+        return {"status": "skipped_no_date"}  # falha fechada: sem data nao grava
+    gap = bool(pub_dt is not None and capture_dt is not None and capture_dt - pub_dt > timedelta(days=GAP_DAYS))
+    raw = C.store_raw(engine=engine, source=source, url=url, content=content, collected_at=None, observed_at=observed)
+    raw_id = getattr(raw, "id", None)
+    _mark_gap(engine, raw_id, pub_dt, gap)
+    n = _process_snippets(engine, source, raw_id, content, observed)
+    return {"status": "done", "raw_id": raw_id, "offers": n, "gap": gap}
+
+
+def fetch_cdx_candidates(source: str, from_date: date, to_date: date | None, rate_limit: float, page_size: int,
+                         slug_mode: str = "either") -> list[dict]:
     url_root = source if str(source).startswith("http") else f"http://{source}/"
     client = C.CDXClient(
         user_agent=C.UA,
@@ -74,10 +160,11 @@ def fetch_cdx_candidates(source: str, from_date: date, to_date: date | None, rat
     )
     captures: list[dict] = []
     seen_resume: set[str] = set()
+    slug_re = "(livelo|smiles)" if slug_mode == "either" else "(livelo.*smiles|smiles.*livelo)"
     kw0 = {
         "from_": from_date,
         "matchType": "prefix",
-        "filter": ["statuscode:200", "mimetype:text/html", "original:.*(livelo.*smiles|smiles.*livelo).*"],
+        "filter": ["statuscode:200", "mimetype:text/html", f"original:.*{slug_re}.*"],
         "collapse": None,
         "limit": page_size,
         "showResumeKey": True,
@@ -113,53 +200,71 @@ def fetch_cdx_candidates(source: str, from_date: date, to_date: date | None, rat
     return [{"url": nu, "timestamp": ts} for nu, ts in sorted(seen_urls.items())]
 
 
+def _engine(args):
+    import os
+
+    import sqlalchemy
+
+    url = args.database_url or os.environ.get("DATABASE_URL")
+    if not url:
+        raise SystemExit("DATABASE_URL ausente")
+    return sqlalchemy.create_engine(url)
+
+
+def _retry_allowed(prev: dict, max_attempts: int) -> bool:
+    if prev.get("status") in (None, "listed_only"):
+        return True
+    if prev.get("status") in ("done", "robots_disallowed", "skipped_no_date"):
+        return False
+    return prev.get("attempts", 1) < max_attempts
+
+
 def run_backfill(args: argparse.Namespace) -> dict:
     state = _load_state()
-    state.setdefault("version", 1)
+    state.setdefault("version", 2)
     state.setdefault("params", {})
     state["params"].update({
-        "from_": args.from_,
-        "to": args.to,
-        "rate_limit": args.rate_limit,
-        "sources": args.sources,
+        "from_": args.from_, "to": args.to, "rate_limit": args.rate_limit, "sources": args.sources,
+        "slug_mode": getattr(args, "slug_mode", "either"),
     })
     state.setdefault("sources", {})
-    engine = None
-    if args.database_url:
-        import sqlalchemy
-
-        engine = sqlalchemy.create_engine(args.database_url)
     from_date = C._parse_date_text(args.from_)
     if from_date is None:
         raise SystemExit(f"data invalida: from_={args.from_!r}")
     to_date = C._parse_date_text(args.to) if args.to is not None else None
-    from datetime import date as _date
-
-    if from_date is None:
-        from_date = _date(2023, 1, 1)
+    max_attempts = getattr(args, "max_attempts", 3)
+    slug_mode = getattr(args, "slug_mode", "either")
+    engine = None
 
     summary: dict[str, dict] = {}
-    for source in args.sources:
+    for idx, source in enumerate(args.sources):
+        if idx > 0:
+            time.sleep(max(args.rate_limit, 10.0))  # >=10 s entre fontes
         src_state = state["sources"].setdefault(source, {})
         src_state.setdefault("processed", {})
         processed = src_state["processed"]
-        # robots
-        robots_txt = None
-        try:
-            robots_txt = C.fetch_robots(source, transport=None, rate_limiter=None)
-        except (OSError, ValueError, RuntimeError, TypeError):
-            robots_txt = None
-        src_state["robots_hash"] = _robots_hash(robots_txt)
-        # verify root permission (fail closed only when robots explicitly parsed)
-        if robots_txt is not None and not C.robots_allowed(robots_txt, (f"http://{source}/" if not str(source).startswith("http") else source)):
-            raise SystemExit(f"robots.txt bloqueia a fonte {source}")
 
-        # candidates
+        status, robots_txt = fetch_robots_strict(source)
+        src_state["robots_status"] = status
+        src_state["robots_hash"] = _robots_hash(robots_txt)
+        if status != "ok":
+            src_state["status"] = "robots_unavailable"
+            summary[source] = {"status": "robots_unavailable", "candidates": 0, "processed_done": 0}
+            _save_state(state)
+            continue
+        root = source if str(source).startswith("http") else f"http://{source}/"
+        if not C.robots_allowed(robots_txt, root):
+            src_state["status"] = "robots_disallowed"
+            summary[source] = {"status": "robots_disallowed", "candidates": 0, "processed_done": 0}
+            _save_state(state)
+            continue
+        src_state["status"] = "ok"
+
         candidates = src_state.get("cdx_candidates")
-        if not candidates or args.refresh_candidates:
-            candidates = fetch_cdx_candidates(source, from_date, to_date, args.rate_limit, args.page_size)
+        if not candidates or args.refresh_candidates or src_state.get("slug_mode") != slug_mode:
+            candidates = fetch_cdx_candidates(source, from_date, to_date, args.rate_limit, args.page_size, slug_mode)
             src_state["cdx_candidates"] = candidates
-            # count-only sources do not download body (decision 002)
+            src_state["slug_mode"] = slug_mode
             src_state["cdx_unique_urls"] = len(candidates)
             src_state["cdx_months"] = len({(c.get("timestamp") or "")[:6] for c in candidates})
             _save_state(state)
@@ -171,56 +276,46 @@ def run_backfill(args: argparse.Namespace) -> dict:
             url = cand["url"]
             ts = cand["timestamp"]
             prev = processed.get(url, {})
-            if prev.get("status") == "done":
-                continue
-            max_attempts = getattr(args, "max_attempts", 3)
-            if prev.get("status") == "fetch_failed" and prev.get("attempts", 1) >= max_attempts:
+            if prev.get("status") == "done" or not _retry_allowed(prev, max_attempts):
                 continue
             if not download_body:
                 processed[url] = {"status": "listed_only", "timestamp": ts}
+                continue
+            if not C.robots_allowed(robots_txt, url):
+                processed[url] = {"status": "robots_disallowed", "timestamp": ts}
                 _save_state(state)
                 continue
+            attempts = prev.get("attempts", 0) + 1
             time.sleep(args.rate_limit)
-            content = C.fetch_snapshot(ts, url, transport=None)
+            content = fetch_snapshot_backoff(ts, url)
             if not content:
-                processed[url] = {"status": "fetch_failed", "timestamp": ts, "attempts": prev.get("attempts", 0) + 1}
+                processed[url] = {"status": "fetch_failed", "timestamp": ts, "attempts": attempts}
                 _save_state(state)
                 continue
-            pub_dt = C._extract_published_time(content)
-            capture_dt = C._ts_to_datetime(ts)
-            observed_candidates = [x for x in (pub_dt, capture_dt) if x is not None]
-            observed = min(observed_candidates) if observed_candidates else capture_dt
-            if observed is None:
-                observed = capture_dt
             try:
-                if engine is not None:
-                    eng = engine
-                else:
-                    # lazy connect from env
-                    import os
-
-                    import sqlalchemy
-
-                    u = os.environ.get("DATABASE_URL")
-                    if not u:
-                        raise SystemExit("DATABASE_URL ausente")
-                    eng = sqlalchemy.create_engine(u)
-                raw = C.store_raw(engine=eng, source=source, url=url, content=content, collected_at=None, observed_at=observed)
-                raw_id = getattr(raw, "id", None)
-                res = C.process_raw_message(eng, raw, first_seen_at=observed)
-                offers_this_run += len(res)
-                stored_this_run += 1
-                processed[url] = {"status": "done", "timestamp": ts, "raw_id": raw_id, "offers": len(res)}
+                if engine is None:
+                    engine = _engine(args)
+                res = ingest_page(engine, source, url, ts, content)
             except (OSError, ValueError, RuntimeError, TypeError) as exc:
-                processed[url] = {"status": "error", "timestamp": ts, "error": str(exc)}
+                res = {"status": "error", "error": str(exc)}
+            res.setdefault("timestamp", ts)
+            res["attempts"] = attempts
+            processed[url] = res
+            if res.get("status") == "done":
+                stored_this_run += 1
+                offers_this_run += res.get("offers", 0)
             _save_state(state)
 
+        from collections import Counter
+
         summary[source] = {
+            "status": "ok",
             "candidates": len(candidates),
             "months": src_state.get("cdx_months"),
             "stored_this_run": stored_this_run,
             "offers_this_run": offers_this_run,
             "processed_done": sum(1 for v in processed.values() if v.get("status") == "done"),
+            "by_status": dict(Counter(v.get("status") for v in processed.values())),
         }
         _save_state(state)
 
@@ -241,6 +336,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--database-url", dest="database_url", default=None)
     parser.add_argument("--refresh-candidates", dest="refresh_candidates", action="store_true")
     parser.add_argument("--max-attempts", dest="max_attempts", type=int, default=3)
+    parser.add_argument("--slug-mode", dest="slug_mode", choices=["either", "both"], default="either")
     parser.add_argument("--titles-only", dest="titles_only", action="store_true")
     return parser
 

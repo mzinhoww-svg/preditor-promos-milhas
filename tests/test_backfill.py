@@ -1,9 +1,10 @@
-"""Backfill Wayback: retomavel, idempotente, respeita robots e ritmo."""
+"""Backfill Wayback: retomavel, idempotente, robots fail-closed, ritmo e ponto-no-tempo."""
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from preditor import backfill as B
@@ -12,11 +13,13 @@ URLS = [
     {"url": "http://a.com/p1", "timestamp": "20240105120000"},
     {"url": "http://a.com/p2", "timestamp": "20240210120000"},
 ]
+ROBOTS_OK = "User-agent: *\nAllow: /\n"
 
 
 def _args(**kw):
     base = {"sources": ["a.com"], "from_": "202301", "to": None, "rate_limit": 10.0, "page_size": 50,
-                "database_url": "sqlite://", "refresh_candidates": False, "titles_only": False, "max_attempts": 3}
+            "database_url": "sqlite://", "refresh_candidates": False, "titles_only": False,
+            "max_attempts": 3, "slug_mode": "both"}
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -26,18 +29,15 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr(B, "STATE_PATH", tmp_path / "state.json")
     sleeps, fetched = [], []
     monkeypatch.setattr(B.time, "sleep", lambda s: sleeps.append(s))
-    monkeypatch.setattr(B.C, "fetch_robots", lambda *a, **k: "User-agent: *\nAllow: /\n")
+    monkeypatch.setattr(B, "fetch_robots_strict", lambda source: ("ok", ROBOTS_OK))
     monkeypatch.setattr(B, "fetch_cdx_candidates", lambda *a, **k: list(URLS))
-    monkeypatch.setattr(B.C, "_extract_published_time", lambda c: None)
-    monkeypatch.setattr(B.C, "_ts_to_datetime", lambda ts: datetime(2024, 1, 5, tzinfo=UTC))
-    monkeypatch.setattr(B.C, "store_raw", lambda **k: type("R", (), {"id": 1})())
-    monkeypatch.setattr(B.C, "process_raw_message", lambda *a, **k: [object()])
 
-    def fake_fetch(ts, url, transport=None):
+    def fake_fetch(ts, url):
         fetched.append(url)
         return "<html>ok</html>"
 
-    monkeypatch.setattr(B.C, "fetch_snapshot", fake_fetch)
+    monkeypatch.setattr(B, "fetch_snapshot_backoff", fake_fetch)
+    monkeypatch.setattr(B, "ingest_page", lambda *a, **k: {"status": "done", "offers": 1, "raw_id": 1, "gap": False})
     return type("E", (), {"sleeps": sleeps, "fetched": fetched, "mp": monkeypatch})
 
 
@@ -45,7 +45,7 @@ def test_resume_does_not_refetch_done(env):
     B.run_backfill(_args())
     assert len(env.fetched) == 2
     B.run_backfill(_args())
-    assert len(env.fetched) == 2  # idempotente: nada novo
+    assert len(env.fetched) == 2
 
 
 def test_sleeps_rate_limit_before_each_snapshot(env):
@@ -53,34 +53,165 @@ def test_sleeps_rate_limit_before_each_snapshot(env):
     assert env.sleeps.count(10.0) >= 2
 
 
-def test_robots_block_aborts_without_fetch(env):
-    env.mp.setattr(B.C, "fetch_robots", lambda *a, **k: "User-agent: *\nDisallow: /\n")
-    with pytest.raises(SystemExit):
-        B.run_backfill(_args())
+def test_robots_unavailable_aborts_source_fail_closed(env):
+    env.mp.setattr(B, "fetch_robots_strict", lambda source: ("robots_unavailable", None))
+    out = B.run_backfill(_args())
     assert env.fetched == []
+    assert out["summary"]["a.com"]["status"] == "robots_unavailable"
+
+
+def test_robots_root_disallow_aborts_without_fetch(env):
+    env.mp.setattr(B, "fetch_robots_strict", lambda source: ("ok", "User-agent: *\nDisallow: /\n"))
+    out = B.run_backfill(_args())
+    assert env.fetched == []
+    assert out["summary"]["a.com"]["status"] == "robots_disallowed"
+
+
+def test_robots_checked_per_candidate_url(env):
+    env.mp.setattr(B, "fetch_robots_strict", lambda source: ("ok", "User-agent: *\nDisallow: /p2\n"))
+    B.run_backfill(_args())
+    assert env.fetched == ["http://a.com/p1"]
+    st = B._load_state()["sources"]["a.com"]["processed"]
+    assert st["http://a.com/p2"]["status"] == "robots_disallowed"
+
+
+def test_robots_hash_recorded_for_every_source(env):
+    env.mp.setattr(B, "fetch_cdx_candidates", lambda *a, **k: [])
+    env.mp.setattr(B, "fetch_robots_strict",
+                   lambda s: ("robots_unavailable", None) if s == "b.com" else ("ok", ROBOTS_OK))
+    B.run_backfill(_args(sources=["a.com", "b.com"]))
+    srcs = B._load_state()["sources"]
+    assert srcs["a.com"]["robots_hash"]
+    assert srcs["b.com"]["robots_status"] == "robots_unavailable"
+    assert "robots_hash" in srcs["b.com"]
+
+
+def test_sleeps_at_least_rate_limit_between_sources(env):
+    env.mp.setattr(B, "fetch_cdx_candidates", lambda *a, **k: [])
+    B.run_backfill(_args(sources=["a.com", "b.com"], rate_limit=10.0))
+    assert env.sleeps and min(env.sleeps) >= 10.0
 
 
 def test_failed_fetch_retried_only_up_to_max_attempts(env):
-    env.mp.setattr(B.C, "fetch_snapshot", lambda ts, url, transport=None: env.fetched.append(url))
+    env.mp.setattr(B, "fetch_snapshot_backoff", lambda ts, url: env.fetched.append(url))
     for _ in range(5):
         B.run_backfill(_args(max_attempts=3))
     assert len(env.fetched) == 2 * 3
 
 
+def test_error_status_also_limited_by_max_attempts(env):
+    env.mp.setattr(B, "ingest_page", lambda *a, **k: {"status": "error", "error": "boom"})
+    for _ in range(5):
+        B.run_backfill(_args(max_attempts=2))
+    assert len(env.fetched) == 2 * 2
+
+
 def test_failed_then_success_marks_done(env):
     calls = {"n": 0}
 
-    def flaky(ts, url, transport=None):
+    def flaky(ts, url):
         calls["n"] += 1
         return None if calls["n"] <= 2 else "<html>ok</html>"
 
-    env.mp.setattr(B.C, "fetch_snapshot", flaky)
+    env.mp.setattr(B, "fetch_snapshot_backoff", flaky)
     B.run_backfill(_args())
     out = B.run_backfill(_args())
     assert out["summary"]["a.com"]["processed_done"] == 2
+
+
+# --- robots real (redirects) ---------------------------------------------------------
+def _client(handler):
+    return lambda: httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+
+
+def test_fetch_robots_follows_redirect(monkeypatch):
+    def handler(req: httpx.Request):
+        if req.url.scheme == "http":
+            return httpx.Response(301, headers={"location": "https://www.a.com/robots.txt"})
+        return httpx.Response(200, text="User-agent: *\nDisallow: /x\n")
+
+    monkeypatch.setattr(B, "_new_client", _client(handler))
+    st, txt = B.fetch_robots_strict("a.com")
+    assert st == "ok" and "Disallow: /x" in txt
+
+
+def test_fetch_robots_403_is_unavailable(monkeypatch):
+    monkeypatch.setattr(B, "_new_client", _client(lambda r: httpx.Response(403)))
+    assert B.fetch_robots_strict("a.com") == ("robots_unavailable", None)
+
+
+def test_fetch_robots_404_means_no_restrictions(monkeypatch):
+    monkeypatch.setattr(B, "_new_client", _client(lambda r: httpx.Response(404)))
+    assert B.fetch_robots_strict("a.com") == ("ok", "")
+
+
+# --- snapshot com backoff em 429 ---------------------------------------------------------
+def test_snapshot_backoff_on_429(monkeypatch):
+    seq = [429, 429, 200]
+    sleeps = []
+    monkeypatch.setattr(B.time, "sleep", lambda s: sleeps.append(s))
+
+    def handler(req):
+        code = seq.pop(0)
+        return httpx.Response(code, text="<html>x</html>")
+
+    monkeypatch.setattr(B, "_new_client", _client(handler))
+    assert B.fetch_snapshot_backoff("20240101000000", "http://a.com/p") == "<html>x</html>"
+    assert len(sleeps) == 2 and sleeps[1] > sleeps[0]
+
+
+# --- ponto-no-tempo / ingest_page ---------------------------------------------------------
+HTML = ('<html><head><meta property="article:published_time" content="2023-01-01T10:00:00+00:00"></head>'
+        "<body><article><p>Livelo para Smiles com 100% de bônus até 31/01.</p></article></body></html>")
+
+
+@pytest.fixture
+def ing(monkeypatch):
+    calls = {"stored": [], "gap": [], "proc": []}
+
+    def store_raw(**k):
+        calls["stored"].append(k)
+        return type("R", (), {"id": 7})()
+
+    monkeypatch.setattr(B.C, "store_raw", store_raw)
+    monkeypatch.setattr(B, "_mark_gap", lambda eng, rid, pub, gap: calls["gap"].append((rid, pub, gap)))
+    monkeypatch.setattr(B.C, "process_raw_message",
+                        lambda eng, raw, first_seen_at=None, **k: calls["proc"].append((raw["content"], first_seen_at)) or [1])
+    return calls
+
+
+def test_gap_flag_when_published_more_than_7_days_before_capture(ing):
+    r = B.ingest_page(object(), "a.com", "http://a.com/p", "20240401000000", HTML)
+    assert r["gap"] is True
+    assert ing["gap"][0][2] is True
+
+
+def test_no_gap_flag_when_published_close_to_capture(ing):
+    close = HTML.replace("2023-01-01", "2024-03-30")
+    r = B.ingest_page(object(), "a.com", "http://a.com/p", "20240401000000", close)
+    assert r["gap"] is False
+
+
+def test_no_dates_at_all_is_not_stored(ing, monkeypatch):
+    monkeypatch.setattr(B.C, "_ts_to_datetime", lambda ts: None)
+    r = B.ingest_page(object(), "a.com", "http://a.com/p", "garbage", "<html>sem data</html>")
+    assert r["status"] == "skipped_no_date"
+    assert ing["stored"] == []
+
+
+def test_only_article_snippets_are_extracted(ing):
+    B.ingest_page(object(), "a.com", "http://a.com/p", "20240401000000", HTML)
+    assert len(ing["proc"]) == 1
+    assert "100%" in ing["proc"][0][0] and "<" not in ing["proc"][0][0]
 
 
 def test_normalize_candidate_strips_noise():
     assert B._normalize_candidate({"original": "http://a.com/x/feed/", "timestamp": "1"}) == (None, None)
     u, _ = B._normalize_candidate({"original": "http://a.com/x/?utm=1", "timestamp": "2024"})
     assert u is not None and "?" not in u
+
+
+def test_observed_never_after_capture():
+    pub = datetime(2024, 5, 1, tzinfo=UTC)
+    cap = pub - timedelta(days=3)
+    assert B._observed(pub, cap) == cap
