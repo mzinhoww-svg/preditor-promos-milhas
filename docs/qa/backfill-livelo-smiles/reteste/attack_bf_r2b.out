@@ -1,0 +1,70 @@
+{
+ "R1_robots_indisponivel_fetches": 0,
+ "R2_disallow_total_fetches": 0,
+ "R3_disallow_url_p3": {
+  "baixou_p3": false,
+  "status_p3": "robots_disallowed",
+  "fetches": 4
+ },
+ "P1_sleep10_antes_de_cada_fetch": true,
+ "I1_reexec": {
+  "fetches_novos": 0,
+  "antes": {
+   "raw_message": 5,
+   "offer": 0,
+   "offer_evidence": 0
+  },
+  "depois": {
+   "raw_message": 5,
+   "offer": 0,
+   "offer_evidence": 0
+  }
+ },
+ "I2_sem_state": {
+  "raw_message": 5,
+  "offer": 0,
+  "offer_evidence": 0
+ },
+ "G_gap_flags": [
+  [
+   true,
+   true
+  ],
+  [
+   true,
+   true
+  ],
+  [
+   true,
+   true
+  ]
+ ],
+ "T1_fetch_failed_tentativas(max3)": 3,
+ "T2_error_fetches_6exec(max3)": 3,
+ "BK1_429_429_200": [
+  "HTML",
+  [
+   30.0,
+   60.0
+  ]
+ ],
+ "BK2_429x3": [
+  null,
+  [
+   30.0,
+   60.0
+  ]
+ ],
+ "BK3_404": [
+  null,
+  []
+ ],
+ "D1_prorrogacao_mescladas": 1,
+ "D1_apos": [
+  [
+   "2026-03-19",
+   "2026-03-31",
+   "80.00"
+  ]
+ ]
+}

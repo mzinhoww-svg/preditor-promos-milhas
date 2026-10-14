@@ -1,0 +1,91 @@
+{
+ "A_extracao": {
+  "14": {
+   "esperado": "110% card Azul (esperado: 80%, nao 110)",
+   "snippets": [],
+   "ofertas": []
+  },
+  "61": {
+   "esperado": "58% hoteis (esperado: nenhuma)",
+   "snippets": [],
+   "ofertas": []
+  },
+  "144": {
+   "esperado": "100% CSS (esperado: nenhuma/20% volta)",
+   "snippets": [
+    "A Livelo retornou com a oferta de até 20% de pointsback para assinantes do Clube Top e Meg",
+    "Neste exemplo, após receber os pontos de volta na conta Livelo, é como se você tivesse uti",
+    "Ótima oportunidade para você transferir pontos da Livelo para a Smiles, já que vai receber"
+   ],
+   "ofertas": [
+    [
+     "livelo",
+     "smiles",
+     100.0
+    ]
+   ]
+  },
+  "118": {
+   "esperado": "80% real",
+   "snippets": [],
+   "ofertas": []
+  },
+  "86": {
+   "esperado": "80%/70% titulo",
+   "snippets": [
+    "A Smiles iniciou uma promoção na qual oferece até 70% de bônus nas transferências de ponto",
+    "70% de bônus: Assinantes Clube Livelo + Assinantes Clube Smiles ou Clientes Diamante;",
+    "60% de bônus: Assinantes Clube Livelo ou Assinantes Clube Smiles ou Clientes Diamante;"
+   ],
+   "ofertas": [
+    [
+     null,
+     null,
+     70.0
+    ]
+   ]
+  },
+  "163": {
+   "esperado": "45% bonus+20% volta",
+   "snippets": [
+    "Na campanha, são oferecidos até 45% de bônus em milhas Smiles, até 20% dos pontos Livelo d",
+    "Vale sempre destacar que as melhores promoções entre Livelo e Smiles podem chegar a 100% o"
+   ],
+   "ofertas": [
+    [
+     null,
+     null,
+     45.0
+    ]
+   ]
+  }
+ },
+ "B_robots_status": {
+  "200": [
+   "ok",
+   "User-agent: *\nDisall"
+  ],
+  "301": [
+   "ok",
+   "User-agent: *\nDisall"
+  ],
+  "403": [
+   "robots_unavailable",
+   null
+  ],
+  "500": [
+   "robots_unavailable",
+   null
+  ],
+  "404": [
+   "ok",
+   ""
+  ]
+ },
+ "B_robots_conexao_recusada": "robots_unavailable",
+ "C_disallow_prefixo_bloqueado": true,
+ "C_wildcard_?s=_bloqueado": false,
+ "C_wildcard_*/search/_bloqueado": false,
+ "C_ua_gptbot_regra": true,
+ "C_UA": "preditor-promos-milhas/0.1 (+https://github.com/mzinhoww-svg/preditor-promos-mil"
+}
