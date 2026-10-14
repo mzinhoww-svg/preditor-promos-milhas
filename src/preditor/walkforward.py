@@ -225,7 +225,9 @@ def walk_forward_splits(
 
         # itens do treino cujo mes de calendario cai na janela
         train_candidates = []
-        for k in range(train_months):
+        # janela expansiva: todos os meses desde o inicio ate o teste (antes
+        # so os primeiros train_months meses entravam, em toda dobra)
+        for k in range(i if expanding else train_months):
             ym = _add_months(train_start, k)
             train_candidates.extend(buckets.get((ym.year, ym.month), []))
         test_candidates = []
