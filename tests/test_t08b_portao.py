@@ -254,9 +254,9 @@ def test_calibration_purged_and_same_booster():
 
 # ---- item 10 ----------------------------------------------------------------
 def test_migration_fixed_parent_single_head():
-    src = (ROOT / "migrations/versions/0003_calendar_seed.py").read_text()
+    src = (ROOT / "migrations/versions/0004_calendar_seed.py").read_text()
     assert "is_file" not in src
-    assert 'down_revision = "0002"' in src
+    assert 'down_revision = "0003"' in src
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 

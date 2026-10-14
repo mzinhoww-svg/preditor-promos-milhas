@@ -470,6 +470,8 @@ def predict_proba(
     as_of: Any = None,
     horizon: Any = None,
     horizons: Any = None,
+    segmented: Any = None,
+    segment_label: Any = None,
     **kwargs: Any,
 ) -> Any:
     # compatibilidade: permite records como positional unico
@@ -506,10 +508,10 @@ def predict_proba(
     if horizons_list is not None and not isinstance(horizons_list, (list, tuple)):
         horizons_list = [int(horizons_list)]
     if horizon_i is not None and horizons_list is None:
-        return m.predict(origin, destination, event_type, as_of=as_of_raw, horizon=horizon_i)
+        return m.predict(origin, destination, event_type, as_of=as_of_raw, horizon=horizon_i, segmented=segmented, segment_label=segment_label)
     if horizons_list is not None:
-        return m.predict(origin, destination, event_type, as_of=as_of_raw, horizons=horizons_list)
-    return m.predict(origin, destination, event_type, as_of=as_of_raw, horizons=HORIZONS_DEFAULT)
+        return m.predict(origin, destination, event_type, as_of=as_of_raw, horizons=horizons_list, segmented=segmented, segment_label=segment_label)
+    return m.predict(origin, destination, event_type, as_of=as_of_raw, horizons=HORIZONS_DEFAULT, segmented=segmented, segment_label=segment_label)
 
 
 # Aliases minimos

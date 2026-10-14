@@ -1,8 +1,8 @@
 """seed calendar_event (idempotente)"""
 from alembic import op
 
-revision = "0003"
-down_revision = "0002"
+revision = "0004"
+down_revision = "0003"
 
 UP = """
 INSERT INTO calendar_event(name, kind, event_date)

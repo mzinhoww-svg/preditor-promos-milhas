@@ -222,8 +222,8 @@ def build_daily_grade(
     grade_rows: list[dict[str, Any]] = []
     for t in day_list:
         t_dt = datetime.combine(t, time.min, tzinfo=TZ)
-        for o, d in pp:
-            for tp in tt:
+        for o, d in sorted(pp, key=str):
+            for tp in sorted(tt, key=str):
                 key = (o, d, tp)
                 # point-in-time known by first_seen_at
                 known = (
@@ -411,6 +411,9 @@ class C1:
         "feature_fraction": 0.9,
         "bagging_fraction": 0.9,
         "bagging_freq": 1,
+        "deterministic": True,
+        "force_row_wise": True,
+        "num_threads": 1,
     }
 
     def __post_init__(self):
@@ -1289,6 +1292,16 @@ def evaluate_c1_vs_b1(
             continue
         engine = C1(horizons=hs)
         engine.fit(train, as_of=cutoff, horizons=hs)
+        fit_fs = [_first_seen_dt(r) for r in engine.records]
+        folds_meta[-1].update(
+            {
+                "fit_as_of": engine.as_of,
+                "fit_n_records": len(engine.records),
+                "fit_max_first_seen": (
+                    max(fit_fs).date() if fit_fs else None
+                ),
+            }
+        )
         grade = build_daily_grade(
             recs,
             horizons=hs,
