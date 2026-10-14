@@ -1,0 +1,67 @@
+{
+ "A1_job_fetch_offers": {
+  "inclui_gap_only": false,
+  "inclui_misto": true,
+  "inclui_sem_evidencia": true
+ },
+ "A2_job_preve_gap_only": false,
+ "A3_loader_ingenuo_inclui_gap_only": true,
+ "A3_exclude_gap_only_remove_sem_campo": true,
+ "A3_helper_que_carrega_com_filtro_existe": [
+  "GAP_ONLY_SQL"
+ ],
+ "B1_so_fim_ate_20/05": [
+  [
+   "livelo",
+   "smiles",
+   "2026-05-09",
+   "2026-05-20",
+   "80.00",
+   "True"
+  ]
+ ],
+ "B2_com_inicio_e_fim": [
+  [
+   "livelo",
+   "smiles",
+   "2026-05-09",
+   "2026-05-20",
+   "80.00",
+   "False"
+  ]
+ ],
+ "B3_sem_datas": [],
+ "B4_fim_no_passado": [],
+ "B5_fim_>90d": [],
+ "C1_run": {
+  "status": "ok",
+  "captures": 3,
+  "items": 6
+ },
+ "C1_raw": {
+  "n": 4,
+  "max_len": 43,
+  "corpo_proibido": 0,
+  "gap": 4
+ },
+ "C1_sleep10_antes_de_cada_snapshot": true,
+ "C2_reexec_novos_fetches": 0,
+ "C2_raw_apos_reexec": 4,
+ "C3_sem_state_raw": 4,
+ "C4_robots_disallow_feed": [
+  {
+   "status": "robots_disallowed",
+   "captures": 0,
+   "items": 0
+  },
+  0
+ ],
+ "C5_robots_indisponivel": [
+  {
+   "status": "robots_unavailable",
+   "captures": 0,
+   "items": 0
+  },
+  0
+ ]
+}
