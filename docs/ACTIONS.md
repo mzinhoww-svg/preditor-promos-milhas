@@ -42,3 +42,7 @@ Outros pares/tipos: livelo→latam_pass 5, esfera→smiles 3, smiles→esfera 2,
 - Gold ainda é `gold_provisional`; revisão humana pendente.
 
 Resíduo de teste (`raw_message` id=1) removido do `preditor_p2`; `tests/conftest.py` protege o banco.
+
+### Listener recorrente de feeds (feat/feed-listener)
+
+`python -m preditor.jobs.feed_listener --once` (agendar por cron, ex.: a cada 30 min): para cada fonte, robots fail-closed (indisponível ⇒ fonte pulada e `source_health.alert`), 1 req/10 s por domínio, item já conhecido (URL em `raw_message`) não é buscado de novo. Pontos pra Voar: só título/data/link; Passageiro de Primeira e Melhores Cartões: artigo integral só de URLs liberadas pelo robots. Cada item vira `raw_message` (com `published_at` e `published_vs_capture_gap` > 7 dias), passa pelo extrator e, havendo oferta nova, dispara `run_daily`. `source_health` registra a coleta; `GET /v1/source-health` agora devolve `last_success_at`, `last_item_at`, `robots_hash` e `status` (`degraded` com 1+ falha seguida, `error` com 3+, `stale` com 7 dias sem item).

@@ -117,30 +117,49 @@ def fetch_model_info() -> dict[str, Any]:
 
 
 def fetch_source_health() -> dict[str, Any]:
+    from preditor.jobs.feed_listener import source_status
+
     engine = get_engine()
     with engine.connect() as conn:
         rows = _rows(conn.execute(text(
-            "SELECT source, checked_at, items_new, extraction_rate, alert FROM source_health ORDER BY checked_at DESC"
+            "SELECT source, checked_at, items_new, extraction_rate, alert, robots_hash "
+            "FROM source_health ORDER BY checked_at DESC"
         )))
+    status_by_source = source_status(engine)
+
+    def iso(v):
+        return v.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z") if hasattr(v, "astimezone") else None
+
     sources = []
     seen = set()
     for r in rows:
         if r["source"] in seen:
             continue
         seen.add(r["source"])
+        st = status_by_source.get(r["source"], {})
+        fails = st.get("consecutive_failures", 1 if r.get("alert") else 0)
+        delay = st.get("delay_hours")
+        if fails >= 3:
+            status = "error"
+        elif fails >= 1:
+            status = "degraded"
+        elif delay is not None and delay > 24 * 7:
+            status = "stale"
+        else:
+            status = "ok"
         sources.append({
             "source": r["source"],
             "kind": "rss",
-            "status": "degraded" if r.get("alert") else "ok",
-            "last_success_at": r["checked_at"].astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z") if hasattr(r["checked_at"], "astimezone") else None,
-            "last_item_at": None,
+            "status": status,
+            "last_success_at": iso(st.get("last_success_at")),
+            "last_item_at": iso(st.get("last_item_at")),
             "items_new_24h": r.get("items_new"),
             "items_new_7d": r.get("items_new"),
             "extraction_rate_7d": float(r["extraction_rate"]) if r.get("extraction_rate") is not None else None,
-            "error_rate_24h": 0.0 if not r.get("alert") else 0.1,
-            "robots_hash": None,
+            "error_rate_24h": 1.0 if fails else 0.0,
+            "robots_hash": r.get("robots_hash"),
             "robots_changed": False,
-            "message": None,
+            "message": f"{fails} falha(s) consecutiva(s)" if fails else None,
         })
     return {"generated_at": _now(), "sources": sources}
 
