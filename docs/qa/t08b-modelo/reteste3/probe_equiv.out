@@ -1,0 +1,9 @@
+BASE {"n": 1149, "p_c1_hash": "82de68105b42", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05491}
+V3V4_pool+predict_fs<=t+30d {"n": 1149, "p_c1_hash": "82de68105b42", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05491}
+V5_data_sem_hora_time.min {"n": 1149, "p_c1_hash": "292190aad389", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.04832}
+V6_b1_com_todos_registros {"n": 1149, "p_c1_hash": "82de68105b42", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05491}
+V7_sem_embargo_no_fit {"n": 1149, "p_c1_hash": "64d1a9f9e3e4", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05551}
+V9_fit_filtro_as_of_removido {"n": 1149, "p_c1_hash": "82de68105b42", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05491}
+V10_predict_curve_sem_filtro_as_of {"n": 1149, "p_c1_hash": "82de68105b42", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05491}
+M5_predict_trained_at_sem_filtro {"n": 1149, "p_c1_hash": "82de68105b42", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05491}
+M3_pool_sem_filtro {"n": 1149, "p_c1_hash": "82de68105b42", "p_b1_hash": "08952a63f1a6", "common": 1149, "changed_by_late_records": 0, "brier_b1": 0.16071, "brier_c1": 0.05491}

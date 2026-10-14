@@ -1,0 +1,8 @@
+vazio EXC ValueError: dados insuficientes para walk-forward
+poucos(5) EXC ValueError: dados insuficientes para walk-forward
+duplicadas_n_campanhas [143, 143]
+duplicadas_mesmo_p_c1 True
+reexec_deterministico True
+troca_c1_pior_promove? False
+relatorio_banner False
+predict_proba_c1 [0.99, 1.0]
