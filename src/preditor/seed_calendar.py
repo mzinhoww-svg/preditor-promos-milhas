@@ -1,0 +1,1 @@
+from preditor.model import *

@@ -33,7 +33,7 @@
       "title": "Spec do coletor Livelo → Smiles",
       "fase": "Portao de viabilidade/coleta",
       "peso": 2,
-      "estado": "Em revisao",
+      "estado": "Feito",
       "evidencia": "docs/plans/coletor-livelo-smiles.md; PR #2",
       "updated_at": "2026-10-13"
     },
@@ -42,7 +42,7 @@
       "title": "Cliente Wayback CDX e ingest idempotente",
       "fase": "Portao de viabilidade/coleta",
       "peso": 3,
-      "estado": "Em revisao",
+      "estado": "Feito",
       "evidencia": "PR #1 (CI verde)",
       "updated_at": "2026-10-13"
     },
@@ -52,7 +52,7 @@
       "fase": "Portao de viabilidade/coleta",
       "peso": 4,
       "estado": "Em andamento",
-      "evidencia": "depende de T05a e T05-spec",
+      "evidencia": "Codigo mergeado (PR #19, vazamento aprovado); backfill real de 24+ meses e listener de feed ainda nao executados",
       "updated_at": "2026-10-13"
     },
     {
@@ -69,7 +69,7 @@
       "title": "Extrator determinístico regex + pydantic",
       "fase": "Estruturacao/extrator",
       "peso": 3,
-      "estado": "Em revisao",
+      "estado": "Feito",
       "evidencia": "PR #5 (CI rodando)",
       "updated_at": "2026-10-13"
     },
@@ -106,7 +106,7 @@
       "fase": "Modelo",
       "peso": 4,
       "estado": "Em andamento",
-      "evidencia": "baseline disponível; decisão pendente",
+      "evidencia": "T08b com dados sinteticos; decisao real so com >= 25 campanhas por par e tipo",
       "updated_at": "2026-10-13"
     },
     {
@@ -114,7 +114,7 @@
       "title": "Job diário gravando prediction",
       "fase": "Produto/dashboard/API/deploy",
       "peso": 3,
-      "estado": "Pendente",
+      "estado": "Em revisao",
       "evidencia": "MVP",
       "updated_at": "2026-10-13"
     },
@@ -123,8 +123,8 @@
       "title": "API respondendo",
       "fase": "Produto/dashboard/API/deploy",
       "peso": 3,
-      "estado": "Pendente",
-      "evidencia": "MVP",
+      "estado": "Em revisao",
+      "evidencia": "PR #25 aberto (FastAPI, X-API-Key, rate limit), em teste cruzado",
       "updated_at": "2026-10-13"
     },
     {
@@ -133,7 +133,7 @@
       "fase": "Produto/dashboard/API/deploy",
       "peso": 4,
       "estado": "Em andamento",
-      "evidencia": "PR #9 dashboard v0",
+      "evidencia": "Dashboard v0 mergeado com dados de exemplo; deploy na Vercel e API real pendentes",
       "updated_at": "2026-10-13"
     },
     {
@@ -177,7 +177,7 @@
       "title": "source_health",
       "fase": "Produto/dashboard/API/deploy",
       "peso": 2,
-      "estado": "Pendente",
+      "estado": "Em andamento",
       "evidencia": "MVP",
       "updated_at": "2026-10-13"
     },
@@ -195,7 +195,7 @@
       "title": "prediction_log ativo",
       "fase": "Produto/dashboard/API/deploy",
       "peso": 3,
-      "estado": "Pendente",
+      "estado": "Em revisao",
       "evidencia": "MVP",
       "updated_at": "2026-10-13"
     },
