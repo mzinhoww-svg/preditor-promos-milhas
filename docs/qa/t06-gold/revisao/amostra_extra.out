@@ -1,0 +1,33 @@
+m-0045 {"ofertas": [{"bonus_pct": 45, "bumerangue_pct": 20, "destino": "smiles", "fim": null, "inicio": null, "origem": "livelo", "segmentada": true, "segmento": "clube", "tipo": "transfer_bonus"}]}
+Bumerangue prorrogado! Transfira pontos da Livelo para Smiles com bônus, pontos de volta e desconto para viajar A Livelo e a Smiles prorrogaram a oferta bumerangue entre os programas! Na campanha, são oferecidos até 45% de bônus em milhas Smiles, até 20% dos pontos Livelo de volta e mais um desconto de 10% para resgatar passagens com milhas para voar com a Gol. O desconto é fixo para todos que fizerem a transferência de pontos, mas o maior bônus é válido para clientes do Clube Smiles, Clube Livelo ou da categoria Diamante.
+prorrogacao; desconto de 10% em passagens nao e tipo do glossario 2023-12-20T12:10:32-03:00
+
+== checagem automatica de datas (todas as positivas) ==
+fins checados: 69 | suspeitos: 2
+   ('m-0037', '2023-09-28', ['dia 28 nao aparece em [30]'])
+   ('m-0042', '2023-11-16', ['dia 16 nao aparece em [14]'])
+
+== bonus_pct vs maior % do trecho ==
+bonus ausente do trecho: 1 [('m-0035', 90, [10, 20, 80])]
+
+== distratores ==
+m-0076 dev ['distrator', 'gap'] passageirode | Pessoal, quem acompanha o site sabe que não recomendamos a troca de pontos/milhas por prod
+m-0077 dev ['distrator', 'gap'] passageirode | Com o fim do Membership Rewards (programa de fidelidade dos cartões American Express) no B
+m-0078 dev ['distrator', 'gap'] passageirode | A Livelo anunciou que, durante o mês de setembro, não haverá cobrança de taxa para as tran
+m-0079 dev ['distrator', 'gap'] passageirode | Um pouco antes do prazo de até 30 dias corridos após o término da promoção, os pointsback 
+m-0080 dev ['distrator', 'gap'] passageirode | Uma das formas de acumular milhas no programa de fidelidade Smiles é através dos pontos ge
+m-0081 test ['distrator'] passageirode | One moment, please... Please wait while your request is being verified...
+m-0082 dev ['distrator'] passageirode | Alerta de disponibilidade!
+m-0083 test ['distrator'] passageirode | US Airways oferece até 50.000 milhas de bônus na compra de milhas Smiles oferece até 60% d
+m-0084 test ['distrator'] passageirode | Momento dicionário: Entenda um pouco melhor de termos usados aqui no site e aviação Como c
+m-0085 test ['distrator'] passageirode | Último dia para ganhar isenção de anuidade por 1 ano dos cartões de crédito - incluindo o 
+m-0086 test ['distrator', 'gap'] passageirode | Livelo oferece 30% de desconto em voos para Miami e Orlando Ganhe até 264 mil milhas em 1 
+m-0087 test ['distrator'] passageirode | Azul Viagens oferece cupom de 20% de desconto em reservas de hotéis e carros Smiles oferec
+m-0088 test ['distrator'] passageirode | CORRE! Apenas 5 cupons com 30% OFF nos Alertas de Viagem do PP Shopping Smiles oferece até
+m-0089 test ['distrator', 'titulo_rss'] pontospravoa | Transfira pontos do LATAM Pass para o ALL Accor com desconto e ganhe até 20% de bônus
+m-0090 dev ['distrator', 'titulo_rss'] pontospravoa | Transfira pontos do Itaú para o Azul Fidelidade com até 100% de bônus + até 5.000 pontos e
+m-0091 dev ['distrator', 'titulo_rss'] pontospravoa | Azul Fidelidade oferece até 100% de bônus na transferência do Sicredi + 15% OFF em passage
+m-0092 test ['distrator', 'titulo_rss'] pontospravoa | Novidade! Smiles oferece até 80% de bônus na transferência de pontos Sem Parar Mais
+m-0093 test ['distrator', 'titulo_rss'] pontospravoa | Mercado Livre com até R$ 500 de desconto em cupons nesta terça-feira
+m-0094 test ['distrator', 'titulo_rss'] pontospravoa | Alerta PPV: voos na LATAM a partir de R$ 154
+m-0095 test ['distrator', 'titulo_rss'] pontospravoa | United Airlines muda regras do MileagePlus em 2027

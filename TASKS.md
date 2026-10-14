@@ -17,3 +17,4 @@
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
 | T10a | API FastAPI + job diário baseline/accuracy | Programador | em_revisao | PR #25; commit `70c0687`/`b2bfaf8`; B1-B3 corrigidos (job roda com ofertas, unicidade prediction_log, accuracy from/to); ruff/pytest verdes (99); ciclo 3: vazamento corrigido (P1 última predição na API, J1b par e J1c método point-in-time), `tests/test_t10a_leakage.py`, pytest 140 verdes |
 | TP1 | Painel de progresso visual ao vivo | Programador (Painel) | em_revisao | tools/painel; docs/mvp-checklist.json; tests/test_painel.py; ruff/pytest verdes; PR pendente |
+| QA-T06 | Revisao do conjunto de ouro provisorio (PR #42) | QA Cruzado | revisada | c9c923f: sem texto integral (max 597 chars), 100% gold_provisional, split 20/30 e 8/12, integridade ok, amostra 10/10 direcao e bonus; ressalvas: 5 distratores com artefato de coleta, composicao A49/B1 (declarada), $ref do schema; ver docs/qa/t06-gold/revisao/RELATORIO.md |

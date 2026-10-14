@@ -1,0 +1,30 @@
+--- m-0057 dev gap=False raw=129 sha_ok=True sentencas_verbatim=6/6 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 70, None, '2024-09-23', True)] | pcts no trecho: [40, 70]
+   trecho: Últimas horas para ganhar até 70% de bônus nas transferências de pontos da Livelo. A campanha é válida até 23h59 de hoje (23). 70% de bônus: assinantes do Clube Livelo e/ou Clube Smiles e/ou clientes Diamante; 40% de bônus: demais participantes. Ganhe até 70% de bônus na Smiles. Quem contratar o Plano 1.000 mensal do Clube Smiles receberá 1.000 milhas do plano + 9.000 milhas bônus, totalizando 10.000 milhas na hora.
+--- m-0045 dev gap=False raw=163 sha_ok=True sentencas_verbatim=3/3 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 45, None, None, True)] | pcts no trecho: [10, 20, 45]
+   trecho: Bumerangue prorrogado! Transfira pontos da Livelo para Smiles com bônus, pontos de volta e desconto para viajar A Livelo e a Smiles prorrogaram a oferta bumerangue entre os programas! Na campanha, são oferecidos até 45% de bônus em milhas Smiles, até 20% dos pontos Livelo de volta e mais um desconto de 10% para resgatar passagens com milhas para voar com a Gol. O desconto é fixo para todos que fizerem a transferência
+--- m-0015 dev gap=True raw=74 sha_ok=True sentencas_verbatim=6/6 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 100, None, '2021-06-30', True)] | pcts no trecho: [50, 100]
+   trecho: A Smiles iniciou uma promoção oferecendo até 100% de bônus nas transferências de pontos da Livelo. Além disso, quem participar dessa oferta receberá milhas (somente as bônus) com 5 anos de validade. A oferta é válida até quarta-feira (30). 100% de bônus: assinantes do Clube Livelo ou assinantes do Clube Smiles ou clientes Diamante; 50% de bônus: demais clientes Smiles. Transfira a partir de 10.000 pontos Livelo para 
+--- m-0055 dev gap=False raw=111 sha_ok=True sentencas_verbatim=4/4 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 90, None, '2024-08-09', True)] | pcts no trecho: [10, 80, 87, 88, 90]
+   trecho: Somente até amanhã (9), a Smiles está oferecendo até 90% de bônus nas transferências de pontos de todos os bancos, inclusive da Livelo. Conforme mencionamos, é possível ganhar até 90% de bônus nas transferências de pontos de todos os parceiros financeiros exclusivo para membros do Clube Smiles e clientes Diamante, dependendo do seu Plano. A promoção é válida somente até amanhã (9). 90% de bônus (80% + 10% de bônus do
+--- m-0017 test gap=True raw=73 sha_ok=True sentencas_verbatim=6/6 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 100, None, '2021-11-17', True)] | pcts no trecho: [50, 100]
+   trecho: A Smiles está oferecendo até 100% de bônus nas transferências de pontos da Livelo. Além disso, todas as milhas são válidas por 10 anos. A oferta é válida somente até amanhã (17). 100% de bônus: assinantes do Clube Livelo ou assinantes do Clube Smiles ou clientes Diamante; 50% de bônus: demais clientes Smiles. Transfira a partir de 10.000 pontos Livelo para a Smiles até 17/11/2021;
+--- m-0051 test gap=False raw=5 sha_ok=True sentencas_verbatim=6/6 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 100, None, '2024-06-11', True)] | pcts no trecho: [40, 90, 100]
+   trecho: A Smiles está oferecendo até 100% de bônus nas transferências de pontos da Livelo. A campanha é válida até 23h59 de amanhã (11). 100% de bônus: assinantes do Clube Livelo e Clube Smiles e/ou clientes Diamante; 90% de bônus: assinantes do Clube Livelo ou Clube Smiles e/ou clientes Diamante; 40% de bônus: demais participantes. Ganhe até 100% de bônus na Smiles.
+--- m-0062 test gap=False raw=168 sha_ok=True sentencas_verbatim=5/5 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 90, None, '2025-03-14', True)] | pcts no trecho: [50, 80, 90]
+   trecho: Ganhe até 90% de bônus na transferência de pontos Livelo A Smiles está com uma nova oferta em comemoração à Semana do Consumidor que oferece até 90% de bônus na transferência de pontos Livelo para o programa. A promoção é válida até sexta, 14 de março. 90% de bônus – Clientes Clube Smiles e/ou Diamante E Clube Livelo. 80% de bônus – Clientes Clube Smiles e/ou categoria Diamante OU Clube Livelo. 50% de bônus – Demais 
+--- m-0054 test gap=False raw=41 sha_ok=True sentencas_verbatim=4/4 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 90, None, '2024-07-16', True)] | pcts no trecho: [10, 80, 87, 88, 90]
+   trecho: Somente até amanhã (16), a Smiles está oferecendo até 90% de bônus nas transferências de pontos de todos os bancos, inclusive da Livelo. Como falamos anteriormente, é possível ganhar até 90% de bônus nas transferências de pontos de todos os parceiros financeiros exclusivo para Clube Smiles, dependendo do seu Plano. A oferta é válida até 23h59 de amanhã (16). 90% de bônus (80% + 10% de bônus do Plano) – Plano 20.000 o
+--- m-0032 test gap=False raw=153 sha_ok=True sentencas_verbatim=4/4 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 100, None, '2023-03-15', True)] | pcts no trecho: [50, 100]
+   trecho: Prorrogado! Ganhe até 100% de bônus ao transferir pontos Livelo para a Smiles A Smiles prorrogou por mais um dia a promoção que oferece até 100% de bônus no envio de pontos Livelo. A oferta agora é válida até às 23h59 de hoje (15/03). Os demais clientes Livelo e Smiles recebem 50% de milhas extras. As milhas bônus terão validade de 12 meses e serão creditadas na conta Smiles até 28/03/2023.
+--- m-0065 test gap=False raw=57 sha_ok=True sentencas_verbatim=4/5 url_ok=True
+   expected: [('livelo', 'smiles', 'transfer_bonus', 80, None, '2025-06-11', True)] | pcts no trecho: [50, 70, 80]
+   trecho: 🔈A Smiles prorrogou a campanha que está oferecendo até 80% de bônus nas transferências de pontos Livelo. A oferta agora é válida até 23h59 de hoje (11). 80% de bônus: assinantes do Clube Livelo e Clube Smiles e/ou clientes Diamante; 70% de bônus: assinantes Clube Livelo ou Clube Smiles e/ou categoria diamante; 50% de bônus: demais clientes Ganhe até 80% de bônus na Smiles
