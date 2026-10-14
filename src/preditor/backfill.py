@@ -528,6 +528,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--refresh-candidates", dest="refresh_candidates", action="store_true")
     parser.add_argument("--max-fetch", dest="max_fetch", type=int, default=None,
                         help="teto de downloads novos por fonte nesta execucao (por prioridade do slug)")
+    parser.add_argument("--feed-step-days", dest="feed_step_days", type=int, default=5)
     parser.add_argument("--rss-archive", dest="rss_archive", default=None,
                         help="URL do feed; lista capturas pela CDX e le so titulo/data/link")
     parser.add_argument("--rss-titles", dest="rss_titles", default=None, help="URL do feed (so titulo/data/link)")
@@ -548,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.rss_archive:
         src = args.sources[0]
         out = collect_archived_feed(_engine(args), src, args.rss_archive, C._parse_date_text(args.from_),
-                                    rate_limit=args.rate_limit)
+                                    rate_limit=args.rate_limit, step_days=args.feed_step_days)
         print(json.dumps(out, ensure_ascii=False))
         return 0
     if args.rss_titles:
