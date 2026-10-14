@@ -325,6 +325,73 @@ def run_backfill(args: argparse.Namespace) -> dict:
     return {"state_path": str(STATE_PATH), "summary": summary}
 
 
+def dedupe_extensions(engine) -> int:
+    """Funde ofertas iguais (mesmo par, tipo, inicio e bonus) que so diferem no fim: prorrogacao."""
+    import sqlalchemy as sa
+
+    merged = 0
+    with engine.begin() as c:
+        groups = c.execute(sa.text(
+            "SELECT array_agg(id ORDER BY first_seen_at, id) FROM offer "
+            "GROUP BY origin, destination, event_type, start_at, bonus_pct HAVING count(*) > 1")).scalars().all()
+        for ids in groups:
+            keep, drop = ids[0], ids[1:]
+            c.execute(sa.text("UPDATE offer SET end_at=(SELECT max(end_at) FROM offer WHERE id = ANY(:ids)) WHERE id=:k"),
+                      {"ids": ids, "k": keep})
+            c.execute(sa.text("UPDATE offer_evidence SET offer_id=:k WHERE offer_id = ANY(:d) AND NOT EXISTS ("
+                              "SELECT 1 FROM offer_evidence e2 WHERE e2.offer_id=:k AND "
+                              "e2.raw_message_id=offer_evidence.raw_message_id)"), {"k": keep, "d": drop})
+            c.execute(sa.text("DELETE FROM offer_evidence WHERE offer_id = ANY(:d)"), {"d": drop})
+            c.execute(sa.text("DELETE FROM offer WHERE id = ANY(:d)"), {"d": drop})
+            merged += len(drop)
+    if merged:
+        with engine.connect() as c:
+            ids = c.execute(sa.text("SELECT id FROM offer")).scalars().all()
+        for oid in ids:
+            C._recompute_offer(engine, oid)
+    return merged
+
+
+def recompute_gap(engine, ts_by_url: dict[str, str]) -> int:
+    """Marca published_vs_capture_gap nas mensagens ja gravadas (timestamp da captura vem do state)."""
+    import sqlalchemy as sa
+
+    with engine.connect() as c:
+        rows = c.execute(sa.text("SELECT id, url, content FROM raw_message")).all()
+    flagged = 0
+    for rid, url, content in rows:
+        pub = C._extract_published_time(content)
+        cap = C._ts_to_datetime(ts_by_url.get(url)) if ts_by_url.get(url) else None
+        gap = bool(pub is not None and cap is not None and cap - pub > timedelta(days=GAP_DAYS))
+        _mark_gap(engine, rid, pub, gap)
+        flagged += int(gap)
+    return flagged
+
+
+def reprocess(engine) -> dict:
+    """Apaga ofertas/evidencias e reextrai de raw_message so do corpo do artigo (sem rede)."""
+    import sqlalchemy as sa
+
+    with engine.connect() as c:
+        old = {tuple(str(x) for x in r) for r in c.execute(sa.text(
+            "SELECT origin,destination,event_type,start_at,bonus_pct FROM offer")).all()}
+    with engine.begin() as c:
+        c.execute(sa.text("DELETE FROM offer_evidence"))
+        c.execute(sa.text("DELETE FROM offer"))
+    with engine.connect() as c:
+        rows = c.execute(sa.text(
+            "SELECT id, source, content, observed_at FROM raw_message WHERE observed_at IS NOT NULL ORDER BY id")).all()
+    for rid, source, content, observed in rows:
+        _process_snippets(engine, source, rid, content, observed)
+    merged = dedupe_extensions(engine)
+    with engine.connect() as c:
+        new = {tuple(str(x) for x in r) for r in c.execute(sa.text(
+            "SELECT origin,destination,event_type,start_at,bonus_pct FROM offer")).all()}
+        n_new = c.execute(sa.text("SELECT count(*) FROM offer")).scalar_one()
+    return {"raw_messages": len(rows), "old_offers": len(old), "new_offers": int(n_new),
+            "merged_extensions": merged, "discarded_vs_old": len(old - new)}
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Backfill real Livelo->Smiles via Wayback (resumavel)")
     parser.add_argument("--source", dest="sources", action="append", help="fonte (repetivel)")
@@ -335,6 +402,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-size", dest="page_size", type=int, default=500)
     parser.add_argument("--database-url", dest="database_url", default=None)
     parser.add_argument("--refresh-candidates", dest="refresh_candidates", action="store_true")
+    parser.add_argument("--reprocess", action="store_true", help="reextrai de raw_message (sem rede)")
     parser.add_argument("--max-attempts", dest="max_attempts", type=int, default=3)
     parser.add_argument("--slug-mode", dest="slug_mode", choices=["either", "both"], default="either")
     parser.add_argument("--titles-only", dest="titles_only", action="store_true")
@@ -348,6 +416,14 @@ def main(argv: list[str] | None = None) -> int:
         args.sources = list(SOURCES_DEFAULT)
     if isinstance(args.sources, str):
         args.sources = [args.sources]
+    if args.reprocess:
+        eng = _engine(args)
+        ts_by_url = {u: v.get("timestamp") for src in _load_state().get("sources", {}).values()
+                     for u, v in src.get("processed", {}).items() if v.get("timestamp")}
+        out = reprocess(eng)
+        out["gap_flagged"] = recompute_gap(eng, ts_by_url)
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        return 0
     result = run_backfill(args)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
