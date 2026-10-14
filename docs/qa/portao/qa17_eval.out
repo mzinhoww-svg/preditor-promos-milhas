@@ -1,0 +1,52 @@
+registros 64 apos exclude_gap_only 31
+tempo 6 s
+{
+ "dobras": 10,
+ "cortes": [
+  "2023-09-24",
+  "2025-12-20"
+ ],
+ "n_train_por_dobra": [
+  3,
+  6,
+  7,
+  9,
+  14,
+  18,
+  19,
+  21,
+  26,
+  29
+ ],
+ "linhas": 3471,
+ "positivas": 651,
+ "campanhas_treino": {
+  "esfera|azul_fidelidade|transfer_bonus": 1,
+  "livelo|latam_pass|transfer_bonus": 3,
+  "livelo|smiles|transfer_bonus": 23
+ },
+ "brier_b1": 0.12469501565326044,
+ "brier_c1": 0.3060689708757032,
+ "logloss_b1": 0.3756526403317617,
+ "logloss_c1": 1.2611799136786537,
+ "ci_brier": [
+  -0.23927603633732422,
+  -0.12617859866883954
+ ],
+ "ci_logloss": [
+  -1.146212595486761,
+  -0.6303247152203266
+ ],
+ "calibrado": false,
+ "decisao": "keep_champion",
+ "motivos": [
+  "dados insuficientes: esfera,azul_fidelidade,transfer_bonus=1 < 25",
+  "dados insuficientes: livelo,latam_pass,transfer_bonus=3 < 25",
+  "dados insuficientes: livelo,smiles,transfer_bonus=23 < 25",
+  "Brier do challenger nao e menor",
+  "log-loss do challenger nao e menor",
+  "IC de Brier inclui zero ou nao favorece challenger",
+  "IC de log-loss inclui zero ou nao favorece challenger",
+  "challenger nao calibrado"
+ ]
+}
