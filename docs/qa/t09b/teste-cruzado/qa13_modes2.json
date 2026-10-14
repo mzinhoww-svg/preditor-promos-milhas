@@ -1,0 +1,253 @@
+{
+ "prob_invalid": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 0,
+   "descartados": [
+    "nus de transferência Compra com desconto Acúmulo turbinado 3 itens da API foram descartados por formato inválido"
+   ],
+   "vazio": [
+    " Nenhuma previsão para esse filtro"
+   ]
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5,
+   "descartados": [],
+   "vazio": []
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": [
+    " Nenhuma semana com predições resolvidas no período"
+   ]
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": []
+  }
+ },
+ "xss": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 1,
+   "descartados": [],
+   "vazio": []
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5,
+   "descartados": [],
+   "vazio": []
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": [
+    " Nenhuma semana com predições resolvidas no período"
+   ]
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": []
+  }
+ },
+ "missing_field": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 2,
+   "descartados": [
+    " Bônus de transferência Compra com desconto Acúmulo turbinado 1 item da API foi descartado por formato inválido"
+   ],
+   "vazio": []
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 5,
+   "descartados": [],
+   "vazio": []
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": [
+    " Nenhuma semana com predições resolvidas no período"
+   ]
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": []
+  }
+ },
+ "empty": {
+  "/": {
+   "http": 200,
+   "s": 0.1,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": "B1 · hazard ",
+   "linhas": 0,
+   "descartados": [],
+   "vazio": [
+    "ônus de transferência Compra com desconto Acúmulo turbinado Nenhuma previsão para esse filtro"
+   ]
+  },
+  "/alertas": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": [
+    " Nenhum alerta ativo",
+    " Nenhum par cruzou o limiar nas últimas execuções"
+   ]
+  },
+  "/modelo": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": [
+    " Nenhuma semana com predições resolvidas no período"
+   ]
+  },
+  "/fontes": {
+   "http": 200,
+   "s": 0.0,
+   "simulados": false,
+   "modo_exemplo": false,
+   "nao_decidido": false,
+   "lixo": [],
+   "script_injetado": false,
+   "motivo": null,
+   "selo": null,
+   "linhas": 0,
+   "descartados": [],
+   "vazio": []
+  }
+ }
+}
