@@ -72,3 +72,13 @@ def test_split_metadata_available():
     assert hasattr(sp, "train_end")
     assert hasattr(sp, "test_start")
     assert sp.test_start >= sp.train_end
+
+
+def test_expanding_window_grows_with_each_fold():
+    recs = [mk(date(2024, 1, 1) + timedelta(days=30 * i)) for i in range(18)]
+    splits = walk_forward_splits(
+        recs, train_months=3, test_months=1, step_months=1, purge_days=30, expanding=True
+    )
+    sizes = [len(sp.train) for sp in splits]
+    assert len(sizes) >= 3
+    assert sizes == sorted(sizes) and sizes[-1] > sizes[0]

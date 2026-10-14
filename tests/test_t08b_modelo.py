@@ -49,6 +49,8 @@ def test_champion_keeps_b1_when_not_better():
         bootstrap_ci_brier={"ci_low": -0.01, "ci_high": 0.02},
         bootstrap_ci_logloss={"ci_low": -0.01, "ci_high": 0.02},
         challenger_calibrated=True,
+        n_campaigns_by_pair_type={("livelo", "smiles", "transfer_bonus"): 30},
+        data_source="real",
     )
     assert d["decision"] == "keep_champion"
     assert d["promoted"] is False

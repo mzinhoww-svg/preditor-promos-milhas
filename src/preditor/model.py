@@ -8,7 +8,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 import lightgbm as lgb
 import numpy as np
@@ -225,29 +225,16 @@ def build_daily_grade(
         for o, d in pp:
             for tp in tt:
                 key = (o, d, tp)
-                [
-                    r
-                    for r in recs
-                    if _origin(r) == o
-                    and _destination(r) == d
-                    and _event_type(r) == tp
-                    and (
-                        _first_seen_dt(r) is not None
-                        and _first_seen_dt(r) <= t_dt
-                        or _start(r) is not None
-                        and _start(r) <= t
-                    )
-                ]
                 # point-in-time known by first_seen_at
-                known = [
-                    r
-                    for r in recs
-                    if _origin(r) == o
-                    and _destination(r) == d
-                    and _event_type(r) == tp
-                    and (_fs := _first_seen_dt(r)) is not None
-                    and _fs <= t_dt
-                ]
+                known = (
+                    [
+                        r
+                        for r in offers_by_pair_type.get(key, [])
+                        if (_fs := _first_seen_dt(r)) is not None and _fs <= t_dt
+                    ]
+                    if include_features
+                    else []
+                )
                 for h in hs:
                     if cutoff_dt is not None and t + timedelta(days=h) > cutoff_dt:
                         # embargo: janela de rótulo cruza corte
@@ -394,8 +381,40 @@ class C1:
     base_rate_: float = 0.0
     records: list = field(default_factory=list)
     as_of: Any = None
+    calibration_info: dict[str, Any] = field(default_factory=dict)
+    calibration_booster: dict[int, Any] = field(default_factory=dict)
+
+    MIN_CALIB_ROWS: ClassVar[int] = 30
+    PROB_MIN: ClassVar[float] = 0.01
+    PROB_MAX: ClassVar[float] = 0.99
+    FEATURE_NAMES: ClassVar[tuple[str, ...]] = (
+        "origin",
+        "destination",
+        "event_type",
+        "days_since_last_offer",
+        "month",
+        "day_of_week",
+        "sibling_offers_7d",
+        "sibling_offers_30d",
+        "is_calendar_event_day",
+        "days_to_next_calendar_event",
+        "n_known_offers",
+        "h",
+    )
+    LGB_PARAMS: ClassVar[dict[str, Any]] = {
+        "objective": "binary",
+        "metric": "binary_logloss",
+        "verbosity": -1,
+        "num_leaves": 31,
+        "min_child_samples": 20,
+        "learning_rate": 0.05,
+        "feature_fraction": 0.9,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+    }
 
     def __post_init__(self):
+        self.feature_names = list(self.FEATURE_NAMES)
         if not self.calendar_events:
             self.calendar_events = [
                 {"name": n, "kind": k, "event_date": d} for (n, k, d) in SEED_EVENTS
@@ -418,20 +437,7 @@ class C1:
         if not rows:
             rows = [r for r in grade_rows]  # fallback
         # if grade contains multiple h but row h differs, still use label y? We'll trust
-        feature_names = [
-            "origin",
-            "destination",
-            "event_type",
-            "days_since_last_offer",
-            "month",
-            "day_of_week",
-            "sibling_offers_7d",
-            "sibling_offers_30d",
-            "is_calendar_event_day",
-            "days_to_next_calendar_event",
-            "n_known_offers",
-            "h",
-        ]
+        feature_names = list(self.FEATURE_NAMES)
         self.feature_names = feature_names
         cat_cols = {"origin", "destination", "event_type"}
         # encode categoricals
@@ -530,14 +536,24 @@ class C1:
             self.trained = False
             return self
 
-        # time split for calibration: last 20% by t
-        sorted_rows = sorted(grade, key=lambda r: _to_date(r.get("t")))
-        cut = max(1, int(len(sorted_rows) * 0.8))
-        train_rows = sorted_rows[:cut]
-        val_rows = sorted_rows[cut:]
-        if not val_rows:
-            val_rows = sorted_rows[-max(1, len(sorted_rows) // 5) :]
-            train_rows = sorted_rows[: -len(val_rows)]
+        # Split temporal com purge: a fatia de calibracao so comeca
+        # max(h) dias depois do fim do treino (rotulos nao se sobrepoem).
+        max_h = max(int(h) for h in self.horizons)
+        ts = sorted({_to_date(r.get("t")) for r in grade})
+        cut_t = ts[max(0, int(len(ts) * 0.8) - 1)]
+        calib_start = cut_t + timedelta(days=max_h)
+        train_rows = [r for r in grade if _to_date(r.get("t")) <= cut_t]
+        val_rows = [r for r in grade if _to_date(r.get("t")) >= calib_start]
+        self.calibration_info = {
+            "purge_days": max_h,
+            "train_max_t": max(_to_date(r.get("t")) for r in train_rows),
+            "calib_min_t": (
+                min(_to_date(r.get("t")) for r in val_rows) if val_rows else None
+            ),
+            "n_train": len(train_rows),
+            "n_calib": len(val_rows),
+        }
+        self.calibration_booster = {}
 
         # base rate
         ys_all = [int(r.get("y", r.get("label", 0))) for r in grade]
@@ -546,16 +562,10 @@ class C1:
         for h in self.horizons:
             h = int(h)
             Xtr, ytr, cat_idxs, fn, _ = self._rows_to_Xy(train_rows, h, fit=True)
-            Xval, yval, _, _, _ = self._rows_to_Xy(val_rows, h, fit=False)
-            # ensure shapes
             if len(set(ytr.tolist())) < 2:
-                # no variation; store dummy
                 self.models[h] = None
-                # calibrator identity
                 self.calibrators[h] = None
                 continue
-            # map categories consistent already
-            # Build datasets
             dtrain = lgb.Dataset(
                 Xtr,
                 label=ytr,
@@ -563,33 +573,22 @@ class C1:
                 feature_name=fn,
                 free_raw_data=False,
             )
-            params = {
-                "objective": "binary",
-                "metric": "binary_logloss",
-                "verbosity": -1,
-                "num_leaves": 31,
-                "min_child_samples": 1,
-                "learning_rate": 0.05,
-                "feature_fraction": 0.9,
-                "bagging_fraction": 0.9,
-                "bagging_freq": 1,
-                "seed": self.random_state,
-            }
+            params = dict(self.LGB_PARAMS, seed=self.random_state)
             booster = lgb.train(
                 params,
                 dtrain,
                 num_boost_round=100,
                 callbacks=[lgb.log_evaluation(period=0)],
             )
-            # validation preds
-            raw_val = (
-                booster.predict(Xval, num_iteration=booster.best_iteration)
-                if booster is not None
-                else np.full(len(yval), self.base_rate_)
-            )
-            raw_val = np.asarray(raw_val, dtype=float)
+            self.models[h] = booster
+            self.calibrators[h] = None
+            if not val_rows:
+                continue
+            Xval, yval, _, _, _ = self._rows_to_Xy(val_rows, h, fit=False)
+            if len(yval) < self.MIN_CALIB_ROWS or len(set(yval.tolist())) < 2:
+                continue  # fatia pequena/sem variacao: nao calibra (nao inventa)
+            raw_val = np.asarray(booster.predict(Xval), dtype=float)
             clipped = np.clip(raw_val, 1e-6, 1 - 1e-6)
-            # calibrator fit
             if self.calibration == "platt":
                 lr = LogisticRegression(max_iter=1000)
                 lr.fit(clipped.reshape(-1, 1), yval)
@@ -598,30 +597,9 @@ class C1:
                 iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
                 iso.fit(clipped, yval)
                 cal = ("isotonic", iso)
-            self.models[h] = booster
             self.calibrators[h] = cal
-
-            # Optional refit on all data with same encoders? Keep encoders. To use all data, refit booster on all grade with same calib?
-            # We'll additionally refit on all data without changing calibrator (uses pre-fit cal). For stability:
-            try:
-                Xall, yall, _, _, _ = self._rows_to_Xy(sorted_rows, h, fit=False)
-                if len(set(yall.tolist())) >= 2:
-                    dall = lgb.Dataset(
-                        Xall,
-                        label=yall,
-                        categorical_feature=cat_idxs,
-                        feature_name=fn,
-                        free_raw_data=False,
-                    )
-                    booster_all = lgb.train(
-                        params,
-                        dall,
-                        num_boost_round=100,
-                        callbacks=[lgb.log_evaluation(period=0)],
-                    )
-                    self.models[h] = booster_all
-            except (ValueError, TypeError):
-                pass
+            # o booster que gerou as predicoes de calibracao e o mesmo de models[h]
+            self.calibration_booster[h] = booster
 
         self.trained = True
         return self
@@ -647,13 +625,12 @@ class C1:
             and _destination(r) == destination
             and _event_type(r) == event_type
         ]
-        all_recs = known
         feats = _features_for_example(
             origin,
             destination,
             event_type,
             t_d,
-            all_recs + list(records or []),
+            list(records or []),
             same,
             self.calendar_events,
             self.horizons,
@@ -809,57 +786,72 @@ class C1:
         if hs is None:
             hs = list(self.horizons)
 
-        # predict each horizon
-        out = {}
         for h in hs:
-            h = int(h)
             if h < 1:
                 raise ValueError("horizon deve ser >= 1")
-            if not self.trained or self.models.get(h) is None:
-                # fallback base_rate
-                prob = self.base_rate_
-            else:
-                booster = self.models[h]
-                # build feature row for as_of date (t = as_of)
-                row_vals, _known = self._feature_row(
-                    origin, destination, event_type, as_of_date, recs_in
-                )
-                # set h feature value = h if present
-                if "h" in self.feature_names:
-                    row_vals[self.feature_names.index("h")] = h
-                cat_cols = {"origin", "destination", "event_type"}
-                enc_row = []
-                for idx, c in enumerate(self.feature_names):
-                    if c in cat_cols:
-                        enc = self.encoders.get(c, {})
-                        enc_row.append(enc.get(row_vals[idx], -1))
-                    else:
-                        v = row_vals[idx]
-                        if v is None:
-                            v = 0
-                        enc_row.append(v)
-                X = np.asarray([enc_row], dtype=float)
-                try:
-                    raw = booster.predict(
-                        X, num_iteration=getattr(booster, "best_iteration", None)
-                    )
-                except (ValueError, TypeError):
-                    raw = np.asarray([self.base_rate_])
-                raw = np.atleast_1d(raw).astype(float)
-                prob_arr = self._calibrate(h, raw)
-                prob = float(np.clip(prob_arr[0], 0.0, 1.0))
-            out[h] = prob
-        # monotonicidade: P(evento em <=h dias) nao decresce com h
-        _prev = 0.0
-        for _h in sorted(out):
-            out[_h] = max(out[_h], _prev)
-            out[_h] = min(out[_h], 1.0)
-            _prev = out[_h]
+        curve = self.predict_curve(origin, destination, event_type, as_of_date, recs_in)
+        missing = [h for h in hs if h not in curve]
+        if missing:
+            raise ValueError(
+                f"horizonte(s) {missing} fora de self.horizons={list(self.horizons)}"
+            )
+        out = {h: curve[h] for h in hs}
         if single_horizon is not None and horizons is None and horizon is not None:
             return out[single_horizon]
         if len(out) == 1 and horizon is not None:
             return float(next(iter(out.values())))
         return out
+
+    def predict_curve(self, origin, destination, event_type, as_of, records):
+        """P(evento em <=h dias) para todos os self.horizons, sem retreinar.
+
+        Calibra, aplica o max acumulado sobre TODOS os horizontes do modelo e
+        so entao limita a [PROB_MIN, PROB_MAX]; o pedido do chamador apenas
+        filtra a saida (a curva nao depende de quais h foram pedidos).
+        """
+        as_of_date = _to_date(as_of)
+        recs = list(records or [])
+        raw_by_h: dict[int, float] = {}
+        row_vals = None
+        for h in sorted(int(x) for x in self.horizons):
+            if not self.trained or self.models.get(h) is None:
+                raw_by_h[h] = self.base_rate_
+                continue
+            if row_vals is None:
+                row_vals, _known = self._feature_row(
+                    origin, destination, event_type, as_of_date, recs
+                )
+            cat_cols = {"origin", "destination", "event_type"}
+            enc_row = []
+            for idx, c in enumerate(self.feature_names):
+                if c in cat_cols:
+                    enc_row.append(self.encoders.get(c, {}).get(row_vals[idx], -1))
+                elif c == "h":
+                    enc_row.append(h)
+                else:
+                    v = row_vals[idx]
+                    enc_row.append(0 if v is None else v)
+            X = np.asarray([enc_row], dtype=float)
+            raw = np.atleast_1d(self.models[h].predict(X)).astype(float)
+            raw_by_h[h] = float(self._calibrate(h, raw)[0])
+        out: dict[int, float] = {}
+        prev = 0.0
+        for h in sorted(raw_by_h):
+            prev = max(prev, raw_by_h[h])
+            out[h] = float(min(self.PROB_MAX, max(self.PROB_MIN, prev)))
+        return out
+
+    def predict_trained_at(self, origin, destination, event_type, as_of, records, horizons):
+        """Predicao no instante `as_of` com o modelo ja treinado (sem retreino).
+
+        Usa so registros com first_seen_at <= as_of (point-in-time).
+        """
+        t_dt = _norm_dt(_to_date(as_of))
+        known = [
+            r for r in records or [] if (fs := _first_seen_dt(r)) is not None and fs <= t_dt
+        ]
+        curve = self.predict_curve(origin, destination, event_type, as_of, known)
+        return {int(h): curve[int(h)] for h in horizons}
 
     def predict_proba(self, *args, **kwargs):
         return self.predict(*args, **kwargs)
@@ -942,132 +934,42 @@ def _logloss(y, p):
 
 
 def block_bootstrap_ci(
-    *args,
-    **kwargs,
+    y_true,
+    pred_b1,
+    pred_c1,
+    blocks=None,
+    *,
+    metric: str = "brier",
+    n_boot: int = 1000,
+    seed: int = 42,
+    alpha: float = 0.05,
 ) -> dict[str, Any]:
-    """IC por bootstrap em blocos da diferença entre B1 e C1.
+    """IC por bootstrap em blocos temporais da diferença métrica(B1) - métrica(C1).
 
-    Aceita múltiplas formas:
-      block_bootstrap_ci(diffs_blocks=..., ...)
-      block_bootstrap_ci(y_true, pred_b1, pred_c1, blocks=..., metric="brier", ...)
-      block_bootstrap_ci(metrics_b1=..., metrics_c1=..., blocks=...)
+    Diferença > 0 significa que C1 é melhor (menor erro). `blocks` é
+    obrigatório e explícito (ex.: semana ISO de t): reamostrar por índice
+    quebraria a dependência temporal e a correlação entre pares/tipos.
     """
-    # parse
-    y_true = kwargs.pop("y_true", kwargs.pop("y", None))
-    pred_b1 = kwargs.pop("pred_b1", kwargs.pop("b1", kwargs.pop("preds_b1", None)))
-    pred_c1 = kwargs.pop("pred_c1", kwargs.pop("c1", kwargs.pop("preds_c1", None)))
-    blocks = kwargs.pop("blocks", kwargs.pop("block", kwargs.pop("groups", None)))
-    metric = kwargs.pop("metric", "brier")
-    n_boot = int(kwargs.pop("n_boot", kwargs.pop("n_bootstrap", kwargs.pop("B", 1000))))
-    seed = int(kwargs.pop("seed", kwargs.pop("random_state", 42)))
-    alpha = float(
-        kwargs.pop(
-            "alpha",
-            kwargs.pop("ci", 0.05) if isinstance(kwargs.get("ci"), float) else 0.05,
-        )
-    )
-    if kwargs.get("ci") and isinstance(kwargs.get("ci"), (tuple, list)):
-        alpha = 1.0 - (kwargs["ci"][1] - kwargs["ci"][0]) if False else alpha
-
-    # positional
-    if args:
-        # try first array of diffs
-        if len(args) == 1 and isinstance(args[0], (list, tuple, np.ndarray)):
-            # differences already
-            diffs_arr = np.asarray(args[0], dtype=float)
-            # no blocks -> treat each as block?
-            return {
-                "mean": float(np.mean(diffs_arr)),
-                "ci_low": float(np.quantile(diffs_arr, 0.025)),
-                "ci_high": float(np.quantile(diffs_arr, 0.975)),
-                "excludes_zero": bool(
-                    np.quantile(diffs_arr, 0.025) > 0
-                    or np.quantile(diffs_arr, 0.975) < 0
-                ),
-                "n_boot": len(diffs_arr),
-                "n_blocks": len(diffs_arr),
-            }
-        # y, pred_b1, pred_c1, maybe blocks
-        if y_true is None and len(args) >= 3:
-            y_true, pred_b1, pred_c1 = args[0], args[1], args[2]
-            if len(args) >= 4:
-                blocks = args[3]
-    # diffs provided
-    diffs_input = kwargs.pop(
-        "diffs", kwargs.pop("differences", kwargs.pop("diff", None))
-    )
-    if diffs_input is not None and (y_true is None or pred_b1 is None):
-        darr = np.asarray(diffs_input, dtype=float)
-        return {
-            "mean": float(np.mean(darr)),
-            "median": float(np.median(darr)),
-            "ci_low": float(np.quantile(darr, alpha / 2)),
-            "ci_high": float(np.quantile(darr, 1 - alpha / 2)),
-            "excludes_zero": bool(
-                np.quantile(darr, alpha / 2) > 0 or np.quantile(darr, 1 - alpha / 2) < 0
-            ),
-            "n_boot": len(darr),
-            "n_blocks": len(darr),
-            "alpha": alpha,
-        }
-
-    if y_true is None or pred_b1 is None or pred_c1 is None:
-        # maybe metric arrays per block provided
-        mb1 = kwargs.pop("metrics_b1", kwargs.pop("b1_metrics", None))
-        mc1 = kwargs.pop("metrics_c1", kwargs.pop("c1_metrics", None))
-        if mb1 is not None and mc1 is not None:
-            mb1 = np.asarray(mb1, dtype=float)
-            mc1 = np.asarray(mc1, dtype=float)
-            darr = mb1 - mc1
-            return {
-                "mean": float(np.mean(darr)),
-                "median": float(np.median(darr)),
-                "ci_low": float(np.quantile(darr, alpha / 2)),
-                "ci_high": float(np.quantile(darr, 1 - alpha / 2)),
-                "excludes_zero": bool(
-                    np.quantile(darr, alpha / 2) > 0
-                    or np.quantile(darr, 1 - alpha / 2) < 0
-                ),
-                "n_boot": len(darr),
-                "n_blocks": len(darr),
-                "alpha": alpha,
-            }
-        raise ValueError("dados insuficientes para bootstrap")
-
-    y_true = np.asarray(y_true)
-    pred_b1 = np.asarray(pred_b1, dtype=float)
-    pred_c1 = np.asarray(pred_c1, dtype=float)
-
     if blocks is None:
-        # default blocks: by index chunks of size? create single block per item? Use chunk size
-        n = len(y_true)
-        block_size = int(
-            kwargs.pop("block_size", kwargs.pop("blocksize", max(1, n // 10 or 1)))
+        raise ValueError(
+            "blocks e obrigatorio: informe o bloco temporal (ex.: semana ISO de t)"
         )
-        blocks = np.array([i // block_size for i in range(n)], dtype=int)
-    blocks = np.asarray(blocks)
-
-    metric_fn = (
-        _brier
-        if metric == "brier"
-        else _logloss
-        if metric in ("log_loss", "logloss", "nll")
-        else _brier
-    )
-    # if metric function provided
-    mf = kwargs.pop("metric_fn", None)
-    if callable(mf):
-        metric_fn = mf
-
+    y = np.asarray(y_true)
+    pb = np.asarray(pred_b1, dtype=float)
+    pc = np.asarray(pred_c1, dtype=float)
+    blk = np.asarray(blocks)
+    if not (len(y) == len(pb) == len(pc) == len(blk)):
+        raise ValueError("y_true, pred_b1, pred_c1 e blocks devem ter o mesmo tamanho")
+    if len(y) == 0:
+        raise ValueError("dados insuficientes para bootstrap")
+    if metric in ("log_loss", "logloss", "nll"):
+        metric_fn = _logloss
+    elif metric == "brier":
+        metric_fn = _brier
+    else:
+        raise ValueError(f"metric desconhecida: {metric!r}")
     return _metric_diffBootstrap(
-        metric_fn,
-        y_true,
-        pred_b1,
-        pred_c1,
-        blocks,
-        n_boot=n_boot,
-        seed=seed,
-        alpha=alpha,
+        metric_fn, y, pb, pc, blk, n_boot=int(n_boot), seed=int(seed), alpha=float(alpha)
     )
 
 
@@ -1124,8 +1026,14 @@ def is_calibrated(y_true, y_pred, *, tol=0.1, min_n=20):
 # ---------------------------------------------------------------------------
 
 
+MIN_CAMPAIGNS_PER_PAIR_TYPE = 25
+DATA_SOURCES = ("real", "synthetic")
+
+
 def decide_champion(
     *,
+    n_campaigns_by_pair_type: dict[tuple[str, str, str], int],
+    data_source: str,
     champion_name: str = "B1",
     challenger_name: str = "C1",
     champion_metrics: dict[str, Any] | None = None,
@@ -1139,59 +1047,44 @@ def decide_champion(
     ci: dict[str, Any] | None = None,
     reliability: Any = None,
     challenger_calibrated: bool | None = None,
-    **kwargs,
 ) -> dict[str, Any]:
-    if champion_metrics is None:
-        champion_metrics = b1_metrics or {}
-    if challenger_metrics is None:
-        challenger_metrics = c1_metrics or {}
-    if ci_brier is None:
-        ci_brier = ci
-    if ci_logloss is None:
-        ci_logloss = ci
-    if bootstrap_ci_brier is None:
-        bootstrap_ci_brier = ci_brier
-    if bootstrap_ci_logloss is None:
-        bootstrap_ci_logloss = ci_logloss
+    """Decide campeão × desafiante. Falha fechada em tudo que falta.
 
-    cm = champion_metrics or {}
-    xm = challenger_metrics or {}
-    # métricas: menor é melhor
+    Promove só se: dados reais, >= 25 campanhas por (par, tipo), C1 menor em
+    Brier e log-loss, IC (bloco) favorável em ambos e C1 calibrado.
+    Parâmetros desconhecidos levantam TypeError (sem **kwargs).
+    """
+    if data_source not in DATA_SOURCES:
+        raise ValueError(f"data_source deve ser um de {DATA_SOURCES}: {data_source!r}")
+    if not isinstance(n_campaigns_by_pair_type, dict):
+        raise TypeError("n_campaigns_by_pair_type deve ser dict[(origem,destino,tipo)] -> int")
+    n_by = {tuple(k): int(v) for k, v in n_campaigns_by_pair_type.items()}
+
+    cm = champion_metrics if champion_metrics is not None else (b1_metrics or {})
+    xm = challenger_metrics if challenger_metrics is not None else (c1_metrics or {})
+    ci_b = bootstrap_ci_brier or ci_brier or ci or {}
+    ci_l = bootstrap_ci_logloss or ci_logloss or ci or {}
+
     b_brier_c = cm.get("brier", cm.get("brier_score"))
     b_brier_x = xm.get("brier", xm.get("brier_score"))
     b_ll_c = cm.get("log_loss", cm.get("logloss"))
     b_ll_x = xm.get("log_loss", xm.get("logloss"))
-    calibrated = True
+
+    # calibração: sem informação => NÃO calibrado
+    calibrated = False
     if challenger_calibrated is not None:
         calibrated = bool(challenger_calibrated)
-    elif reliability is not None:
-        if isinstance(reliability, dict):
-            calibrated = bool(
-                reliability.get("calibrated", reliability.get("is_calibrated", True))
-            )
-        else:
-            calibrated = bool(reliability)
+    elif isinstance(reliability, dict):
+        calibrated = bool(
+            reliability.get("calibrated", reliability.get("is_calibrated", False))
+        )
+    elif isinstance(reliability, bool):
+        calibrated = reliability
 
-    # IC exclui zero. Convencão: diffs = champion - challenger; challenger vence se diff > 0 com IC >0.
-    # Suportamos também diff = challenger - champion; inferimos pelo nome.
-    ci_b = bootstrap_ci_brier or {}
-    ci_l = bootstrap_ci_logloss or {}
-    lo_b, hi_b = ci_b.get("ci_low"), ci_b.get("ci_high")
-    lo_l, hi_l = ci_l.get("ci_low"), ci_l.get("ci_high")
-    ic_b_exclui_zero = (lo_b is not None and hi_b is not None) and (
-        lo_b > 0 or hi_b < 0
-    )
-    ic_l_exclui_zero = (lo_l is not None and hi_l is not None) and (
-        lo_l > 0 or hi_l < 0
-    )
-
-    # determinar direção: se média ci sugere challenger melhor, aceitar either sign?
-    # Consider challenger vence se IC exclui zero na direção favorable a challenger.
-    # Favorable challenger means diff (champion - challenger) > 0 (champion worse).
-    # If ci entirely >0 => challenger better in this metric.
-    ci_b_favors_challenger = lo_b is not None and lo_b > 0
-    ci_l_favors_challenger = lo_l is not None and lo_l > 0
-
+    # diff = champion - challenger; > 0 => challenger melhor
+    lo_b, lo_l = ci_b.get("ci_low"), ci_l.get("ci_low")
+    ci_b_favors = lo_b is not None and lo_b > 0
+    ci_l_favors = lo_l is not None and lo_l > 0
     beats_brier = (
         b_brier_x is not None
         and b_brier_c is not None
@@ -1201,42 +1094,45 @@ def decide_champion(
         b_ll_x is not None and b_ll_c is not None and float(b_ll_x) < float(b_ll_c)
     )
 
-    promote = bool(
-        beats_brier
-        and beats_logloss
-        and ci_b_favors_challenger
-        and ci_l_favors_challenger
-        and calibrated
-        and ic_b_exclui_zero
-        and ic_l_exclui_zero
-    )
+    reasons: list[str] = []
+    if data_source != "real":
+        reasons.append("dados sintéticos")
+    if not n_by:
+        reasons.append("dados insuficientes: nenhum (par,tipo) informado")
+    for k in sorted(n_by):
+        if n_by[k] < MIN_CAMPAIGNS_PER_PAIR_TYPE:
+            reasons.append(
+                f"dados insuficientes: {','.join(map(str, k))}={n_by[k]} "
+                f"< {MIN_CAMPAIGNS_PER_PAIR_TYPE}"
+            )
+    data_gate_passed = not reasons
+    if not beats_brier:
+        reasons.append("Brier do challenger nao e menor")
+    if not beats_logloss:
+        reasons.append("log-loss do challenger nao e menor")
+    if not ci_b_favors:
+        reasons.append("IC de Brier inclui zero ou nao favorece challenger")
+    if not ci_l_favors:
+        reasons.append("IC de log-loss inclui zero ou nao favorece challenger")
+    if not calibrated:
+        reasons.append("challenger nao calibrado")
 
+    promote = not reasons
     if promote:
         decision = "promote_challenger"
-        note = f"{challenger_name} vence {champion_name} em Brier e log-loss com IC excluindo zero e calibrado."
+        note = (
+            f"{challenger_name} vence {champion_name} em Brier e log-loss com IC "
+            "excluindo zero, calibrado e com dados reais suficientes."
+        )
     else:
         decision = "keep_champion"
-        reasons = []
-        if not beats_brier:
-            reasons.append("Brier do challenger nao e menor")
-        if not beats_logloss:
-            reasons.append("log-loss do challenger nao e menor")
-        if not ci_b_favors_challenger:
-            reasons.append("IC de Brier inclui zero ou nao favorece challenger")
-        if not ci_l_favors_challenger:
-            reasons.append("IC de log-loss inclui zero ou nao favorece challenger")
-        if not calibrated:
-            reasons.append("challenger nao calibrado")
-        if not reasons:
-            reasons.append("dados insuficientes")
         note = "; ".join(reasons) + f". {champion_name} permanece em producao."
-    # insufficient data if no metrics
-    result = {
+    return {
         "decision": decision,
         "comparison": {
             "decision": decision,
             "promote": promote,
-            "keep_champion": (decision == "keep_champion"),
+            "keep_champion": not promote,
             "delta_brier": (
                 None
                 if b_brier_c is None or b_brier_x is None
@@ -1255,8 +1151,11 @@ def decide_champion(
         "note": note,
         "promoted": promote,
         "calibrated": calibrated,
+        "reasons": reasons,
+        "data_source": data_source,
+        "data_gate_passed": data_gate_passed,
+        "n_campaigns_by_pair_type": n_by,
     }
-    return result
 
 
 champion_decision = decide_champion
@@ -1266,27 +1165,289 @@ decide_promotion = decide_champion
 should_promote = decide_champion
 
 
+# ---------------------------------------------------------------------------
+# Avaliação walk-forward C1 x B1 (alimenta o portão)
+# ---------------------------------------------------------------------------
+
+
+def _is_synthetic(rec: Any) -> bool:
+    if _get(rec, "synthetic", "is_synthetic", default=False):
+        return True
+    return str(_get(rec, "data_source", default="")).lower() in {"synthetic", "sintetico"}
+
+
+def _count_campaigns(records: Iterable[Any]) -> dict[tuple[str, str, str], int]:
+    """Campanhas por (origem, destino, tipo), dedup por janela de ±3 dias."""
+    by_key: dict[tuple, list[date]] = defaultdict(list)
+    for r in records:
+        s = _start(r)
+        if s is not None:
+            by_key[(_origin(r), _destination(r), _event_type(r))].append(s)
+    out = {}
+    for k, starts in by_key.items():
+        starts.sort()
+        n, last = 0, None
+        for d in starts:
+            if last is None or (d - last).days > 3:
+                n += 1
+            last = d
+        out[k] = n
+    return out
+
+
+def _iso_week(d: date) -> str:
+    y, w, _ = d.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def evaluate_c1_vs_b1(
+    records: Iterable[Any],
+    *,
+    horizons: Iterable[int] = (7, 15, 30),
+    purge_days: int = 30,
+    n_folds: int | None = None,
+    train_months: int = 6,
+    test_months: int = 3,
+    step_months: int = 3,
+    n_boot: int = 1000,
+    seed: int = 42,
+    data_source: str = "synthetic",
+) -> dict[str, Any]:
+    """Avalia B1 x C1 em walk-forward com purge; a saída alimenta decide_champion.
+
+    Em cada dobra B1 e C1 são treinados só com first_seen_at <= corte (início
+    do teste - purge_days) e preveem cada (par, tipo, t, h) do teste com
+    as_of = t usando apenas registros com first_seen_at <= t. `data_source`
+    é declarado por quem chama (default "synthetic": falha fechada).
+    """
+    from preditor.baseline import predict_proba as _b1_predict
+    from preditor.walkforward import metrics as _metrics
+    from preditor.walkforward import walk_forward_splits
+
+    if data_source not in DATA_SOURCES:
+        raise ValueError(f"data_source deve ser um de {DATA_SOURCES}: {data_source!r}")
+    hs = tuple(int(h) for h in horizons)
+    if not hs:
+        raise ValueError("horizons vazio")
+    if purge_days < max(hs):
+        raise ValueError("purge_days deve ser >= max(horizons)")
+    recs = list(records or [])
+    splits = walk_forward_splits(
+        recs,
+        train_months=train_months,
+        test_months=test_months,
+        step_months=step_months,
+        purge_days=purge_days,
+        horizons=hs,
+    )
+    if n_folds is not None:
+        splits = splits[-int(n_folds):]
+    starts_all = [s for s in (_start(r) for r in recs) if s is not None]
+    if not splits or not starts_all:
+        raise ValueError("dados insuficientes para walk-forward")
+    data_end = max(starts_all)
+    keys = sorted(
+        {(_origin(r), _destination(r), _event_type(r)) for r in recs},
+        key=lambda k: tuple(str(x) for x in k),
+    )
+
+    cols: dict[str, list] = {
+        k: [] for k in ("y", "p_b1", "p_c1", "t", "h", "origin", "destination",
+                        "event_type", "blocks", "fold")
+    }
+    folds_meta: list[dict[str, Any]] = []
+    train_union: dict[int, Any] = {}
+    for fi, sp in enumerate(splits):
+        cutoff = sp.test_start - timedelta(days=purge_days)
+        cutoff_dt = _norm_dt(cutoff)
+        train = [
+            r
+            for r in sp.train
+            if (fs := _first_seen_dt(r)) is not None and fs <= cutoff_dt
+        ]
+        for r in train:
+            train_union[id(r)] = r
+        fs_max = max((_first_seen_dt(r) for r in train), default=None)
+        test_days = sorted(
+            {_start(r) for r in sp.test if _start(r) is not None}
+        )
+        t_lo, t_hi = sp.test_start, (test_days[-1] if test_days else sp.test_start)
+        days = [t_lo + timedelta(days=i) for i in range((t_hi - t_lo).days + 1)]
+        folds_meta.append(
+            {
+                "fold": fi,
+                "cutoff": cutoff,
+                "n_train": len(train),
+                "train_max_first_seen": (
+                    fs_max.date() if fs_max is not None else None
+                ),
+                "test_min_t": days[0],
+                "test_max_t": days[-1],
+            }
+        )
+        if not train:
+            continue
+        engine = C1(horizons=hs)
+        engine.fit(train, as_of=cutoff, horizons=hs)
+        grade = build_daily_grade(
+            recs,
+            horizons=hs,
+            t_values=days,
+            pairs={(k[0], k[1]) for k in keys},
+            types={k[2] for k in keys},
+            embargo_cutoff=data_end,
+            include_features=False,
+        )
+        pool_cache: dict[date, list] = {}
+        for row in grade:
+            key = (row["origin"], row["destination"], row["event_type"])
+            if key not in set(keys):
+                continue
+            t = row["t"]
+            if t not in pool_cache:
+                t_dt = _norm_dt(t)
+                pool_cache[t] = [
+                    r
+                    for r in recs
+                    if (fs := _first_seen_dt(r)) is not None and fs <= t_dt
+                ]
+            pool = pool_cache[t]
+            h = row["h"]
+            p_c1 = engine.predict_trained_at(*key, t, pool, [h])[h]
+            p_b1 = _b1_predict(
+                pool, *key, as_of=t, horizon=h, method="b1"
+            )
+            cols["y"].append(int(row["y"]))
+            cols["p_b1"].append(float(p_b1))
+            cols["p_c1"].append(float(p_c1))
+            cols["t"].append(t)
+            cols["h"].append(h)
+            cols["origin"].append(key[0])
+            cols["destination"].append(key[1])
+            cols["event_type"].append(key[2])
+            cols["blocks"].append(_iso_week(t))
+            cols["fold"].append(fi)
+
+    if not cols["y"]:
+        raise ValueError("avaliacao sem linhas de teste")
+    y, pb, pc, blocks = cols["y"], cols["p_b1"], cols["p_c1"], cols["blocks"]
+    m_b1, m_c1 = _metrics(y, pb), _metrics(y, pc)
+    ci_brier = block_bootstrap_ci(
+        y, pb, pc, blocks=blocks, metric="brier", n_boot=n_boot, seed=seed
+    )
+    ci_logloss = block_bootstrap_ci(
+        y, pb, pc, blocks=blocks, metric="log_loss", n_boot=n_boot, seed=seed
+    )
+    calibrated = bool(is_calibrated(y, pc))
+    real_train = [r for r in train_union.values() if not _is_synthetic(r)]
+    counted = _count_campaigns(real_train)
+    n_by = {k: counted.get(k, 0) for k in keys}
+    out: dict[str, Any] = {
+        **cols,
+        "metrics": {"b1": m_b1, "c1": m_c1},
+        "ci_brier": ci_brier,
+        "ci_logloss": ci_logloss,
+        "calibrated": calibrated,
+        "reliability": reliability_curve(y, pc),
+        "n_campaigns_by_pair_type": n_by,
+        "data_source": data_source,
+        "folds": folds_meta,
+        "purge_days": purge_days,
+        "horizons": hs,
+    }
+    out["gate_inputs"] = {
+        "champion_metrics": m_b1,
+        "challenger_metrics": m_c1,
+        "bootstrap_ci_brier": {k: ci_brier[k] for k in ("ci_low", "ci_high")},
+        "bootstrap_ci_logloss": {k: ci_logloss[k] for k in ("ci_low", "ci_high")},
+        "challenger_calibrated": calibrated,
+        "n_campaigns_by_pair_type": n_by,
+        "data_source": data_source,
+    }
+    return out
+
+
 def record_decision_report(
-    decision, path="docs/reports/t08b-champion-decision.md", **kwargs
+    decision,
+    path="docs/reports/t08b-champion-decision.md",
+    *,
+    data_source: str | None = None,
+    n_campaigns_by_pair_type: dict | None = None,
 ):
+    """Escreve o relatório. O banner 'SINTÉTICOS' é emitido sempre que os
+    dados não são reais ou o portão de >= 25 campanhas por (par, tipo)
+    reprova (inclusive quando a informação não foi fornecida)."""
     d = decision if isinstance(decision, dict) else {}
     dec = d.get("decision", "keep_champion")
     note = d.get("note", "")
-    lines = [
-        "# Decisão campeão × desafiante (T08b)",
-        "",
+    src = data_source if data_source is not None else d.get("data_source", "synthetic")
+    n_by = (
+        n_campaigns_by_pair_type
+        if n_campaigns_by_pair_type is not None
+        else d.get("n_campaigns_by_pair_type", {})
+    ) or {}
+    gate_ok = (
+        src == "real"
+        and bool(n_by)
+        and min(int(v) for v in n_by.values()) >= MIN_CAMPAIGNS_PER_PAIR_TYPE
+    )
+    lines = ["# Decisão campeão × desafiante (T08b)", ""]
+    if not gate_ok:
+        lines += [
+            "> **Atenção**: este resultado foi obtido com **dados SINTÉTICOS** (ou sem",
+            "> campanhas reais suficientes) e só valida a mecânica do portão. A decisão",
+            f"> real só vale com **≥ {MIN_CAMPAIGNS_PER_PAIR_TYPE} campanhas por (par, tipo)**.",
+            "> Enquanto isso, B1 permanece em produção.",
+            "",
+        ]
+    lines += [
+        f"- Fonte de dados: **{src}**",
         f"- Decisão: **{dec}**",
         f"- Nota: {note}",
         "",
+        "## Campanhas reais no treino por (par, tipo)",
+        "",
+        "| origem,destino,tipo | campanhas | mínimo |",
+        "|---|---|---|",
+    ]
+    for k in sorted(n_by, key=lambda x: tuple(map(str, x))):
+        lines.append(f"| {','.join(map(str, k))} | {n_by[k]} | {MIN_CAMPAIGNS_PER_PAIR_TYPE} |")
+    if not n_by:
+        lines.append("| (nenhum informado) | 0 | 25 |")
+    lines += [
+        "",
         "## Critérios aplicados",
-        "- C1 vira campeão apenas se vencer B1 em Brier e log-loss, com IC (bootstrap em blocos) excluindo zero e modelo calibrado (curva de confiabilidade).",
-        "- Caso contrário (ou dados insuficientes), B1 permanece em produção e o motivo é registrado em `docs/reports`.",
+        (
+            "- C1 vira campeão apenas com dados reais, ≥ 25 campanhas por (par, tipo), "
+            "vencendo B1 em Brier e log-loss com IC (bootstrap em blocos de semana ISO) "
+            "excluindo zero e modelo calibrado."
+        ),
+        "- Caso contrário, B1 permanece em produção e o motivo é registrado aqui.",
         "",
     ]
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if d.get("reasons"):
+        lines += ["## Motivos", *[f"- {r}" for r in d["reasons"]], ""]
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     return path
+
+
+def run_champion_challenger(
+    records: Iterable[Any],
+    *,
+    data_source: str = "synthetic",
+    report_path: str | None = None,
+    **eval_kwargs: Any,
+) -> dict[str, Any]:
+    """Avalia, decide e (opcionalmente) grava o relatório; nada digitado à mão."""
+    ev = evaluate_c1_vs_b1(records, data_source=data_source, **eval_kwargs)
+    decision = decide_champion(**ev["gate_inputs"])
+    if report_path is not None:
+        record_decision_report(decision, path=report_path)
+    return {"evaluation": ev, "decision": decision}
 
 
 # ---------------------------------------------------------------------------
@@ -1318,12 +1479,14 @@ __all__ = [
     "champion_decision",
     "daily_grade",
     "decide_champion",
+    "evaluate_c1_vs_b1",
     "grade_diaria",
     "is_calibrated",
     "make_daily_grade",
     "populate_calendar_events",
     "record_decision_report",
     "reliability_curve",
+    "run_champion_challenger",
     "seed_calendar_events",
 ]
 
