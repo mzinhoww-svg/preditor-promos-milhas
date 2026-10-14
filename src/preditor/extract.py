@@ -81,6 +81,8 @@ def _promo_signal(sentence: str) -> bool:
         return True
     if _PROGRAM_ALIASES and any(re.search(p, low, re.IGNORECASE) for p in ("livelo", "esfera", "smiles", "azul", "latam")):
         return True
+    if REL_DAY_RE.search(sentence):
+        return True
     m = re.search(r"\d{1,2}/\d{1,2}", sentence)
     if not m:
         return False
@@ -91,10 +93,10 @@ def _promo_signal(sentence: str) -> bool:
 def _sanitize_sentence(sentence: str) -> str | None:
     """Remove gatilhos de injeção e histórico; retorna None se sentença descartada."""
     low = sentence.lower()
-    if any(m in low for m in _NEGATION_MARKERS):
+    if any(re.search(rf"\b{re.escape(m)}", low) for m in _NEGATION_MARKERS):
         return None
-    if any(m in low for m in _HISTORY_MARKERS):
-        return None
+    if any(re.search(rf"\b{re.escape(m)}\b", low) for m in _HISTORY_MARKERS):
+        return None  # 'antes' nao casa dentro de 'assinantes'
     # trunca em marcador de injeção
     for marker in _INJECTION_MARKERS:
         idx = low.find(marker)
@@ -220,6 +222,17 @@ def _make_date(day, month, year, fs_date: date | None, inferred: bool = False) -
         return None
 
 
+REL_DAY_RE = re.compile(
+    r"\b(?:hoje|amanh[ãa]|ontem|(?:segunda|ter[çc]a|quarta|quinta|sexta)-feira|s[áa]bado|domingo)\s*\((\d{1,2})\)",
+    re.IGNORECASE)
+
+
+REL_WORD_RE = re.compile(
+    r"\b(?:at[ée]\s+o\s+(?:final|fim)\s+do\s+dia|at[ée]\s+hoje|somente\s+hoje|s[óo]\s+hoje|"
+    r"at[ée]\s+amanh[ãa](?!\s*[,(])|[úu]ltimo\s+dia)\b", re.IGNORECASE)
+_CREDIT_CTX = re.compile(r"(credit|crédit|expir|receb|prazo)", re.IGNORECASE)
+
+
 def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
     """Coleta datas ISO com causa point-in-time; None se first_seen ausente/invalido para datas sem ano."""
     fs_date = _first_seen_sp_date(first_seen_at)
@@ -232,6 +245,27 @@ def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
 
     explicit_years = []
     resolved = []  # (pos, iso, year_was_explicit)
+    if fs_date is not None:
+        for m in REL_WORD_RE.finditer(text_norm):
+            word = m.group(0).lower()
+            d = fs_date + timedelta(days=1) if "amanh" in word else fs_date
+            resolved.append((m.start(), d.isoformat(), False))
+        for m in REL_DAY_RE.finditer(text_norm):
+            day = int(m.group(1))
+            best = None
+            for delta in (-1, 0, 1):
+                mm = fs_date.month + delta
+                yy = fs_date.year + (mm - 1) // 12
+                mm = (mm - 1) % 12 + 1
+                try:
+                    d = date(yy, mm, day)
+                except ValueError:
+                    continue
+                in_window = (fs_date - timedelta(days=7)) <= d <= (fs_date + timedelta(days=31))
+                if in_window and (best is None or abs((d - fs_date).days) < abs((best - fs_date).days)):
+                    best = d
+            if best is not None:
+                resolved.append((m.start(), best.isoformat(), False))
     for pos, day, month, year in candidates:
         explicit = (year is not None and str(year).strip() != "")
         if not explicit:
@@ -255,8 +289,12 @@ def _collect_dates(text_norm: str, first_seen_at: Any = None) -> list[str]:
 
     out = []
     for pos, iso, explicit in sorted(resolved, key=lambda x: x[0]):
-        if not out or out[-1] != iso:
+        if _CREDIT_CTX.search(text_norm[max(0, pos - 50):pos]):
+            continue  # data de credito/expiracao nao e janela da oferta
+        if iso not in out:
             out.append(iso)
+    if len(out) >= 2 and out[1] < out[0] and not any(e for (_p, _i, e) in resolved if _i == out[1]):
+        out[0], out[1] = out[1], out[0]
 
     # rollover: +1 ano apenas se o ano do fim foi omitido
     if len(out) >= 2:
@@ -312,6 +350,28 @@ def _directional_pair(sentence: str) -> tuple[str | None, str | None]:
                 re.IGNORECASE | re.DOTALL)
             if offer_pat.search(sentence):
                 return origin, dest
+    # "... bonus nas transferencias (de pontos) da/de ORIGEM" (+ "inclusive/incluindo"): ORIGEM e a origem;
+    # o destino e o outro programa da sentenca (quem "esta oferecendo").
+    low_s = sentence.lower()
+    for origin in progs:
+        o_rx = aliases[origin]
+        pat_from = re.compile(
+            rf"transfer\w*\s+(?:de\s+pontos\s+)?(?:feitas?\s+|realizadas?\s+)?"
+            rf"(?:(?:d[ao]s?|de)\s+(?:todos\s+os\s+bancos,?\s+inclusive\s+(?:d[ao]s?\s+)?|"
+            rf"diversos\s+parceiros,?\s+incluindo\s+(?:[ao]s?\s+)?|)){o_rx}"
+            rf"|(?:inclusive|incluindo)\s+(?:d[ao]s?\s+|[ao]s?\s+)?{o_rx}"
+            rf"|pontos\s+(?:(?:d[ao]s?|de)\s+)?{o_rx}\b",
+            re.IGNORECASE | re.DOTALL)
+        if pat_from.search(low_s):
+            others = [p for p in progs if p != origin]
+            if others:
+                return origin, others[0]
+    # "transferirem/transferir pontos para a DEST": DEST e o destino; a origem e o outro programa citado
+    for dest in progs:
+        if re.search(rf"transfer\w*\s+(?:de\s+)?pontos\s+para\s+(?:[ao]\s+)?{aliases[dest]}", low_s, re.IGNORECASE):
+            others = [p for p in progs if p != dest]
+            if others:
+                return others[0], dest
     # "X para Y" / "X -> Y" / "X a Y"
     for origin in progs:
         for dest in progs:
@@ -347,7 +407,9 @@ def _detect_type(sentence: str) -> str | None:
 def _extract_bonus(sentence: str, segmented_flag: list[bool]) -> int | float | None:
     segmented_flag[0] = False
     plus_total = None
-    for a, b in re.findall(r"(\d{1,3}(?:,\d+)?)\s*%[^.]*?\+\s*(\d{1,3}(?:,\d+)?)\s*%", sentence, flags=re.IGNORECASE):
+    for a, b in re.findall(
+            r"(\d{1,3}(?:,\d+)?)\s*%[^.]*?\+\s*(\d{1,3}(?:,\d+)?)\s*%(?!\s*(?:de\s+)?(?:desconto|pointsback|pontos\s+de\s+volta|de\s+volta))",
+            sentence, flags=re.IGNORECASE):
         try:
             plus_total = float(a.replace(",", ".")) + float(b.replace(",", "."))
         except ValueError:
@@ -651,7 +713,9 @@ def _build_offer(sentence: str, first_seen_at: Any = None) -> Offer | None:
     elif len(dates) == 1:
         d0 = dates[0]
         lowc = cleaned.lower()
-        if any(k in lowc for k in ("até", "ate", "válido", "valido", "validade", "termina", "encerra")):
+        end_markers = ("até", "ate", "válido", "valido", "válida", "valida", "validade", "termina", "encerra",
+                       "somente", "só hoje", "so hoje", "último dia", "ultimo dia", "últimas horas")
+        if any(k in lowc for k in end_markers) and not re.search(r"inici(?:ou|a)\b|a partir d", lowc):
             inicio = None
             fim = d0
         else:

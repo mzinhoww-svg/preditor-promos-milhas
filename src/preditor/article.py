@@ -87,18 +87,41 @@ def _n_programs(s: str) -> int:
     return sum(1 for p in _PROGRAMS if re.search(p, s, re.IGNORECASE))
 
 
+_VALIDITY = re.compile(
+    r"(hoje|amanh[ãa]|\d{1,2}/\d{1,2}|\(\d{1,2}\)|v[áa]lid[ao]|vig[êe]ncia|vigente|at[ée]\s|encerra|termina)", re.IGNORECASE)
+
+
+def _pcts(s: str) -> set[str]:
+    return set(re.findall(r"(\d{1,3}(?:,\d+)?)\s*%", s))
+
+
 def snippets(text: str) -> list[str]:
-    """Sentencas com >=2 programas e % na MESMA sentenca (+ sentenca seguinte se so tiver data)."""
+    """Sentencas com % e transferencia/2 programas, mais ate 2 frases seguintes de validade
+    ('valida ate 23h59 de amanha (11)', 'hoje', DD/MM) sem % novo, e a frase que nomeia o outro programa."""
     out: list[str] = []
     parts = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", text) if s and s.strip()]
     for i, s in enumerate(parts):
-        if _n_programs(s) < 2 or not re.search(r"\d\s*%", s):
+        if not re.search(r"\d\s*%", s):
+            continue
+        n = _n_programs(s)
+        if n < 2 and not (n == 1 and re.search(r"transfer", s, re.IGNORECASE)):
             continue
         cand = s
-        if i + 1 < len(parts):
-            nxt = parts[i + 1]
-            if _n_programs(nxt) == 0 and not re.search(r"%", nxt) and re.search(r"\d{1,2}/\d{1,2}", nxt):
-                cand = f"{s} {nxt}"
+        progs = n
+        for nxt in parts[i + 1:i + 4]:
+            new_pcts = _pcts(nxt) - _pcts(s)
+            names_other = progs < 2 and _n_programs(nxt) >= 1
+            if not (_VALIDITY.search(nxt) or names_other):
+                break
+            if new_pcts:
+                if not names_other:
+                    break
+                # frase que so nomeia o outro programa: entra sem os percentuais (nao altera o bonus)
+                nxt = re.sub(r"\d{1,3}(?:,\d+)?\s*%", "", nxt)
+            cand = f"{cand} {nxt}"
+            progs = max(progs, _n_programs(cand))
+        if _n_programs(cand) < 2:
+            continue
         if cand not in out:
             out.append(cand)
     return out
