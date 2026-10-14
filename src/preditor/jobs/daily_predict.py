@@ -11,6 +11,7 @@ from sqlalchemy import text
 from preditor.api.db import get_engine
 from preditor.api.queries import fetch_prediction_accuracy
 from preditor.baseline import _available, predict_proba
+from preditor.stop import StopRequested, check_stop
 from preditor.offer_filter import GAP_ONLY_SQL
 
 HORIZONS = (7, 15, 30)
@@ -77,6 +78,7 @@ def _quantile(sorted_vals: list[float], q: float) -> float | None:
 
 
 def run_daily(as_of: Any = None, engine=None) -> dict[str, Any]:
+    check_stop()
     eng = _engine(engine)
     ao = _as_date(as_of) if as_of is not None else date.today()
     made_at = datetime(ao.year, ao.month, ao.day, tzinfo=UTC)
@@ -171,12 +173,16 @@ def main(argv=None):
     parser.add_argument("command", nargs="?", default="daily", choices=["daily", "accuracy", "all"])
     parser.add_argument("--as-of", dest="as_of", default=None)
     args = parser.parse_args(argv)
-    if args.command in ("daily", "all"):
-        res = run_daily(as_of=args.as_of)
-        print(res)
-    if args.command in ("accuracy", "all"):
-        res = run_accuracy(as_of=args.as_of)
-        print(res)
+    try:
+        if args.command in ("daily", "all"):
+            res = run_daily(as_of=args.as_of)
+            print(res)
+        if args.command in ("accuracy", "all"):
+            res = run_accuracy(as_of=args.as_of)
+            print(res)
+    except StopRequested as exc:
+        print(f"STOP: {exc}")
+        raise SystemExit(3) from exc
 
 
 if __name__ == "__main__":
