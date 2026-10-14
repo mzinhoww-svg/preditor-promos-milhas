@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import time
 from datetime import UTC, date, datetime, timedelta
@@ -212,6 +213,20 @@ def _engine(args):
     return sqlalchemy.create_engine(url)
 
 
+def slug_priority(url: str) -> int:
+    """Prioridade de busca pelo slug: os dois programas e transferencia pesam mais."""
+    low = url.lower()
+    has_l, has_s = "livelo" in low, "smiles" in low
+    if not (has_l or has_s):
+        return 0
+    score = 1 + (3 if has_l and has_s else 0)
+    if re.search(r"transfer", low):
+        score += 2
+    if re.search(r"b[oô]nus|bonific", low):
+        score += 1
+    return score
+
+
 def _retry_allowed(prev: dict, max_attempts: int) -> bool:
     if prev.get("status") in (None, "listed_only"):
         return True
@@ -273,7 +288,10 @@ def run_backfill(args: argparse.Namespace) -> dict:
         download_body = not (args.titles_only or "pontospravoar" in str(source).lower())
         stored_this_run = 0
         offers_this_run = 0
-        for cand in candidates:
+        fetched_this_run = 0
+        max_fetch = getattr(args, "max_fetch", None)
+        ordered = sorted(candidates, key=lambda c: (-slug_priority(c["url"]), c["url"]))
+        for cand in ordered:
             url = cand["url"]
             ts = cand["timestamp"]
             prev = processed.get(url, {})
@@ -286,6 +304,9 @@ def run_backfill(args: argparse.Namespace) -> dict:
                 processed[url] = {"status": "robots_disallowed", "timestamp": ts}
                 _save_state(state)
                 continue
+            if max_fetch is not None and fetched_this_run >= max_fetch:
+                break
+            fetched_this_run += 1
             attempts = prev.get("attempts", 0) + 1
             time.sleep(args.rate_limit)
             content = fetch_snapshot_backoff(ts, url)
@@ -505,6 +526,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-size", dest="page_size", type=int, default=500)
     parser.add_argument("--database-url", dest="database_url", default=None)
     parser.add_argument("--refresh-candidates", dest="refresh_candidates", action="store_true")
+    parser.add_argument("--max-fetch", dest="max_fetch", type=int, default=None,
+                        help="teto de downloads novos por fonte nesta execucao (por prioridade do slug)")
     parser.add_argument("--rss-archive", dest="rss_archive", default=None,
                         help="URL do feed; lista capturas pela CDX e le so titulo/data/link")
     parser.add_argument("--rss-titles", dest="rss_titles", default=None, help="URL do feed (so titulo/data/link)")

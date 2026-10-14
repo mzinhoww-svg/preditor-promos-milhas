@@ -282,3 +282,20 @@ def test_archived_feed_respects_robots(feed, monkeypatch):
     out = B.collect_archived_feed(object(), "pontospravoar.com", "https://pontospravoar.com/feed/",
                                   date(2023, 1, 1), rate_limit=10.0, step_days=5)
     assert out["status"] == "robots_disallowed" and feed["fetched"] == []
+
+
+# --- priorizacao e teto de buscas ---------------------------------------------------------
+def test_priority_prefers_both_programs_and_transfer():
+    a = B.slug_priority("http://x/livelo-smiles-transferencia-bonus")
+    b = B.slug_priority("http://x/smiles-voo-barato")
+    c = B.slug_priority("http://x/livelo-bonus")
+    assert a > c > b
+    assert B.slug_priority("http://x/outra-coisa") == 0
+
+
+def test_max_fetch_caps_new_downloads_by_priority(env):
+    many = [{"url": f"http://a.com/livelo-{'smiles-' if i % 2 else ''}p{i}", "timestamp": "20240105120000"} for i in range(10)]
+    env.mp.setattr(B, "fetch_cdx_candidates", lambda *a, **k: many)
+    B.run_backfill(_args(max_fetch=3))
+    assert len(env.fetched) == 3
+    assert all("smiles" in u for u in env.fetched)
