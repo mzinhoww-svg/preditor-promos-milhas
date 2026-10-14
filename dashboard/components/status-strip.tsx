@@ -1,7 +1,7 @@
 import { Badge } from "@/components/badge";
 import { fallbackReason } from "@/components/data-notice";
 import type { Optional, StatusResponse } from "@/lib/api";
-import { dateTime, int, relativeFrom } from "@/lib/format";
+import { dateTime, int, relativeFrom, timeUTC } from "@/lib/format";
 
 /**
  * Faixa de operação: estado STOP, última execução do job diário e base
@@ -52,6 +52,7 @@ export function StatusStrip({ status, jobFallbackAt, now }: { status: Optional<S
           {runAt ? (
             <>
               {relativeFrom(runAt, now)} <span className="text-xs text-ink-3">· {dateTime(runAt)}</span>
+              <span className="block text-xs text-ink-2">dados de {timeUTC(runAt)}</span>
               {s?.last_job?.status && s.last_job.status !== "ok" ? (
                 <span className="ml-2 text-xs font-medium text-crit">{s.last_job.status}</span>
               ) : null}

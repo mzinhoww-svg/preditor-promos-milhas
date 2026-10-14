@@ -82,7 +82,7 @@ export function PredictionList({ items }: { items: PredictionItem[] }) {
         <div>7 dias</div>
         <div>15 dias</div>
         <div>30 dias</div>
-        <div>Bônus previsto (P25 · P50 · P75)</div>
+        <div>Bônus nas campanhas anteriores (P25 · P50 · P75)</div>
       </div>
 
       <ol className="divide-y divide-line">
@@ -130,7 +130,7 @@ export function PredictionList({ items }: { items: PredictionItem[] }) {
                 </div>
 
                 <div>
-                  <div className="mb-1 text-xs text-ink-3 lg:hidden">Bônus previsto (P25 · P50 · P75)</div>
+                  <div className="mb-1 text-xs text-ink-3 lg:hidden">Bônus nas campanhas anteriores (P25 · P50 · P75)</div>
                   {hasBonus ? (
                     <>
                       <div className="flex items-baseline gap-1.5">
@@ -144,7 +144,7 @@ export function PredictionList({ items }: { items: PredictionItem[] }) {
                         </span>
                         <Bonus v={item.bonus_pct.p75} />
                       </div>
-                      <p className="mt-1 text-xs text-ink-3">mediana e quartis do bônus</p>
+                      <p className="mt-1 text-xs text-ink-3">mediana e quartis dos bônus anteriores</p>
                     </>
                   ) : (
                     <p className="text-sm text-ink-2">Sem histórico de bônus para o par.</p>

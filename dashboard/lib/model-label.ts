@@ -1,4 +1,4 @@
-import type { ComparisonDecision, Method, PredictionItem } from "./api/types";
+import type { ComparisonDecision, Method, ModelMetricsResponse, PredictionItem } from "./api/types";
 
 export const METHOD_LABEL: Record<Method, string> = { b0: "B0 · taxa-base", b1: "B1 · hazard empírico" };
 
@@ -35,8 +35,12 @@ export function modelBadge(name: string, decision: ComparisonDecision | null): M
 export function headerModel(name: string, items: Pick<PredictionItem, "method">[], decision: ComparisonDecision | null): ModelLabel {
   const methods = new Set(items.map((i) => i.method).filter((m): m is Method => m === "b0" || m === "b1"));
   const known = items.length > 0 && items.every((i) => i.method === "b0" || i.method === "b1");
+  const nB1 = items.filter((i) => i.method === "b1").length;
+  const nB0 = items.filter((i) => i.method === "b0").length;
+  const unknown = items.length - nB1 - nB0;
+  const counts = nB1 + nB0 > 0 ? ` (${nB1} em B1, ${nB0} em B0${unknown > 0 ? `, ${unknown} sem método` : ""})` : "";
   const mixed: ModelLabel = {
-    label: "B0/B1 por par",
+    label: `B0/B1 por par${counts}`,
     tone: "primary",
     title: "Pares com 25 ou mais campanhas usam B1 (hazard empírico); os demais, B0 (taxa-base). O método de cada item está em “Por que está na lista”.",
   };
@@ -49,4 +53,32 @@ export function headerModel(name: string, items: Pick<PredictionItem, "method">[
   const n = name.trim().toLowerCase();
   if (n === "b1") return mixed;
   return modelBadge(name, decision);
+}
+
+/**
+ * "Calibrada" só quando a curva de confiabilidade existe e a API marcou `is_calibrated`;
+ * até lá a probabilidade é "estimada" (revisão do Planejador no PR #56).
+ */
+export function probabilityWord(metrics: Pick<ModelMetricsResponse, "reliability"> | null): "calibrada" | "estimada" {
+  return metrics && metrics.reliability.bins.length > 0 && metrics.reliability.is_calibrated ? "calibrada" : "estimada";
+}
+
+/**
+ * Rótulo da comparação campeão × desafiante. Sem dados, nunca mostra Δ nem IC:
+ * "Não decidido: dados insuficientes (23 campanhas no treino, mínimo 25)".
+ */
+export function comparisonLabel(
+  cmp: Pick<ModelMetricsResponse["comparison"], "has_data" | "decision" | "note">,
+  training: { pair: string | null; n_campaigns: number | null; min: number | null },
+): { value: string; detail: string } {
+  if (cmp.has_data) {
+    const label = { keep_champion: "Campeão mantido", promote_challenger: "Promover desafiante", insufficient_data: "Dados insuficientes" }[cmp.decision];
+    return { value: label, detail: cmp.note };
+  }
+  const min = training.min ?? 25;
+  const n = training.n_campaigns;
+  // Par de referência = 1º da lista (o par da prova de conceito), com suas campanhas conhecidas no treino.
+  const who = training.pair ? `${training.pair}: ` : "";
+  const detail = n !== null ? `dados insuficientes (${who}${n} campanhas no treino, mínimo ${min})` : `dados insuficientes (mínimo ${min} campanhas por par)`;
+  return { value: "Não decidido", detail };
 }

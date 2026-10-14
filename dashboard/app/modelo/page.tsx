@@ -6,7 +6,8 @@ import { ModelBadge } from "@/components/model-badge";
 import { PageHeader, Section, SummaryPanel } from "@/components/page-header";
 import { ReliabilityChart } from "@/components/reliability-chart";
 import { ScrollRegion } from "@/components/scroll-region";
-import { dataSource, getAccuracy, getModelMetrics, getStatus, HORIZONS, type ModelSummary } from "@/lib/api";
+import { dataSource, getAccuracy, getExplanations, getModelMetrics, getPredictions, getStatus, HORIZONS, withExplanations, type ModelSummary } from "@/lib/api";
+import { comparisonLabel, headerModel } from "@/lib/model-label";
 import { dateLong, dateTime, int, num, pct, signed } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Modelo" };
@@ -20,12 +21,32 @@ const DECISION_LABEL = {
 
 export default async function ModelPage() {
   const configured = dataSource();
-  const [mRes, accRes, statusRes] = await Promise.all([getModelMetrics(), getAccuracy(), getStatus()]);
+  const [mRes, accRes, statusRes, predRes] = await Promise.all([getModelMetrics(), getAccuracy(), getStatus(), getPredictions({ limit: 12 })]);
   const m = mRes.data;
   const acc = accRes.data;
   const discardedWeekly = accRes.discardedWeekly;
-  const c = m.champion;
+  // Campeão decidido = is_champion na API (predictions.champion) e resumo presente; senão, o run que serve.
+  const decided = m.champion !== null && predRes.data.champion !== null;
+  const c: ModelSummary = m.champion ?? {
+    name: m.serving?.name ?? predRes.data.model.name,
+    version: m.serving?.version ?? "—",
+    trained_at: m.serving?.trained_at ?? m.generated_at,
+    horizons: [7, 15, 30],
+    validation: { method: "walk-forward", folds: null, period: { from: null, to: null }, by_horizon: {} },
+    production: null,
+  };
   const prod = c.production;
+  const expl = await getExplanations(predRes.data.items);
+  const served = withExplanations(predRes.data.items, expl.byKey);
+  const serving = headerModel(predRes.data.model.name, served, m.comparison.decision);
+  const first = served[0] ?? null;
+  const minB1 = [...expl.byKey.values()].find((e) => e?.factors.min_campaigns_b1)?.factors.min_campaigns_b1 ?? null;
+  const cmpLabel = comparisonLabel(m.comparison, {
+    pair: first ? `${first.pair.origin} → ${first.pair.destination}` : null,
+    n_campaigns: first?.n_campaigns ?? null,
+    min: minB1,
+  });
+  const n30 = acc.by_horizon["30"].n;
   const hasValidation = HORIZONS.some((h) => c.validation.by_horizon[h]);
   const nCampaigns = statusRes.data?.n_campaigns_total ?? null;
   const cmp = m.comparison;
@@ -46,8 +67,10 @@ export default async function ModelPage() {
         items={[
           {
             label: "Em produção",
-            value: <ModelBadge name={c.name} decision={m.comparison.decision} />,
-            hint: `${c.name} ${c.version} · treinado ${dateLong(c.trained_at)}${nCampaigns !== null ? ` · ${int(nCampaigns)} campanhas` : ""}`,
+            value: decided ? <ModelBadge name={c.name} decision={m.comparison.decision} /> : <Badge tone="warn">Modelo não decidido</Badge>,
+            hint: decided
+              ? `${c.name} ${c.version} · treinado ${dateLong(c.trained_at)}${nCampaigns !== null ? ` · ${int(nCampaigns)} campanhas` : ""}`
+              : `servindo ${serving.label} · run ${m.serving?.run_id ?? predRes.data.model.run_id}`,
           },
           {
             label: "Brier em produção · 30 d",
@@ -56,15 +79,15 @@ export default async function ModelPage() {
           },
           {
             label: "Acerto em produção · 30 d",
-            value: acc.by_horizon["30"].n > 0 ? pct(acc.by_horizon["30"].hit_rate) : "—",
-            hint: acc.by_horizon["30"].n > 0 ? `${int(acc.by_horizon["30"].n)} predições resolvidas` : "sem predições resolvidas",
+            value: n30 > 0 ? pct(acc.by_horizon["30"].hit_rate) : "—",
+            hint: n30 > 0 ? `${int(n30)} predições resolvidas${n30 < 30 ? " · amostra pequena (n < 30)" : ""}` : "sem predições resolvidas",
           },
           {
             label: "Campeão × desafiante",
-            value: cmp.has_data ? DECISION_LABEL[cmp.decision] : "Sem dados",
+            value: cmpLabel.value,
             hint: cmp.has_data
               ? `Δ Brier ${signed(cmp.delta_brier)}${cmp.ci_delta_brier ? ` · IC ${num(cmp.ci_delta_brier[0])} a ${num(cmp.ci_delta_brier[1])}` : " · IC indisponível"}`
-              : cmp.note || "a API ainda não comparou campeão e desafiante",
+              : cmpLabel.detail,
           },
         ]}
       />
@@ -144,6 +167,7 @@ export default async function ModelPage() {
           )}
           <p className="mt-2 text-xs text-ink-3">
             Δ positivo = pior que a validação. Linhas marcadas estão fora do intervalo de confiança da validação.
+            {n30 > 0 && n30 < 30 ? " Amostra pequena (n < 30): o acerto ainda oscila muito." : ""}
           </p>
         </Section>
 
@@ -165,13 +189,14 @@ export default async function ModelPage() {
           description="O desafiante só vai para produção se vencer em Brier e log-loss com intervalo de confiança por bootstrap em blocos."
         >
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-            <ModelCard model={c} role="Campeão" />
+            <ModelCard model={c} role={decided ? "Campeão" : "Servindo (sem decisão)"} />
             {m.challenger ? (
               <ModelCard model={m.challenger} role="Desafiante" />
             ) : (
               <p className="text-sm text-ink-2">Sem desafiante treinado.</p>
             )}
           </div>
+          {cmp.has_data ? (
           <dl className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-x-6 gap-y-3 rounded-lg border border-line p-4 text-sm">
             <div>
               <dt className="text-xs text-ink-3">Horizonte</dt>
@@ -179,32 +204,31 @@ export default async function ModelPage() {
             </div>
             <div>
               <dt className="text-xs text-ink-3">Δ Brier (desafiante − campeão)</dt>
-              <dd className="tnum mt-0.5 font-medium text-ink">{cmp.has_data ? signed(cmp.delta_brier) : "—"}</dd>
+              <dd className="tnum mt-0.5 font-medium text-ink">{signed(cmp.delta_brier)}</dd>
             </div>
             <div>
               <dt className="text-xs text-ink-3">IC do Δ Brier</dt>
               <dd className="tnum mt-0.5 font-medium text-ink">
-                {cmp.has_data && cmp.ci_delta_brier ? `${num(cmp.ci_delta_brier[0])} a ${num(cmp.ci_delta_brier[1])}` : "—"}
+                {cmp.ci_delta_brier ? `${num(cmp.ci_delta_brier[0])} a ${num(cmp.ci_delta_brier[1])}` : "—"}
               </dd>
             </div>
             <div>
               <dt className="text-xs text-ink-3">Δ Log-loss</dt>
-              <dd className="tnum mt-0.5 font-medium text-ink">{cmp.has_data ? signed(cmp.delta_log_loss) : "—"}</dd>
+              <dd className="tnum mt-0.5 font-medium text-ink">{signed(cmp.delta_log_loss)}</dd>
             </div>
             <div className="col-span-full">
               <dt className="text-xs text-ink-3">Decisão</dt>
               <dd className="mt-0.5 flex flex-wrap items-center gap-2 text-ink">
-                {cmp.has_data ? (
-                  <Badge tone={cmp.decision === "promote_challenger" ? "ok" : "neutral"}>{DECISION_LABEL[cmp.decision]}</Badge>
-                ) : (
-                  <Badge tone="warn">Sem dados</Badge>
-                )}
-                <span className="min-w-0 break-words text-ink-2">
-                  {cmp.has_data ? cmp.note : `${cmp.note ? cmp.note.charAt(0).toUpperCase() + cmp.note.slice(1) : "A API ainda não comparou campeão e desafiante"}. Δ e IC aparecem quando houver predições resolvidas dos dois modelos.`}
-                </span>
+                <Badge tone={cmp.decision === "promote_challenger" ? "ok" : "neutral"}>{DECISION_LABEL[cmp.decision]}</Badge>
+                <span className="min-w-0 break-words text-ink-2">{cmp.note}</span>
               </dd>
             </div>
           </dl>
+          ) : (
+            <p className="mt-4 rounded-lg border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-ink">
+              <span className="font-semibold text-warn">Não decidido:</span> {cmpLabel.detail}. Δ e IC aparecem quando houver predições resolvidas dos dois modelos.
+            </p>
+          )}
         </Section>
       </div>
 

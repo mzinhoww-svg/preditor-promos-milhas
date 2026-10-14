@@ -6,7 +6,8 @@ import { HeaderModelBadge } from "@/components/model-badge";
 import { PageHeader, SummaryPanel } from "@/components/page-header";
 import { PredictionList } from "@/components/prediction-list";
 import { StatusStrip } from "@/components/status-strip";
-import { dataSource, getModelMetrics, getPredictions, getStatus, type OfferType } from "@/lib/api";
+import { dataSource, getExplanations, getModelMetrics, getPredictions, getStatus, withExplanations, type OfferType } from "@/lib/api";
+import { probabilityWord } from "@/lib/model-label";
 import { OFFER_TYPE_LABEL, dateTime, pct } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Previsões" };
@@ -25,8 +26,11 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
 
   const configured = dataSource();
   const [predRes, metricsRes, statusRes] = await Promise.all([getPredictions(), getModelMetrics(), getStatus()]);
-  const all = predRes.data;
+  // Método por par vem da explicação (a lista ainda não o traz): até 12 itens, memorizado por 5 min.
+  const expl = await getExplanations(predRes.data.items);
+  const all = { ...predRes.data, items: withExplanations(predRes.data.items, expl.byKey) };
   const items = type ? all.items.filter((i) => i.type === type) : all.items;
+  const word = probabilityWord(metricsRes.origin === "api" || configured === "mock" ? metricsRes.data : null);
   const discarded = predRes.discarded;
   const invalidWindows = predRes.invalidWindows;
   const now = new Date();
@@ -40,7 +44,7 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
     <>
       <PageHeader
         title="Próximas promoções prováveis"
-        description="Lista ranqueada por probabilidade de uma nova oferta começar nos próximos 30 dias. Cada item traz a probabilidade calibrada por janela, a faixa prevista do bônus e os fatores que o colocaram ali."
+        description={`Lista ranqueada por probabilidade de uma nova oferta começar nos próximos 30 dias. Cada item traz a probabilidade ${word} por janela, os bônus das campanhas anteriores e o contexto histórico do par.`}
       />
 
       <DataNotice configured={configured} sources={[predRes, metricsRes]} />
@@ -50,7 +54,7 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
           {
             label: "Mais provável em 7 dias",
             value: top ? `${top.pair.origin} → ${top.pair.destination}` : "—",
-            hint: top ? `${top.windows["7"] ? pct(top.windows["7"].probability) : "janela de 7 d inválida"}${top.bonus_pct.p50 !== null ? ` · mediana ${top.bonus_pct.p50}%` : ""}` : undefined,
+            hint: top ? `${top.windows["7"] ? pct(top.windows["7"].probability) : "janela de 7 d inválida"}${top.bonus_pct.p50 !== null ? ` · mediana histórica ${top.bonus_pct.p50}%` : ""}` : undefined,
           },
           { label: "Pares com ≥ 50% em 7 dias", value: likely7, hint: `de ${all.items.length} acompanhados` },
           { label: "Pares com ≥ 50% em 30 dias", value: likely30, hint: `de ${all.items.length} acompanhados` },
@@ -94,9 +98,10 @@ export default async function PredictionsPage({ searchParams }: PageProps<"/">) 
       <PredictionList items={items} />
 
       <p className="mt-6 max-w-prose text-xs leading-5 text-ink-3">
-        Probabilidade é a chance calibrada de uma oferta do par e tipo começar dentro da janela, contada a partir de{" "}
+        Probabilidade é a chance {word} de uma oferta do par e tipo começar dentro da janela, contada a partir de{" "}
         {dateTime(all.generated_at)}. O intervalo abaixo da barra, quando existe, vem de bootstrap em blocos. P25, P50 e
-        P75 são os quartis do bônus previsto em pontos percentuais. Pares com menos de 25 campanhas usam a taxa-base (B0);
+        P75 são os quartis dos bônus nas campanhas anteriores do par, em pontos percentuais; não são uma previsão do próximo
+        bônus. Pares com menos de 25 campanhas usam a taxa-base (B0);
         com 25 ou mais, o hazard empírico (B1). Ofertas segmentadas (clube, cartão) têm linha própria.
       </p>
     </>

@@ -15,6 +15,7 @@ import type {
   Explanation,
   ModelMetricsResponse,
   OfferType,
+  PredictionItem,
   PredictionsResponse,
   SourceHealthResponse,
   StatusResponse,
@@ -157,6 +158,44 @@ export async function getThresholdAlerts(limit = 100): Promise<Optional<Threshol
 /** GET /v1/status (proposto no contrato). 404 vira "não exposto"; a tela mostra o estado como desconhecido. */
 export async function getStatus(): Promise<Optional<StatusResponse>> {
   return loadOptional("/status", mockStatus, (raw) => ({ data: validateStatus(raw), discarded: 0 }));
+}
+
+/**
+ * Explicações de vários itens (cabeçalho "B0/B1 por par (X em B1, Y em B0)" e selo por item).
+ * Uma chamada por item, limitada a `max` itens e memorizada por 5 min em memória: a
+ * explicação muda uma vez por dia (as_of) e o limite da API é 60 req/min por chave.
+ * Falha em um item não derruba a tela: o item fica sem método.
+ */
+const EXPL_TTL_MS = 5 * 60_000;
+const EXPL_MAX = 12;
+const explMemo = new Map<string, { at: number; value: Explanation | null }>();
+
+export async function getExplanations(
+  items: Pick<PredictionItem, "pair" | "type">[],
+  max = EXPL_MAX,
+): Promise<{ byKey: Map<string, Explanation | null>; covered: number; total: number }> {
+  const byKey = new Map<string, Explanation | null>();
+  const slice = items.slice(0, max);
+  await Promise.all(
+    slice.map(async (it) => {
+      const key = `${it.pair.origin}|${it.pair.destination}|${it.type}`;
+      const hit = explMemo.get(key);
+      if (hit && Date.now() - hit.at < EXPL_TTL_MS) return byKey.set(key, hit.value);
+      const res = await getExplanation(it.pair.origin, it.pair.destination, it.type);
+      if (res.data || res.unavailable?.status === 404) explMemo.set(key, { at: Date.now(), value: res.data });
+      byKey.set(key, res.data);
+    }),
+  );
+  return { byKey, covered: slice.length, total: items.length };
+}
+
+/** Preenche method e n_campaigns do item a partir da explicação quando a API não os manda na lista. */
+export function withExplanations(items: PredictionItem[], byKey: Map<string, Explanation | null>): PredictionItem[] {
+  return items.map((it) => {
+    const e = byKey.get(`${it.pair.origin}|${it.pair.destination}|${it.type}`);
+    if (!e) return it;
+    return { ...it, method: it.method ?? e.factors.method, n_campaigns: it.n_campaigns ?? e.factors.n_campaigns };
+  });
 }
 
 /**

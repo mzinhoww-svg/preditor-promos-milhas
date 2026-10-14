@@ -51,9 +51,22 @@ export interface PredictionItem {
   n_campaigns: number | null;
 }
 
+/** Referência curta a um model_run (T10b): o run que serve as predições ou o campeão decidido. */
+export interface RunRef {
+  run_id: string;
+  name: string;
+  version: string | null;
+  /** "champion", "challenger", "daily" (run diário que serve sem decisão) ou outro. */
+  role: string;
+  trained_at: string | null;
+}
+
 export interface PredictionsResponse {
   generated_at: string;
-  model: { run_id: string; name: string; version: string | null; role: "champion" | "challenger" };
+  /** Run que gerou as predições (com a T10b, o run diário: role "daily"). */
+  model: RunRef;
+  /** Campeão decidido (is_champion). null = nenhuma decisão campeão × desafiante ainda. */
+  champion: RunRef | null;
   items: PredictionItem[];
 }
 
@@ -98,7 +111,10 @@ export type ComparisonDecision = "keep_champion" | "promote_challenger" | "insuf
 
 export interface ModelMetricsResponse {
   generated_at: string;
-  champion: ModelSummary;
+  /** null quando não há campeão decidido nem run servindo. */
+  champion: ModelSummary | null;
+  /** Run que serve as predições hoje (T10b); pode ser um run diário sem decisão. */
+  serving: RunRef | null;
   challenger: ModelSummary | null;
   comparison: {
     horizon: number;
@@ -113,6 +129,8 @@ export interface ModelMetricsResponse {
   reliability: {
     horizon: number;
     bins: { p_mean: number; observed: number; n: number }[];
+    /** Só com bins e este flag verdadeiro a tela diz "probabilidade calibrada"; senão, "estimada". */
+    is_calibrated: boolean;
   };
 }
 

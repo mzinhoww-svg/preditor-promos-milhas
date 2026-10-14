@@ -10,6 +10,7 @@ import type {
   PredictionItem,
   PredictionsResponse,
   ProductionMetrics,
+  RunRef,
   SourceHealth,
   SourceHealthResponse,
   StatusResponse,
@@ -62,6 +63,12 @@ const pairOrNull = (v: unknown): [number, number] | null =>
   Array.isArray(v) && v.length === 2 && v.every(isNum) ? [v[0], v[1]] : null;
 const methodOrNull = (v: unknown): Method | null => (v === "b0" || v === "b1" ? v : isStr(v) && /^b[01]$/i.test(v) ? (v.toLowerCase() as Method) : null);
 
+/** Referência de run: exige run_id e name; o resto é tolerante. */
+function runRef(v: unknown): RunRef | null {
+  if (!isObj(v) || !isStr(v.run_id) || !isStr(v.name)) return null;
+  return { run_id: v.run_id, name: v.name, version: strOrNull(v.version), role: isStr(v.role) ? v.role : "unknown", trained_at: isoOrNull(v.trained_at) };
+}
+
 const OFFER_TYPES = new Set(["transfer_bonus", "purchase_discount", "boosted_accrual"]);
 const REASON_KINDS = new Set(["days_since_last", "month", "sibling_pairs", "source_signal", "other"]);
 const HORIZON_KEYS: Horizon[] = ["7", "15", "30"];
@@ -101,8 +108,8 @@ export function validatePredictions(raw: unknown): { data: PredictionsResponse; 
   if (!isObj(raw) || !isIsoDate(raw.generated_at) || !isObj(raw.model) || !Array.isArray(raw.items)) {
     throw new InvalidResponseError("/predictions", "formato inesperado");
   }
-  const m = raw.model;
-  if (!isStr(m.run_id) || !isStr(m.name)) {
+  const model = runRef(raw.model);
+  if (!model) {
     throw new InvalidResponseError("/predictions", "campo model inválido");
   }
   let invalidWindows = 0;
@@ -129,7 +136,8 @@ export function validatePredictions(raw: unknown): { data: PredictionsResponse; 
   return {
     data: {
       generated_at: raw.generated_at,
-      model: { run_id: m.run_id, name: m.name, version: strOrNull(m.version), role: m.role === "challenger" ? "challenger" : "champion" },
+      model,
+      champion: runRef(raw.champion),
       items,
     },
     discarded: raw.items.length - items.length,
@@ -192,8 +200,10 @@ export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
   if (!isObj(raw) || !isIsoDate(raw.generated_at)) {
     throw new InvalidResponseError("/model/metrics", "formato inesperado");
   }
+  // Com a T10b o campeão pode ser null (sem decisão); objeto malformado também vira null, e a tela diz "não decidido".
   const champion = modelSummary(raw.champion);
-  if (!champion) throw new InvalidResponseError("/model/metrics", "champion inválido");
+  const serving = runRef(raw.serving);
+  if (!champion && !serving) throw new InvalidResponseError("/model/metrics", "sem champion nem serving");
   const challenger = raw.challenger === null || raw.challenger === undefined ? null : modelSummary(raw.challenger);
   const c = isObj(raw.comparison) ? raw.comparison : {};
   const decision = c.decision === "promote_challenger" || c.decision === "insufficient_data" ? c.decision : "keep_champion";
@@ -201,7 +211,9 @@ export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
   const ci = pairOrNull(c.ci_delta_brier);
   // Ressalva 1: a API sem comparação devolve Δ 0, IC [0,0] e nota "sem dados suficientes"; isso não é medida.
   const zeroed = (!isNum(c.delta_brier) || c.delta_brier === 0) && (!isNum(c.delta_log_loss) || c.delta_log_loss === 0) && (ci === null || (ci[0] === 0 && ci[1] === 0));
-  const has_data = !(decision === "insufficient_data" || /sem dados/i.test(note) || zeroed || (champion.validation.folds === null && Object.keys(champion.validation.by_horizon).length === 0));
+  const degenerate = ci !== null && ci[0] === ci[1];
+  const noValidation = !champion || (champion.validation.folds === null && Object.keys(champion.validation.by_horizon).length === 0);
+  const has_data = !(decision === "insufficient_data" || /sem dados|insuficiente/i.test(note) || zeroed || degenerate || noValidation);
   const r = isObj(raw.reliability) ? raw.reliability : {};
   const bins = (Array.isArray(r.bins) ? r.bins : []).filter(
     (b): b is { p_mean: number; observed: number; n: number } => isObj(b) && isProb(b.p_mean) && isProb(b.observed) && isNum(b.n),
@@ -209,6 +221,7 @@ export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
   return {
     generated_at: raw.generated_at,
     champion,
+    serving,
     challenger,
     comparison: {
       horizon: isNum(c.horizon) ? c.horizon : 30,
@@ -219,7 +232,7 @@ export function validateModelMetrics(raw: unknown): ModelMetricsResponse {
       note,
       has_data,
     },
-    reliability: { horizon: isNum(r.horizon) ? r.horizon : 30, bins },
+    reliability: { horizon: isNum(r.horizon) ? r.horizon : 30, bins, is_calibrated: r.is_calibrated === true && bins.length > 0 },
   };
 }
 

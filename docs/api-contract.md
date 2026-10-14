@@ -96,7 +96,12 @@ Campos:
 | `method` | `b0`\|`b1`\|ausente | **proposto**: método do item (o job já grava em `prediction.explanation.method`); evita uma chamada de explicação por item só para mostrar o selo |
 | `n_campaigns` | int\|ausente | **proposto**: nº de campanhas conhecidas em `as_of` (idem) |
 
-`model.name` é o modelo da execução (`B0` se nenhum par atingiu 25 campanhas, senão `B1`).
+`model` é o run que gerou as predições (com a T10b, o run diário: `role: "daily"`); `model.name`
+é `B0` se nenhum par atingiu 25 campanhas, senão `B1`. `champion` (T10b) é a referência do
+campeão decidido (`is_champion`) ou `null` sem decisão; com `null` o dashboard mostra
+"Modelo não decidido · servindo B0/B1 por par (X em B1, Y em B0)". As contagens por método
+vêm das explicações dos primeiros 12 itens (memorizadas por 5 min no servidor) até a lista
+trazer `method`.
 O dashboard mostra selo só para `B0` e `B1`; qualquer outro nome (ex. `C1`) aparece como
 "modelo não decidido" até `comparison.decision` em `/model/metrics` ser `promote_challenger`.
 
@@ -167,6 +172,12 @@ separada da precisão real em produção (`prediction_log` conferido com o que a
 
 `comparison.decision` ∈ `keep_champion | promote_challenger | insufficient_data`.
 `reliability.bins` são os pontos da curva de confiabilidade (previsto × observado) do campeão.
+`champion` pode ser `null` (sem campeão decidido); `serving` (T10b) é o run que serve as
+predições. `reliability.is_calibrated` (proposto, padrão `false`): o dashboard só escreve
+"probabilidade calibrada" com `bins` não vazios e este flag verdadeiro; até lá diz
+"probabilidade estimada". `comparison` com nota de falta de dados, `insufficient_data`,
+Δ e IC zerados ou IC degenerado aparece como "Não decidido: dados insuficientes (N campanhas
+no treino, mínimo 25)", sem Δ nem IC.
 `production` é `null` quando o modelo nunca serviu predições. **A API de hoje** devolve
 `validation` vazia (`folds: 0`, `period` nulo, `by_horizon: {}`), `production: null`,
 `comparison` zerado com `note: "sem dados suficientes"` e `bins: []`; o dashboard mostra os

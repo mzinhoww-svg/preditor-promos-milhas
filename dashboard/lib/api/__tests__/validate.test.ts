@@ -97,6 +97,14 @@ describe("validatePredictions", () => {
     expect(r.discarded).toBe(1);
     expect(r.invalidWindows).toBe(0);
   });
+  it("T10b mesclada: model com role 'daily' e champion null (sem decisão) ou referência", () => {
+    const base = { generated_at: "2026-10-14T00:00:00Z", items: [REAL_ITEM] };
+    const undecided = validatePredictions({ ...base, model: { run_id: "mr_1", name: "B1", version: "1.0.0", role: "daily" }, champion: null });
+    expect(undecided.data.model.role).toBe("daily");
+    expect(undecided.data.champion).toBeNull();
+    const decided = validatePredictions({ ...base, model: { run_id: "mr_1", name: "B1" }, champion: { run_id: "mr_3", name: "B1", version: "1.0.0", role: "champion", trained_at: "2026-10-14T06:29:20Z" } });
+    expect(decided.data.champion?.run_id).toBe("mr_3");
+  });
   it("rejeita resposta sem items", () => {
     expect(() => validatePredictions({ generated_at: "2026-10-14T00:00:00Z", model: {} })).toThrow(InvalidResponseError);
   });
@@ -105,15 +113,15 @@ describe("validatePredictions", () => {
 describe("validateModelMetrics", () => {
   it("aceita o mock", () => {
     const m = validateModelMetrics(modelMetrics);
-    expect(m.champion.validation.folds).toBe(18);
+    expect(m.champion?.validation.folds).toBe(18);
     expect(m.reliability.bins.length).toBeGreaterThan(0);
   });
   it("aceita a resposta real sem validação registrada", () => {
     const m = validateModelMetrics(REAL_METRICS);
-    expect(m.champion.validation.folds).toBeNull();
-    expect(m.champion.validation.period).toEqual({ from: null, to: null });
-    expect(m.champion.validation.by_horizon).toEqual({});
-    expect(m.champion.production).toBeNull();
+    expect(m.champion?.validation.folds).toBeNull();
+    expect(m.champion?.validation.period).toEqual({ from: null, to: null });
+    expect(m.champion?.validation.by_horizon).toEqual({});
+    expect(m.champion?.production).toBeNull();
     expect(m.challenger).toBeNull();
     expect(m.comparison.decision).toBe("keep_champion");
     expect(m.reliability.bins).toEqual([]);
@@ -125,6 +133,18 @@ describe("validateModelMetrics", () => {
     expect(zeroNoNote.comparison.has_data).toBe(false);
     const insufficient = validateModelMetrics({ ...REAL_METRICS, comparison: { horizon: 30, delta_brier: -0.01, delta_log_loss: 0.02, ci_delta_brier: [-0.03, 0.01], decision: "insufficient_data", note: "" } });
     expect(insufficient.comparison.has_data).toBe(false);
+  });
+  it("T10b mesclada: champion null e serving presente; IC degenerado não é dado; is_calibrated só com bins", () => {
+    const m = validateModelMetrics({ ...REAL_METRICS, champion: null, serving: { run_id: "mr_1", name: "B1", version: "1.0.0", role: "daily", trained_at: "2026-10-14T06:29:05Z" } });
+    expect(m.champion).toBeNull();
+    expect(m.serving?.role).toBe("daily");
+    expect(m.comparison.has_data).toBe(false);
+    expect(m.reliability.is_calibrated).toBe(false);
+    const degenerate = validateModelMetrics({ ...REAL_METRICS, champion: { ...REAL_METRICS.champion, validation: { method: "walk-forward", folds: 5, period: { from: "2024-01-01", to: "2026-09-30" }, by_horizon: { "30": { brier: 0.1, log_loss: 0.3, auc: 0.7 } } } }, comparison: { horizon: 30, delta_brier: -0.01, delta_log_loss: 0.01, ci_delta_brier: [0.02, 0.02], decision: "keep_champion", note: "" } });
+    expect(degenerate.comparison.has_data).toBe(false);
+    const flagged = validateModelMetrics({ ...modelMetrics, reliability: { ...(modelMetrics as { reliability: object }).reliability, is_calibrated: true } });
+    expect(flagged.reliability.is_calibrated).toBe(true);
+    expect(() => validateModelMetrics({ ...REAL_METRICS, champion: null })).toThrow(InvalidResponseError);
   });
   it("decisão desconhecida vira keep_champion e IC malformado vira null", () => {
     const m = validateModelMetrics({ ...REAL_METRICS, comparison: { ...REAL_METRICS.comparison, decision: "x", ci_delta_brier: [1] } });

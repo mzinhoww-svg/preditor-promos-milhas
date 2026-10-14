@@ -62,6 +62,12 @@ export function relativeFrom(iso: string | null | undefined, now: Date): string 
   return `há ${Math.round(diffH / 24)} dias`;
 }
 
+/** Hora do dado, "06:00 UTC", para a faixa de status ("dados de HH:MM"). */
+export function timeUTC(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat(ptBR, { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(iso)) + " UTC";
+}
+
 /** Idade curta de um instante: "agora", "há 5 min", "há 3 h", "há 2 dias". */
 export function ageLabel(iso: string | null | undefined, now: Date): string {
   if (!iso) return "—";
