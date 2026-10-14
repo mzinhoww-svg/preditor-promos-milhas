@@ -152,6 +152,7 @@ class CDXClient:
         self.rate_limiter = RateLimiter(rate=rl, min_interval=mi, delay=dl)
         self.transport = transport
         self.timeout = timeout
+        self.last_resume_key = None
         self._extra = kwargs
         attempts = None
         for k in ("max_retries", "retries", "max_attempts", "attempts", "retry_count"):
@@ -167,7 +168,7 @@ class CDXClient:
             params["from"] = start
         if end:
             params["to"] = end
-        for key in ("matchType", "limit", "collapse", "filter", "fl", "fastLatest"):
+        for key in ("matchType", "limit", "collapse", "filter", "fl", "fastLatest", "resumeKey", "showResumeKey"):
             if key in extra and extra[key] is not None:
                 params[key] = extra[key]
         alias = {
@@ -195,6 +196,11 @@ class CDXClient:
         params = self._params(url, start, end, extra)
 
         data = self._request(params, extra)
+        resume_key = None
+        if isinstance(data, list) and data and isinstance(data[-1], list) and len(data[-1]) == 1 and isinstance(data[-1][0], str) and len(data[-1][0]) >= 10:
+            resume_key = data[-1][0]
+            data = data[:-1]
+        self.last_resume_key = resume_key
         return parse_cdx_response(data, base_url_fallback=url)
 
     def _request(self, params, extra):

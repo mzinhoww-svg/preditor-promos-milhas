@@ -471,20 +471,57 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
     to_date = _parse_date_text(to_) if to_ is not None else None
     from_date = from_date or date(2023, 1, 1)
     url_root = source if str(source).startswith("http") else f"http://{source}/"
-    client = CDXClient(user_agent=UA, rate_limit=0.5, min_interval=2.0)
-    captures = None
+    min_interval = float(kwargs.get("min_interval", 10.0))
+    page_size = int(kwargs.get("page_size", 500))
+    client = CDXClient(user_agent=UA, rate_limit=1.0/min_interval if min_interval > 0 else 0.0,
+                       min_interval=min_interval, timeout=float(kwargs.get("timeout", 120.0)),
+                       max_retries=int(kwargs.get("max_retries", 3)))
+    captures = []
+    seen_resume: set[str] = set()
+    download_body = kwargs.get("download_body")
+    if download_body is None:
+        download_body = not ("pontospravoar" in str(source or "").lower())
+    robots_txt = robots_txt if robots_txt is not None else kwargs.get("robots_txt")
     try:
-        kw = {
+        if robots_txt is None:
+            try:
+                robots_txt = fetch_robots(source, transport=transport, rate_limiter=None)
+            except (OSError, ValueError, RuntimeError):
+                robots_txt = None
+    except (OSError, ValueError, RuntimeError, TypeError):
+        robots_txt = None
+
+    try:
+        kw0 = {
             "from_": from_date,
             "matchType": "prefix",
             "filter": ["statuscode:200", "mimetype:text/html",
                        "original:.*(livelo.*smiles|smiles.*livelo).*"],
             "collapse": None,
-            "limit": 100000,
+            "limit": page_size,
+            "showResumeKey": True,
         }
         if to_date is not None:
-            kw["to_"] = to_date
-        captures = client.list_captures(url_root, **kw)
+            kw0["to_"] = to_date
+        resume = None
+        pages = 0
+        max_pages = int(kwargs.get("max_pages", 10000))
+        while pages < max_pages:
+            kw = dict(kw0)
+            if resume:
+                kw["resumeKey"] = resume
+                if resume in seen_resume:
+                    break
+                seen_resume.add(resume)
+            page = client.list_captures(url_root, **kw)
+            if not page:
+                break
+            captures.extend(page)
+            resume = getattr(client, "last_resume_key", None)
+            pages += 1
+            if not resume:
+                break
+            time.sleep(min_interval)
     except (OSError, ValueError, RuntimeError, Exception) as e:
         raise CollectorError(str(e)) from e
     if captures is None:
@@ -498,6 +535,7 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
         nu = normalize_url(u)
         if nu is None:
             continue
+        nu = str(nu).replace("%0A", "").replace("%0a", "")
         low = str(nu).lower()
         if any(seg in low for seg in ("/embed/", "/feed/", "/amp/")):
             continue
@@ -511,8 +549,14 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
     stored = 0
     offers_created = 0
     for nu, (ts, orig) in seen_urls.items():
+        if source and "pontospravoar" in str(source) and not download_body:
+            continue
+        if not download_body:
+            continue
         if source and "pontospravoar" in str(source):
             continue
+        if transport is None:
+            time.sleep(min_interval)
         content = fetch_snapshot(ts, orig, transport=transport)
         if not content:
             continue
