@@ -116,31 +116,46 @@ def fetch_model_info() -> dict[str, Any]:
     }
 
 
+def _iso(dt) -> str | None:
+    if dt is None or not hasattr(dt, "astimezone"):
+        return None
+    return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def fetch_source_health() -> dict[str, Any]:
+    """Saúde por fonte, agregada da tabela source_health (checagens do listener/coletor)."""
     engine = get_engine()
     with engine.connect() as conn:
         rows = _rows(conn.execute(text(
-            "SELECT source, checked_at, items_new, extraction_rate, alert FROM source_health ORDER BY checked_at DESC"
+            "SELECT source, checked_at, items_new, extraction_rate, alert, robots_hash "
+            "FROM source_health ORDER BY checked_at DESC"
         )))
-    sources = []
-    seen = set()
+    now = datetime.now(UTC)
+    by_source: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
-        if r["source"] in seen:
-            continue
-        seen.add(r["source"])
+        by_source[r["source"]].append(r)  # já em ordem decrescente de checked_at
+    sources = []
+    for source, checks in by_source.items():
+        latest = checks[0]
+        d24 = [c for c in checks if now - c["checked_at"] <= timedelta(hours=24)]
+        d7 = [c for c in checks if now - c["checked_at"] <= timedelta(days=7)]
+        ok = next((c for c in checks if not c["alert"]), None)
+        with_items = next((c for c in checks if (c["items_new"] or 0) > 0), None)
+        prev_hash = next((c["robots_hash"] for c in checks[1:] if c["robots_hash"]), None)
+        rates = [float(c["extraction_rate"]) for c in d7 if c["extraction_rate"] is not None]
         sources.append({
-            "source": r["source"],
+            "source": source,
             "kind": "rss",
-            "status": "degraded" if r.get("alert") else "ok",
-            "last_success_at": r["checked_at"].astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z") if hasattr(r["checked_at"], "astimezone") else None,
-            "last_item_at": None,
-            "items_new_24h": r.get("items_new"),
-            "items_new_7d": r.get("items_new"),
-            "extraction_rate_7d": float(r["extraction_rate"]) if r.get("extraction_rate") is not None else None,
-            "error_rate_24h": 0.0 if not r.get("alert") else 0.1,
-            "robots_hash": None,
-            "robots_changed": False,
-            "message": None,
+            "status": "degraded" if latest["alert"] else "ok",
+            "last_success_at": _iso(ok["checked_at"]) if ok else None,
+            "last_item_at": _iso(with_items["checked_at"]) if with_items else None,
+            "items_new_24h": sum(c["items_new"] or 0 for c in d24),
+            "items_new_7d": sum(c["items_new"] or 0 for c in d7),
+            "extraction_rate_7d": round(sum(rates) / len(rates), 4) if rates else None,
+            "error_rate_24h": round(sum(1 for c in d24 if c["alert"]) / len(d24), 4) if d24 else 0.0,
+            "robots_hash": latest["robots_hash"],
+            "robots_changed": bool(latest["robots_hash"] and prev_hash and latest["robots_hash"] != prev_hash),
+            "message": "sem itens novos ou falha na última checagem" if latest["alert"] else None,
         })
     return {"generated_at": _now(), "sources": sources}
 
@@ -272,4 +287,49 @@ def fetch_model_metrics() -> dict[str, Any]:
             "note": "sem dados suficientes",
         },
         "reliability": {"horizon": 30, "bins": []},
+    }
+
+
+def fetch_alerts(limit: int = 100) -> dict[str, Any]:
+    engine = get_engine()
+    limit = max(1, min(int(limit), 500))
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT made_at, origin, destination, event_type, horizon_days, probability, "
+            "previous_probability, threshold FROM alert ORDER BY made_at DESC, probability DESC, "
+            "origin, destination, horizon_days LIMIT :l"
+        ), {"l": limit}))
+    items = [{
+        "made_at": r["made_at"].astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "pair": {"origin": r["origin"], "destination": r["destination"]},
+        "type": r["event_type"],
+        "horizon_days": r["horizon_days"],
+        "probability": float(r["probability"]),
+        "previous_probability": float(r["previous_probability"]) if r["previous_probability"] is not None else None,
+        "threshold": float(r["threshold"]),
+    } for r in rows]
+    return {"generated_at": _now(), "items": items}
+
+
+def fetch_explanation(origin: str, destination: str, event_type: str) -> dict[str, Any] | None:
+    """Explicação gravada pelo job na predição mais recente (point-in-time por construção)."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT DISTINCT ON (horizon_days) made_at, horizon_days, probability, explanation "
+            "FROM prediction WHERE origin = :o AND destination = :d AND event_type = :t "
+            "ORDER BY horizon_days, made_at DESC, model_run_id DESC"
+        ), {"o": origin, "d": destination, "t": event_type}))
+    if not rows:
+        return None
+    latest = max(rows, key=lambda r: r["made_at"])
+    ex = latest.get("explanation") or {}
+    return {
+        "pair": {"origin": origin, "destination": destination},
+        "type": event_type,
+        "as_of": ex.get("as_of") or latest["made_at"].astimezone(UTC).date().isoformat(),
+        "windows": {str(r["horizon_days"]): float(r["probability"]) for r in rows},
+        "factors": {k: ex.get(k) for k in (
+            "method", "n_campaigns", "last_campaign_start", "days_since_last",
+            "median_interval_days", "min_campaigns_b1")},
     }
