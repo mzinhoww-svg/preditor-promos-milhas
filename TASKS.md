@@ -14,4 +14,4 @@
 | T06 | Conjunto de ouro (50 campanhas) | pendente | pendente | data/gold |
 | T05 | Coletor RSS e backfill Wayback | pendente | pendente | depende de T05a e PR #2 |
 | T10 | API, job diário, deploy VPS | pendente | pendente | MVP |
-| T10a | API FastAPI + job diário baseline/accuracy | Programador | em_revisao | PR #25; commit `70c0687`; B1-B3 corrigidos (job roda com ofertas, unicidade prediction_log, accuracy from/to); ruff/pytest verdes (99) |
+| T10a | API FastAPI + job diário baseline/accuracy | Programador | em_revisao | QA reteste 70c0687: aprovada com condicao (renumerar migracao 0002 que colide com a da main); ver docs/qa/t10a-api/reteste/RELATORIO.md |
