@@ -170,7 +170,11 @@ def run_backfill(args: argparse.Namespace) -> dict:
         for cand in candidates:
             url = cand["url"]
             ts = cand["timestamp"]
-            if url in processed and processed[url].get("status") == "done":
+            prev = processed.get(url, {})
+            if prev.get("status") == "done":
+                continue
+            max_attempts = getattr(args, "max_attempts", 3)
+            if prev.get("status") == "fetch_failed" and prev.get("attempts", 1) >= max_attempts:
                 continue
             if not download_body:
                 processed[url] = {"status": "listed_only", "timestamp": ts}
@@ -179,7 +183,7 @@ def run_backfill(args: argparse.Namespace) -> dict:
             time.sleep(args.rate_limit)
             content = C.fetch_snapshot(ts, url, transport=None)
             if not content:
-                processed[url] = {"status": "fetch_failed", "timestamp": ts}
+                processed[url] = {"status": "fetch_failed", "timestamp": ts, "attempts": prev.get("attempts", 0) + 1}
                 _save_state(state)
                 continue
             pub_dt = C._extract_published_time(content)
@@ -236,6 +240,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-size", dest="page_size", type=int, default=500)
     parser.add_argument("--database-url", dest="database_url", default=None)
     parser.add_argument("--refresh-candidates", dest="refresh_candidates", action="store_true")
+    parser.add_argument("--max-attempts", dest="max_attempts", type=int, default=3)
     parser.add_argument("--titles-only", dest="titles_only", action="store_true")
     return parser
 
