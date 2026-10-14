@@ -278,13 +278,12 @@ def _insert_offer(engine, origin, destination, etype, start_date, end_date, bonu
 def _insert_evidence(engine, offer_id, raw_message_id, source, seen_start, start_inferred=False):
     if raw_message_id is None:
         return
-    # Note: start_inferred not in schema; skip (spec says mark evidence; no column). 
     with engine.begin() as c:
         from sqlalchemy import text
         c.execute(text(
-            "INSERT INTO offer_evidence(offer_id, raw_message_id, source, seen_start_at) "
-            "VALUES (:o,:r,:s,:d) ON CONFLICT (offer_id, raw_message_id) DO NOTHING"
-        ), {"o": offer_id, "r": raw_message_id, "s": source, "d": seen_start})
+            "INSERT INTO offer_evidence(offer_id, raw_message_id, source, seen_start_at, start_inferred) "
+            "VALUES (:o,:r,:s,:d,:i) ON CONFLICT (offer_id, raw_message_id) DO NOTHING"
+        ), {"o": offer_id, "r": raw_message_id, "s": source, "d": seen_start, "i": bool(start_inferred)})
 
 def _recompute_offer(engine, offer_id):
     with engine.connect() as c:
@@ -350,9 +349,20 @@ def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
             # goes to review, not offer
             continue
         start_iso = off.inicio
+        start_inferred = False
         if start_iso is None:
-            # never convert "only end" to start
-            continue
+            # spec coletor-livelo-smiles 3.1: inicio nulo ("ate DD/MM") => start_at = first_seen_at::date
+            # com start_inferred=true na evidencia. Sem fim, nao ha oferta (nunca inventar).
+            from preditor.extract import _first_seen_sp_date
+
+            fs_day = _first_seen_sp_date(fs)
+            if off.fim is None or fs_day is None:
+                continue
+            end_day = date.fromisoformat(off.fim)
+            if end_day < fs_day or (end_day - fs_day).days > 90:
+                continue  # campanha ja encerrada ou janela implausivel
+            start_iso = fs_day.isoformat()
+            start_inferred = True
         origin = off.origem
         destination = off.destino
         etype = off.tipo
@@ -369,7 +379,7 @@ def process_raw_message(engine, raw_message, first_seen_at=None, **kwargs):
         if offer_id is None:
             end_iso = off.fim
             offer_id = _insert_offer(engine, origin, destination, etype, start_date, end_iso, bonus, segmented, segment_label, first_seen_val)
-        _insert_evidence(engine, offer_id, rm_id, source, start_date)
+        _insert_evidence(engine, offer_id, rm_id, source, start_date, start_inferred=start_inferred)
         _recompute_offer(engine, offer_id)
         created.append(offer_id)
     return created
@@ -471,20 +481,57 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
     to_date = _parse_date_text(to_) if to_ is not None else None
     from_date = from_date or date(2023, 1, 1)
     url_root = source if str(source).startswith("http") else f"http://{source}/"
-    client = CDXClient(user_agent=UA, rate_limit=0.5, min_interval=2.0)
-    captures = None
+    min_interval = float(kwargs.get("min_interval", 10.0))
+    page_size = int(kwargs.get("page_size", 500))
+    client = CDXClient(user_agent=UA, rate_limit=1.0/min_interval if min_interval > 0 else 0.0,
+                       min_interval=min_interval, timeout=float(kwargs.get("timeout", 120.0)),
+                       max_retries=int(kwargs.get("max_retries", 3)))
+    captures = []
+    seen_resume: set[str] = set()
+    download_body = kwargs.get("download_body")
+    if download_body is None:
+        download_body = not ("pontospravoar" in str(source or "").lower())
+    robots_txt = robots_txt if robots_txt is not None else kwargs.get("robots_txt")
     try:
-        kw = {
+        if robots_txt is None:
+            try:
+                robots_txt = fetch_robots(source, transport=transport, rate_limiter=None)
+            except (OSError, ValueError, RuntimeError):
+                robots_txt = None
+    except (OSError, ValueError, RuntimeError, TypeError):
+        robots_txt = None
+
+    try:
+        kw0 = {
             "from_": from_date,
             "matchType": "prefix",
             "filter": ["statuscode:200", "mimetype:text/html",
                        "original:.*(livelo.*smiles|smiles.*livelo).*"],
             "collapse": None,
-            "limit": 100000,
+            "limit": page_size,
+            "showResumeKey": True,
         }
         if to_date is not None:
-            kw["to_"] = to_date
-        captures = client.list_captures(url_root, **kw)
+            kw0["to_"] = to_date
+        resume = None
+        pages = 0
+        max_pages = int(kwargs.get("max_pages", 10000))
+        while pages < max_pages:
+            kw = dict(kw0)
+            if resume:
+                kw["resumeKey"] = resume
+                if resume in seen_resume:
+                    break
+                seen_resume.add(resume)
+            page = client.list_captures(url_root, **kw)
+            if not page:
+                break
+            captures.extend(page)
+            resume = getattr(client, "last_resume_key", None)
+            pages += 1
+            if not resume:
+                break
+            time.sleep(min_interval)
     except (OSError, ValueError, RuntimeError, Exception) as e:
         raise CollectorError(str(e)) from e
     if captures is None:
@@ -498,6 +545,7 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
         nu = normalize_url(u)
         if nu is None:
             continue
+        nu = str(nu).replace("%0A", "").replace("%0a", "")
         low = str(nu).lower()
         if any(seg in low for seg in ("/embed/", "/feed/", "/amp/")):
             continue
@@ -511,8 +559,14 @@ def backfill(engine=None, source=None, from_=None, transport=None, robots_txt=No
     stored = 0
     offers_created = 0
     for nu, (ts, orig) in seen_urls.items():
+        if source and "pontospravoar" in str(source) and not download_body:
+            continue
+        if not download_body:
+            continue
         if source and "pontospravoar" in str(source):
             continue
+        if transport is None:
+            time.sleep(min_interval)
         content = fetch_snapshot(ts, orig, transport=transport)
         if not content:
             continue
