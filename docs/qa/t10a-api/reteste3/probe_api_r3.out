@@ -1,0 +1,17 @@
+A5 duplicatas logicas (chave do indice) = 0 de 15 linhas
+6 jobs simultaneos: erros [] | linhas azul/tudo em 2026-07-15 = 3 (esperado 3 horizontes)
+rotas ['/healthz', '/v1/model/metrics', '/v1/prediction-log/accuracy', '/v1/predictions', '/v1/source-health']
+/healthz 200 {"status":"ok"}
+/v1/model/metrics 200 {"generated_at":"2026-10-14T03:03:36Z","champion":{"name":"B1","version":"1.0.0","trained_
+/v1/prediction-log/accuracy 200 {"generated_at":"2026-10-14T03:03:36Z","period":{"from":"2026-06-01","to":"2026-10-14"},"b
+/v1/predictions 200 {"generated_at":"2026-07-15T00:00:00Z","model":{"run_id":"mr_14","name":"B1","version":"1.
+/v1/source-health 200 {"generated_at":"2026-10-14T03:03:36Z","sources":[]}
+/v1/predictions?limit=-1 200 {"generated_at":"2026-07-15T00:00:00Z","model":{"run_id":"mr_14","name":"B1","version":"1.
+/v1/accuracy?from=ontem 404 {"detail":"Not Found"}
+/v1/accuracy?from=2026-01-01&to=2026-12-31 404 {"detail":"Not Found"}
+sem key 401
+/v1/prediction-log/accuracy?from=ontem 500 {"error":{"code":"INTERNAL_ERROR","message":"erro interno"}}
+/v1/prediction-log/accuracy?from=2026-12-01&to=2026-01-01 200 {"generated_at":"2026-10-14T03:03:42Z","period":{"from":"2026-12-01","to":"2026-01-01"},"by_horizon"
+/v1/predictions?limit=-1 200 {"generated_at":"2026-07-15T00:00:00Z","model":{"run_id":"mr_14","name":"B1","version":"1.0.0","role
+/v1/predictions?limit=0 200 {"generated_at":"2026-07-15T00:00:00Z","model":{"run_id":"mr_14","name":"B1","version":"1.0.0","role
+/v1/predictions?type=zzz 200 {"generated_at":"2026-10-14T03:03:42Z","model":{"run_id":"mr_14","name":"B1","version":"1.0.0","role
