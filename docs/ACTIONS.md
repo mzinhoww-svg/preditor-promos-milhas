@@ -112,3 +112,9 @@ Não existe comando "resolver": a resolução é feita na leitura (`GET /v1/pred
 2. `/v1/prediction-log/accuracy` com n=0 devolve `hit_rate`/`brier`/`log_loss` = 0,0 (parece perfeito); o campo `n` é o único aviso. `weekly` sempre `[]`. Não alterei por causa do contrato do dashboard.
 3. `GET /v1/prediction-log/accuracy` não separa B0 × B1; hoje só há B0, então não distorce.
 4. `run_accuracy` no job ignora `engine` (código morto `if False`).
+
+## 2026-10-14 — Deploy Vercel (primeiro, produção)
+
+- Projeto `preditor-promos-milhas`, root `dashboard`, `target: production`, `PREDITOR_DATA_SOURCE=mock` (sem API pública ainda).
+- URL: https://preditor-promos-milhas.vercel.app (HTTP 302 para login da Vercel: proteção de acesso ligada).
+- Autorizado por Aurimar nesta data. Rollback: Promote do deployment anterior ou novo deploy.
