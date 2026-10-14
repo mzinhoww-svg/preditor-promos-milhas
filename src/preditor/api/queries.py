@@ -69,31 +69,74 @@ def fetch_predictions(type_filter: str | None = None, limit: int = 50) -> dict[s
             "bonus_pct": {"p25": b25, "p50": b50, "p75": b75},
             "last_offer": None,
             "reasons": [],
+            "model_run_id": f"mr_{g['mr']}",
         })
     items.sort(key=lambda x: (-(x["windows"]["30"]["probability"]), -(x["windows"]["7"]["probability"])))
     for i, it in enumerate(items, start=1):
         it["rank"] = i
     if limit:
         items = items[:limit]
-    model = fetch_model_info()
-    return {"generated_at": generated_at, "model": model, "items": items}
+    serving = fetch_serving_run()
+    champion = fetch_champion_run()
+    model = fetch_model_info()  # compatível: run_id/name/version/role + champion/challenger
+    if serving is not None:
+        model = {**model, **_run_ref(serving)}
+    return {"generated_at": generated_at, "model": model, "champion": _run_ref(champion, "champion"),
+            "items": items}
+
+
+def _run_ref(run: dict | None, role: str | None = None) -> dict[str, Any] | None:
+    """Referência curta de um model_run (nome, versão, role) para a API."""
+    if not run:
+        return None
+    hv = run.get("hyperparams") or {}
+    return {
+        "run_id": f"mr_{run['id']}",
+        "name": hv.get("name") or run.get("model_version"),
+        "version": hv.get("version") or "1.0.0",
+        "role": role or ("champion" if run.get("is_champion") else (run.get("role") or "experiment")),
+        "trained_at": _iso(run.get("trained_at")),
+    }
+
+
+def fetch_serving_run() -> dict | None:
+    """model_run que gerou as predições mais recentes (não é necessariamente o campeão)."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT m.id, m.model_version, m.trained_at, m.hyperparams, m.metrics, m.is_champion, m.role "
+            "FROM model_run m WHERE m.id = (SELECT model_run_id FROM prediction "
+            "ORDER BY made_at DESC, model_run_id DESC LIMIT 1)"
+        )))
+    return rows[0] if rows else None
+
+
+def fetch_champion_run() -> dict | None:
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT id, model_version, trained_at, hyperparams, metrics, is_champion, role FROM model_run "
+            "WHERE is_champion ORDER BY trained_at DESC, id DESC LIMIT 1"
+        )))
+    return rows[0] if rows else None
 
 
 def fetch_model_info() -> dict[str, Any]:
     engine = get_engine()
     with engine.connect() as conn:
         rows = _rows(conn.execute(text(
-            "SELECT id, model_version, trained_at, hyperparams, metrics, is_champion FROM model_run ORDER BY is_champion DESC, trained_at DESC"
+            "SELECT id, model_version, trained_at, hyperparams, metrics, is_champion, role FROM model_run "
+            "ORDER BY is_champion DESC, (role = 'daily') DESC, trained_at DESC"
         )))
     champion = None
     challenger = None
     for r in rows:
         if champion is None and r.get("is_champion"):
             champion = r
-        elif challenger is None and not r.get("is_champion"):
+        elif challenger is None and not r.get("is_champion") and r.get("role") != "daily":
             challenger = r
     if champion is None and rows:
-        champion = rows[0]
+        champion = rows[0]  # sem campeão decidido: o run diário mais recente serve as predições
     def _name_version(run):
         if not run:
             return {"name": None, "version": None, "trained_at": None, "run_id": None}
@@ -116,7 +159,14 @@ def fetch_model_info() -> dict[str, Any]:
     }
 
 
+def _iso(dt) -> str | None:
+    if dt is None or not hasattr(dt, "astimezone"):
+        return None
+    return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def fetch_source_health() -> dict[str, Any]:
+    """Saúde por fonte: agregados 24h/7d da tabela source_health + status do listener (error/stale)."""
     from preditor.jobs.feed_listener import source_status
 
     engine = get_engine()
@@ -126,24 +176,21 @@ def fetch_source_health() -> dict[str, Any]:
             "FROM source_health ORDER BY checked_at DESC"
         )))
     status_by_source = source_status(engine)
-    with engine.connect() as conn:
-        hashes: dict[str, list] = {}
-        for src, h in conn.execute(text(
-                "SELECT source, robots_hash FROM source_health WHERE robots_hash IS NOT NULL "
-                "ORDER BY checked_at DESC")).all():
-            hashes.setdefault(src, []).append(h)
-
-    def iso(v):
-        return v.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z") if hasattr(v, "astimezone") else None
-
-    sources = []
-    seen = set()
+    now = datetime.now(UTC)
+    by_source: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
-        if r["source"] in seen:
-            continue
-        seen.add(r["source"])
-        st = status_by_source.get(r["source"], {})
-        fails = st.get("consecutive_failures", 1 if r.get("alert") else 0)
+        by_source[r["source"]].append(r)  # ordem decrescente de checked_at
+    sources = []
+    for source, checks in by_source.items():
+        latest = checks[0]
+        st = status_by_source.get(source, {})
+        d24 = [c for c in checks if now - c["checked_at"] <= timedelta(hours=24)]
+        d7 = [c for c in checks if now - c["checked_at"] <= timedelta(days=7)]
+        ok = next((c for c in checks if not c["alert"]), None)
+        with_items = next((c for c in checks if (c["items_new"] or 0) > 0), None)
+        prev_hash = next((c["robots_hash"] for c in checks[1:] if c["robots_hash"]), None)
+        rates = [float(c["extraction_rate"]) for c in d7 if c["extraction_rate"] is not None]
+        fails = st.get("consecutive_failures", 1 if latest["alert"] else 0)
         delay = st.get("delay_hours")
         if fails >= 3:
             status = "error"
@@ -154,17 +201,17 @@ def fetch_source_health() -> dict[str, Any]:
         else:
             status = "ok"
         sources.append({
-            "source": r["source"],
+            "source": source,
             "kind": "rss",
             "status": status,
-            "last_success_at": iso(st.get("last_success_at")),
-            "last_item_at": iso(st.get("last_item_at")),
-            "items_new_24h": r.get("items_new"),
-            "items_new_7d": r.get("items_new"),
-            "extraction_rate_7d": float(r["extraction_rate"]) if r.get("extraction_rate") is not None else None,
-            "error_rate_24h": 1.0 if fails else 0.0,
-            "robots_hash": r.get("robots_hash"),
-            "robots_changed": len(hashes.get(r["source"], [])) >= 2 and hashes[r["source"]][0] != hashes[r["source"]][1],
+            "last_success_at": _iso(st.get("last_success_at")) or (_iso(ok["checked_at"]) if ok else None),
+            "last_item_at": _iso(st.get("last_item_at")) or (_iso(with_items["checked_at"]) if with_items else None),
+            "items_new_24h": sum(c["items_new"] or 0 for c in d24),
+            "items_new_7d": sum(c["items_new"] or 0 for c in d7),
+            "extraction_rate_7d": round(sum(rates) / len(rates), 4) if rates else None,
+            "error_rate_24h": round(sum(1 for c in d24 if c["alert"]) / len(d24), 4) if d24 else 0.0,
+            "robots_hash": latest["robots_hash"],
+            "robots_changed": bool(latest["robots_hash"] and prev_hash and latest["robots_hash"] != prev_hash),
             "message": f"{fails} falha(s) consecutiva(s)" if fails else None,
         })
     return {"generated_at": _now(), "sources": sources}
@@ -266,7 +313,9 @@ def fetch_prediction_accuracy(date_from=None, date_to=None, horizon=None) -> dic
 
 def fetch_model_metrics() -> dict[str, Any]:
     info = fetch_model_info()
-    champion = info.get("champion", {})
+    serving = fetch_serving_run()
+    # campeão decidido (is_champion); sem decisão, o run que serve as predições
+    champion = fetch_champion_run() or serving or info.get("champion", {})
     cinfo = info.get("challenger", {}) or {}
     now = _now()
     def empty_model(run, name_default):
@@ -287,6 +336,7 @@ def fetch_model_metrics() -> dict[str, Any]:
     return {
         "generated_at": now,
         "champion": empty_model(champion, "B1"),
+        "serving": _run_ref(serving),
         "challenger": (empty_model(cinfo, "C1") if (cinfo and cinfo.get("run_id")) else None),
         "comparison": {
             "horizon": 30,
@@ -297,4 +347,50 @@ def fetch_model_metrics() -> dict[str, Any]:
             "note": "sem dados suficientes",
         },
         "reliability": {"horizon": 30, "bins": []},
+    }
+
+
+def fetch_alerts(limit: int = 100) -> dict[str, Any]:
+    engine = get_engine()
+    limit = max(1, min(int(limit), 500))
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT made_at, origin, destination, event_type, horizon_days, probability, "
+            "previous_probability, threshold FROM alert ORDER BY made_at DESC, probability DESC, "
+            "origin, destination, horizon_days LIMIT :l"
+        ), {"l": limit}))
+    items = [{
+        "made_at": r["made_at"].astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "pair": {"origin": r["origin"], "destination": r["destination"]},
+        "type": r["event_type"],
+        "horizon_days": r["horizon_days"],
+        "probability": float(r["probability"]),
+        "previous_probability": float(r["previous_probability"]) if r["previous_probability"] is not None else None,
+        "threshold": float(r["threshold"]),
+    } for r in rows]
+    return {"generated_at": _now(), "items": items}
+
+
+def fetch_explanation(origin: str, destination: str, event_type: str) -> dict[str, Any] | None:
+    """Explicação gravada pelo job na rodada mais recente do item (mesmo made_at e model_run)."""
+    engine = get_engine()
+    with engine.connect() as conn:
+        rows = _rows(conn.execute(text(
+            "SELECT made_at, model_run_id, horizon_days, probability, explanation FROM prediction "
+            "WHERE origin = :o AND destination = :d AND event_type = :t AND (made_at, model_run_id) = ("
+            "  SELECT made_at, model_run_id FROM prediction WHERE origin = :o AND destination = :d "
+            "  AND event_type = :t ORDER BY made_at DESC, model_run_id DESC LIMIT 1) "
+            "ORDER BY horizon_days"
+        ), {"o": origin, "d": destination, "t": event_type}))
+    if not rows:
+        return None
+    ex = rows[0].get("explanation") or {}
+    return {
+        "pair": {"origin": origin, "destination": destination},
+        "type": event_type,
+        "as_of": ex.get("as_of") or rows[0]["made_at"].astimezone(UTC).date().isoformat(),
+        "windows": {str(r["horizon_days"]): float(r["probability"]) for r in rows},
+        "factors": {k: ex.get(k) for k in (
+            "method", "probability_driven_by", "n_campaigns", "last_campaign_start", "days_since_last",
+            "median_interval_days", "min_campaigns_b1")},
     }

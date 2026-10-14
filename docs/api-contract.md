@@ -52,12 +52,17 @@ Variáveis do dashboard:
 Lista ranqueada das próximas promoções prováveis, já ordenada por `rank`. Uma linha por
 (origem, destino, tipo); as três janelas vêm juntas na mesma linha.
 
+`model` é o run que **gerou** estas predições (`role`: `daily` para o job diário, `champion` se o
+run for o campeão decidido); `champion` é o campeão da decisão campeão × desafiante (`null` se
+nunca houve decisão). Cada item traz `model_run_id` do run que o gerou.
+
 Query opcional: `type` (`transfer_bonus|purchase_discount|boosted_accrual`), `limit` (padrão 50).
 
 ```json
 {
-  "generated_at": "2026-10-14T00:00:00Z",
-  "model": { "run_id": "mr_3", "name": "B1", "version": "1.0.0", "role": "champion" },
+  "generated_at": "2026-10-13T06:00:00Z",
+  "model": { "run_id": "mr_41", "name": "B1", "version": "1.0.0", "role": "daily" },
+  "champion": { "run_id": "mr_7", "name": "C1", "version": "0.4.2", "role": "champion" },
   "items": [
     {
       "rank": 1,
@@ -169,6 +174,9 @@ separada da precisão real em produção (`prediction_log` conferido com o que a
   }
 }
 ```
+
+`serving` é o run que gerou as predições mais recentes (pode ser o job diário B0/B1, diferente do
+`champion`). `champion` é o run com `is_champion`; sem decisão, cai para `serving`.
 
 `comparison.decision` ∈ `keep_champion | promote_challenger | insufficient_data`.
 `reliability.bins` são os pontos da curva de confiabilidade (previsto × observado) do campeão.

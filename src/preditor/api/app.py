@@ -46,12 +46,13 @@ def create_app() -> FastAPI:
     def healthz():
         return {"status": "ok"}
 
-    from .routers import accuracy, model, predictions, source_health
+    from .routers import accuracy, alerts, model, predictions, source_health
 
     deps = [Depends(require_api_key)]
     app.include_router(predictions.router, prefix="/v1", dependencies=deps)
     app.include_router(model.router, prefix="/v1", dependencies=deps)
     app.include_router(source_health.router, prefix="/v1", dependencies=deps)
+    app.include_router(alerts.router, prefix="/v1", dependencies=deps)
     app.include_router(accuracy.router, prefix="/v1", dependencies=deps)
 
     # rate limit dependency global por rota autenticada

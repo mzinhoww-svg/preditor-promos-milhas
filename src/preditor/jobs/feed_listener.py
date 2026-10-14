@@ -27,6 +27,7 @@ import httpx
 import sqlalchemy as sa
 
 from preditor import collector as C
+from preditor.stop import StopRequested, check_stop
 
 INTERVAL = 10.0
 GAP_DAYS = 7
@@ -155,6 +156,7 @@ def _store(engine, source, url, content, observed, pub, gap):
 
 def run_source(engine, cfg: dict[str, str], *, http_get, sleep, now: datetime,
                state: dict | None = None) -> dict[str, Any]:
+    check_stop()
     source, feed_url, mode = cfg["source"], cfg["feed"], cfg["mode"]
     pacer = _Pacer(sleep)
     budget = _Budget(state if state is not None else {}, source, now)
@@ -196,6 +198,7 @@ def run_source(engine, cfg: dict[str, str], *, http_get, sleep, now: datetime,
     new = offers = failures = 0
     capped = False
     for it in items:
+        check_stop()
         link, title = it.get("link"), (it.get("title") or "").strip()
         if not link or not title or _known(engine, source, link):
             continue
@@ -242,11 +245,15 @@ def run_once(engine, sources: list[dict[str, str]] | None = None, *, http_get=No
     sleep = sleep or time.sleep
     now = now or datetime.now(UTC)
     path = state_path if state_path is not None else STATE_PATH
+    check_stop()
     state = _load_state(path)
     out: dict[str, dict[str, Any]] = {}
-    for cfg in (sources if sources is not None else FEEDS):
-        out[cfg["source"]] = run_source(engine, cfg, http_get=http_get, sleep=sleep, now=now, state=state)
-    _save_state(path, state)
+    try:
+        for cfg in (sources if sources is not None else FEEDS):
+            check_stop()
+            out[cfg["source"]] = run_source(engine, cfg, http_get=http_get, sleep=sleep, now=now, state=state)
+    finally:
+        _save_state(path, state)  # preserva o orçamento de requisições mesmo com STOP
     if run_pipeline and any(v.get("offers") for v in out.values()):
         from preditor.jobs.daily_predict import run_daily
 
@@ -293,11 +300,21 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     import os
 
+    try:
+        check_stop()
+    except StopRequested as exc:
+        print(f"STOP: {exc}")
+        return 3
+
     url = args.database_url or os.environ.get("DATABASE_URL")
     if not url:
         raise SystemExit("DATABASE_URL ausente")
     engine = sa.create_engine(url)
-    out = run_once(engine, run_pipeline=not args.no_pipeline)
+    try:
+        out = run_once(engine, run_pipeline=not args.no_pipeline)
+    except StopRequested as exc:
+        print(f"STOP: {exc}")
+        return 3
     print(json.dumps(out, ensure_ascii=False, default=str))
     return 0 if all(v["status"] in ("ok", "paused", "daily_cap_reached") for v in out.values()) else 1
 
