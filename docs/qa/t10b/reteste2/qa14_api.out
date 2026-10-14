@@ -1,0 +1,75 @@
+{
+ "run_ids": [
+  39,
+  39
+ ],
+ "runs": [
+  [
+   38,
+   "C1",
+   "experiment",
+   true
+  ],
+  [
+   39,
+   "B0",
+   "daily",
+   false
+  ]
+ ],
+ "predictions.model": {
+  "run_id": "mr_39",
+  "name": "B0",
+  "version": "1.0.0",
+  "role": "daily",
+  "champion": {
+   "name": "C1",
+   "version": "2.0.0",
+   "trained_at": "2026-10-14T07:08:45Z",
+   "run_id": "mr_38"
+  },
+  "challenger": {
+   "name": null,
+   "version": null,
+   "trained_at": null,
+   "run_id": null
+  },
+  "trained_at": "2026-10-14T07:08:45Z"
+ },
+ "predictions.champion": {
+  "run_id": "mr_38",
+  "name": "C1",
+  "version": "2.0.0",
+  "role": "champion",
+  "trained_at": "2026-10-14T07:08:45Z"
+ },
+ "item_model_run_id": [
+  "mr_39"
+ ],
+ "metrics.champion": {
+  "name": "C1",
+  "version": "2.0.0",
+  "run_id": null
+ },
+ "metrics.serving": {
+  "run_id": "mr_39",
+  "name": "B0",
+  "version": "1.0.0",
+  "role": "daily",
+  "trained_at": "2026-10-14T07:08:45Z"
+ },
+ "metrics.comparison": {
+  "horizon": 30,
+  "delta_brier": 0.0,
+  "delta_log_loss": 0.0,
+  "ci_delta_brier": [
+   0.0,
+   0.0
+  ],
+  "decision": "keep_champion",
+  "note": "sem dados suficientes"
+ },
+ "sem_campeao.predictions.champion": null,
+ "sem_campeao.metrics.champion_name": "B0",
+ "sem_campeao.metrics.serving": "B0"
+}

@@ -1,0 +1,63 @@
+STOP: STOP presente: execução abortada sem gravar
+{
+  "raw_messages": 6,
+  "old_offers": 6,
+  "new_offers": 6,
+  "merged_extensions": 0,
+  "discarded_vs_old": 0,
+  "gap_flagged": 3
+}
+{
+ "base": {
+  "offers": 6,
+  "ev": 6,
+  "gaps": [
+   true,
+   false,
+   true,
+   false,
+   true,
+   false
+  ]
+ },
+ "A_STOP_4o_de_6": {
+  "res": "StopRequested",
+  "igual_ao_estado_anterior": true,
+  "offers": 6,
+  "ev": 6
+ },
+ "B_erro_3o": {
+  "res": "ValueError: falha de extracao simulada",
+  "igual_ao_estado_anterior": true,
+  "offers": 6
+ },
+ "C_recompute_gap_falha": {
+  "res": "RuntimeError: recompute_gap falhou",
+  "offers": 6,
+  "igual_ao_estado_anterior": true
+ },
+ "D_CLI_STOP_meio": {
+  "rc": 3,
+  "ofertas_inalteradas": true
+ },
+ "E_CLI_STOP_antes": {
+  "rc": 3,
+  "out": "STOP: STOP presente: execução abortada sem gravar",
+  "ofertas_inalteradas": true
+ },
+ "F_sucesso": {
+  "rc": 0,
+  "offers": 6
+ },
+ "G_leitor_concorrente_durante_reprocess": {
+  "contagens_vistas": [
+   6,
+   6,
+   6,
+   6,
+   6,
+   6
+  ],
+  "nunca_zero_ou_parcial": true
+ }
+}
