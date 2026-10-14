@@ -301,6 +301,17 @@ def _directional_pair(sentence: str) -> tuple[str | None, str | None]:
         if len(progs) == 1 and any(k in sentence.lower() for k in ("compra", "desconto", "comprar")):
             return None, progs[0]
         return None, None
+    # "DESTINO oferece ... bonus nas transferencias (feitas) da/de ORIGEM": o programa que oferece e o destino
+    for origin in progs:
+        for dest in progs:
+            if origin == dest:
+                continue
+            offer_pat = re.compile(
+                rf"{aliases[dest]}\s+(?:oferece|tem|libera|lan[cç]a|anuncia|divulga|promove)\b.{{0,80}}?"
+                rf"transfer\w*\s+(?:feitas?\s+|realizadas?\s+)?(?:d[ao]s?|de|a partir d[ao])\s+{aliases[origin]}",
+                re.IGNORECASE | re.DOTALL)
+            if offer_pat.search(sentence):
+                return origin, dest
     # "X para Y" / "X -> Y" / "X a Y"
     for origin in progs:
         for dest in progs:
