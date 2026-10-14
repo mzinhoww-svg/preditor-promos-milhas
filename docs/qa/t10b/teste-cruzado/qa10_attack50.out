@@ -1,0 +1,145 @@
+<scratchpad>/venv27/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+{
+ "S1_job_STOP_arquivo_cwd": {
+  "abortou": true,
+  "igual": true
+ },
+ "S2_job_STOP_env": {
+  "abortou": true,
+  "igual": true
+ },
+ "S2b_env_0_nao_para": true,
+ "S3_STOP_FILE_override": true,
+ "S3b_override_ignora_STOP_do_cwd": true,
+ "S4_cli_exit": [
+  3,
+  "STOP: STOP presente: execução abortada sem gravar\n"
+ ],
+ "C1_collect_rss": {
+  "abortou": true,
+  "gravou": false
+ },
+ "C2_collector.backfill": {
+  "abortou": true,
+  "gravou": false
+ },
+ "C3_backfill.run_backfill(CLI real)": {
+  "abortou": false,
+  "gravou": true
+ },
+ "C4_collect_archived_feed": {
+  "abortou": false,
+  "gravou": true
+ },
+ "C5_collect_titles_rss": {
+  "abortou": true,
+  "gravou": true
+ },
+ "S5_STOP_no_meio": {
+  "abortou": false,
+  "pares": 4,
+  "gravou_pred": 12
+ },
+ "M1_reexec_mesmo_run": {
+  "ids": [
+   2,
+   2
+  ],
+  "n_model_run": 2,
+  "campos": {
+   "id": "2",
+   "model_version": "B0",
+   "dataset_version": "c87848782bf5fe16d7e4ace3a5956cc0c0b60e1131af5ad60252e5ce09ed",
+   "code_hash": "01d5e20c6a3b729b80df7abb3d0999a3ea4e3a4a7cb80d404ac9ae2537bd",
+   "metrics": "{'n_b0': 5, 'n_b1': 0, 'n_pairs': 5, 'n_offers': 20, 'n_pred",
+   "hyperparams": "{'name': 'B0', 'methods': {'b0': 5, 'b1': 0}, 'version': '1.",
+   "is_champion": "True"
+  }
+ },
+ "M2_novos_dados_novo_run": {
+  "id": 3,
+  "n_model_run_champion": [
+   3,
+   1
+  ],
+  "predicoes_mesmo_dia": 42
+ },
+ "M2b_prediction_mesmo_made_at_runs": [
+  [
+   1,
+   12
+  ],
+  [
+   2,
+   15
+  ],
+  [
+   3,
+   15
+  ]
+ ],
+ "M3_concorrencia": {
+  "erros": [],
+  "n_model_run": 4,
+  "champions": 1,
+  "predicoes": 60,
+  "alertas": 5
+ },
+ "A1_cruzamentos_por_dia": [
+  0,
+  3,
+  0,
+  0,
+  3
+ ],
+ "A2_idempotente_reexec": {
+  "novos": [
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "total": 11
+ },
+ "A2b_total_apos_mesma_thr": 11,
+ "A3_novo_limiar_cria_outro": 14,
+ "A4_limiar_invalido": {
+  "abc": 0.5,
+  "1.5": 0.5,
+  "-1": 0.5,
+  "0": 0.5,
+  "nan": 0.5
+ },
+ "A5_prob_igual_limiar_sem_anterior": 3,
+ "A6_retroativo_dia3": 0,
+ "A7_sem_canal_externo": [],
+ "API_alerts": [
+  200,
+  17,
+  [
+   {
+    "made_at": "2026-10-06T00:00:00Z",
+    "pair": {
+     "origin": "esfera",
+     "destination": "latam"
+    },
+    "type": "transfer_bonus",
+    "horizon_days": 7,
+    "probability": 0.5,
+    "previous_probability": 0.14407,
+    "threshold": 0.5
+   }
+  ]
+ ],
+ "API_alerts_limit": {
+  "0": 422,
+  "1": 200,
+  "500": 200,
+  "501": 422,
+  "x": 422
+ },
+ "API_alerts_sem_key": 401,
+ "API_expl_inexistente": 404
+}

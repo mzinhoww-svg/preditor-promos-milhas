@@ -1,0 +1,114 @@
+{
+ "E1_explicacao_as_of_2026-06-01": {
+  "as_of": "2026-06-01",
+  "method": "b0",
+  "n_campaigns": 4,
+  "last_campaign_start": "2026-04-01",
+  "days_since_last": 61,
+  "median_interval_days": 30.0
+ },
+ "E1_sem_vazamento": true,
+ "E2_explicacao_antiga_inalterada": true,
+ "E2b_explicacao_nova": {
+  "as_of": "2026-09-01",
+  "n_campaigns": 7,
+  "last_campaign_start": "2026-08-01",
+  "days_since_last": 31
+ },
+ "E3_reexec_retroativa_mantem": true,
+ "API_explanation": [
+  200,
+  {
+   "pair": {
+    "origin": "ex_a",
+    "destination": "ex_b"
+   },
+   "type": "transfer_bonus",
+   "as_of": "2026-09-01",
+   "windows": {
+    "7": 0.18434,
+    "15": 0.35378,
+    "30": 0.5824
+   },
+   "factors": {
+    "method": "b0",
+    "n_campaigns": 7,
+    "last_campaign_start": "2026-08-01",
+    "days_since_last": 31,
+    "median_interval_days": 30.0,
+    "min_campaigns_b1": 25
+   }
+  }
+ ],
+ "API_explanation_type_invalido": 404,
+ "SH": {
+  "fonte_c": {
+   "status": "ok",
+   "items_new_24h": 2,
+   "items_new_7d": 2,
+   "extraction_rate_7d": 0.4,
+   "error_rate_24h": 0.0,
+   "robots_hash": "z",
+   "robots_changed": false,
+   "last_success_at": "2026-10-14T05:10:39Z",
+   "last_item_at": "2026-10-14T05:10:39Z",
+   "message": null
+  },
+  "fonte_a": {
+   "status": "ok",
+   "items_new_24h": 3,
+   "items_new_7d": 10,
+   "extraction_rate_7d": 0.6,
+   "error_rate_24h": 0.0,
+   "robots_hash": "h1",
+   "robots_changed": false,
+   "last_success_at": "2026-10-14T05:09:39Z",
+   "last_item_at": "2026-10-14T05:09:39Z",
+   "message": null
+  },
+  "fonte_b": {
+   "status": "degraded",
+   "items_new_24h": 0,
+   "items_new_7d": 4,
+   "extraction_rate_7d": 0.9,
+   "error_rate_24h": 1.0,
+   "robots_hash": null,
+   "robots_changed": false,
+   "last_success_at": "2026-10-13T04:09:39Z",
+   "last_item_at": "2026-10-13T04:09:39Z",
+   "message": "sem itens novos ou falha na última checagem"
+  }
+ },
+ "MR_corrida": [
+  {
+   "rodada": 0,
+   "grupos_duplicados": 0,
+   "champions": 1,
+   "erros": []
+  },
+  {
+   "rodada": 1,
+   "grupos_duplicados": 1,
+   "champions": 5,
+   "erros": []
+  },
+  {
+   "rodada": 2,
+   "grupos_duplicados": 2,
+   "champions": 4,
+   "erros": []
+  },
+  {
+   "rodada": 3,
+   "grupos_duplicados": 3,
+   "champions": 4,
+   "erros": []
+  },
+  {
+   "rodada": 4,
+   "grupos_duplicados": 4,
+   "champions": 5,
+   "erros": []
+  }
+ ]
+}
