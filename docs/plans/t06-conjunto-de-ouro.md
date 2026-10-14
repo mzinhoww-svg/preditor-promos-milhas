@@ -183,6 +183,25 @@ Temporal: o extrator recebe `text` e `observed_at` como `first_seen_at`, nada al
 7. Status `gold_provisional` em todas as linhas até a conferência. `review.md` gerado para Aurimar.
 8. Entrega e evidência registradas em `TASKS.md`.
 
+## 10. Composição das 50 campanhas (universo real em 2026-10-14)
+
+Universo: os 172 `raw_message` do backfill (PR #36, banco `preditor_p2`): Passageiro de Primeira 144, Melhores Cartões 28, mais 20 títulos do RSS vivo do Pontos pra Voar. O quadro de candidatas vem das sentenças do corpo do artigo (`article.snippets`), agrupadas pela chave do glossário (±3 dias). **O extrator só gera candidatas; o `expected` é anotado a partir do texto.**
+
+| Bloco | Campanhas | Seleção | Status das cotas da seção 4 |
+|---|---|---|---|
+| A. livelo→smiles `transfer_bonus` | **todas as ~28 disponíveis** (2018-02 a 2025-06) | todas, sem sorteio | cota 30: déficit de ~2 |
+| B. outros pares, incluindo os ~10 smiles→livelo (suspeitos de direção invertida) e as mensagens sem direção identificada | **22** | sorteio estratificado por ano (`seed=20261013`), priorizando 2025–2026 | cota 10: OK |
+| C. distratores | **20** | entre as 36 mensagens sem sentença de oferta | OK |
+
+Déficits já conhecidos, a registrar no `data/gold/README.md` sem inventar casos:
+- `purchase_discount` (cota 4) e `boosted_accrual` (cota 3): **0 no universo**, porque o filtro CDX por slug `livelo|smiles` não pega esses posts. A recoleta precisa de slugs como "compra-de-pontos" e "acumule".
+- Ano de 2026 (cota 8): livelo→smiles 0, outros pares ~4.
+- `titulo_rss` (cota 8): o RSS vivo só tem itens de 2026-10-13. Depende do RSS arquivado (PR #36, bloqueante 4).
+- Validadas (cota 20): ~12 só com PdP + MC.
+- Mensagens com `published_vs_capture_gap=true` (83 de 172) **entram** no ouro com a tag `gap`. Elas servem justamente para revisar a data, mas o `expected.inicio` delas vem só do texto.
+
+Splits: o bloco A é dividido 17 `test` / 11 `dev` e o bloco B 13 `test` / 9 `dev`, totalizando 30/20, como manda a decisão 005. Os distratores ficam 12/8.
+
 ## 9. Divisão de trabalho sugerida
 
 - Programador: `scripts/gold_candidates.py`, schemas, `tests/test_gold.py`, `preditor.gold.eval`.
