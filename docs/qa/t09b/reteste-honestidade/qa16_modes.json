@@ -1,0 +1,301 @@
+{
+ "ok": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:13 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:13 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par (1 em B1, 2 em B0) · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada ",
+  "cmp": "Não decidido: dados insuficientes (Livelo → Smiles: 23 campanhas no treino, mínimo 25) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [],
+  "lixo": []
+ },
+ "champion_null_explicit": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:13 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:13 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par (1 em B1, 2 em B0) · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada ",
+  "cmp": "Não decidido: dados insuficientes (Livelo → Smiles: 23 campanhas no treino, mínimo 25) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [],
+  "lixo": []
+ },
+ "metrics_champion_null": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/alerts": 1,
+   "/source-health": 2
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:13 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:13 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par (1 em B1, 2 em B0) · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada ",
+  "cmp": "Não decidido: dados insuficientes (Livelo → Smiles: 23 campanhas no treino, mínimo 25) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [],
+  "lixo": []
+ },
+ "decided_promote": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:13 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:13 UTC",
+  "modelo_decisao": "Campeão × desafiante Promover desafiante Δ Brier −0,021 · IC -0,040 a -0,005 Validação histórica O modelo em produção ainda não",
+  "cmp": "Promover desafiante Δ Brier −0,021 · IC -0,040 a -0,005 Validação histórica O modelo em produção ai",
+  "delta_visivel": true,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Promover ",
+  "proibidos": [],
+  "lixo": []
+ },
+ "decided_keep": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:13 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:13 UTC",
+  "modelo_decisao": "Campeão × desafiante Campeão mantido Δ Brier +0,004 · IC -0,010 a 0,020 Validação histórica O modelo em produção ainda não tem ",
+  "cmp": "Campeão mantido Δ Brier +0,004 · IC -0,010 a 0,020 Validação histórica O modelo em produção ain",
+  "delta_visivel": true,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Campeão m",
+  "proibidos": [],
+  "lixo": []
+ },
+ "calibrated": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:13 UTC API consultada ag",
+  "kpi_prob": "probabilidade calibrada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:13 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par (1 em B1, 2 em B0) · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada ",
+  "cmp": "Não decidido: dados insuficientes (Livelo → Smiles: 23 campanhas no treino, mínimo 25) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [
+   "probabilidade(s)? calibrada"
+  ],
+  "lixo": []
+ },
+ "reliab_bins_not_calibrated": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:14 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:14 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par (1 em B1, 2 em B0) · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada ",
+  "cmp": "Não decidido: dados insuficientes (Livelo → Smiles: 23 campanhas no treino, mínimo 25) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [],
+  "lixo": []
+ },
+ "n_small": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:14 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:14 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par (1 em B1, 2 em B0) · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada ",
+  "cmp": "Não decidido: dados insuficientes (Livelo → Smiles: 23 campanhas no treino, mínimo 25) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [],
+  "lixo": []
+ },
+ "n_big": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par (1 em B1, 2 em B0) execução mr_1 · gerado 14/10, 07:14 UTC API consultada ag",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:14 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par (1 em B1, 2 em B0) · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada ",
+  "cmp": "Não decidido: dados insuficientes (Livelo → Smiles: 23 campanhas no treino, mínimo 25) ",
+  "delta_visivel": false,
+  "amostra": null,
+  "proibidos": [],
+  "lixo": []
+ },
+ "expl_429": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 6,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par execução mr_1 · gerado 14/10, 07:14 UTC API consultada agora · dados gerados",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:14 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada Acerto em produção ",
+  "cmp": "Não decidido: dados insuficientes (mínimo 25 campanhas por par) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [],
+  "lixo": []
+ },
+ "expl_404": {
+  "http": {
+   "/": 200,
+   "/modelo": 200,
+   "/alertas": 200,
+   "/fontes": 200
+  },
+  "hits_api": {
+   "/predictions": 2,
+   "model": 2,
+   "/status": 3,
+   "predictions": 3,
+   "prediction-log": 2,
+   "/source-health": 2,
+   "/alerts": 1
+  },
+  "cabecalho": "Modelo em produção B0/B1 por par execução mr_1 · gerado 14/10, 07:14 UTC API consultada agora · dados gerados",
+  "kpi_prob": "probabilidade estimada por janela, os bônus das campanhas ante",
+  "bonus_rotulo": "mediana histórica 80% Pares com ≥ 50% em 7 dias",
+  "dados_de": "dados de 07:14 UTC",
+  "modelo_decisao": "Modelo não decidido servindo B0/B1 por par · run mr_1 Brier em produção · 30 d 0,319 sem validação histórica registrada Acerto em produção ",
+  "cmp": "Não decidido: dados insuficientes (mínimo 25 campanhas por par) ",
+  "delta_visivel": false,
+  "amostra": "amostra pequena (n < 30) Campeão × desafiante Não decid",
+  "proibidos": [],
+  "lixo": []
+ }
+}
