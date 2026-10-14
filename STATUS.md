@@ -4,7 +4,7 @@ Data: 2026-10-14. Código: `main` em `edff94a`. Escrito pelo Planejador para Aur
 
 ## 1. Em uma frase
 
-O sistema roda de ponta a ponta **em máquina local**, com dado **real** de Livelo → Smiles. Em produção está o **B1** (hazard empírico) para esse par e o **B0** (taxa-base) para os demais. A decisão C1 × B1 ainda **não foi tomada**: há 23 campanhas no treino, abaixo do mínimo de 25. Também **não existe acurácia de produção**, porque o `prediction_log` está vazio (n = 0). Nada foi publicado: não há VPS nem deploy na Vercel.
+O sistema roda de ponta a ponta **em máquina local**, com dado **real** de Livelo → Smiles. Na primeira execução real do job (PR #65, cópia `preditor_e2e`), **todos os pares saíram em B0** (taxa-base). A série principal de livelo → smiles tem 23 campanhas em `as_of`, abaixo das 25 do B1, porque as campanhas de clube e outros segmentos formam séries próprias. A decisão C1 × B1 ainda **não foi tomada**: há 23 campanhas no treino, abaixo do mínimo de 25. Também **não existe acurácia de produção**, porque o `prediction_log` está vazio (n = 0). Nada foi publicado: não há VPS nem deploy na Vercel.
 
 ## 2. O que funciona de ponta a ponta (local)
 
@@ -44,7 +44,7 @@ Verificação em 2026-10-14, num Postgres descartável migrado até `0008`: **30
 | Campanhas no total | 55 | — |
 | Validadas por 2 fontes | 7 (13%) | fraco |
 | Meses distintos | 47 (campanhas de 2020-02 a 2026-03) | atende ≥ 24 |
-| Utilizáveis (sem só-gap) | **27** | atende o B1 no job (≥ 25) |
+| Utilizáveis (sem só-gap) | **27** no total; **23** na série principal (sem segmento) | **não atende o B1 no job**: a série principal tem 23 < 25 e sai em B0 |
 | No treino do walk-forward (purge 30) | **23** | **não atende o C1 × B1 (< 25)** |
 | Últimos 24 meses | 12 campanhas; nenhuma depois de 2026-03-11 | não atende |
 
@@ -56,7 +56,7 @@ Base: 1.239 `raw_message` (Passageiro de Primeira 314, Melhores Cartões 28, Pon
 
 - **Decisão: `keep_champion` (C1 não decidido).** São 23 campanhas no treino, contra o mínimo de 25.
 - **Com estes dados, o C1 perde para o B1:** Brier 0,306 contra 0,125 e log-loss 1,261 contra 0,376, com IC a favor do B1, e o C1 não está calibrado. As métricas do B1 são de validação histórica (10 dobras, 3.471 linhas avaliadas).
-- **Acurácia de produção: nenhuma ainda.** O `prediction_log` do `preditor_p2` tem **0** linhas. A primeira métrica real exige o job diário rodando e janelas de 7, 15 e 30 dias fechadas.
+- **Acurácia de produção: nenhuma ainda.** O `prediction_log` do `preditor_p2` tem **0** linhas. O backtest retroativo do PR #65 (n = 221 por horizonte, só B0, janelas sobrepostas, no `preditor_e2e`) **não é acurácia de produção** e não serve de base para afirmar acerto. A primeira métrica real exige o job diário rodando e janelas de 7, 15 e 30 dias fechadas.
 
 ## 6. Limites conhecidos
 
@@ -65,12 +65,15 @@ Base: 1.239 `raw_message` (Passageiro de Primeira 314, Melhores Cartões 28, Pon
 - **Segunda fonte fraca.** O Pontos pra Voar (só título, decisão 002) não validou nenhuma campanha.
 - **Início inferido.** 90 de 109 evidências têm início inferido (data em que a oferta foi vista).
 - **Extrator.** Só regex; a camada LLM não foi feita. Contra o ouro dev: 28/28 campanhas, direção e bônus 100%, fim 79%. O ouro ainda é provisório.
+- **B0 com pouco histórico:** com 1 campanha, a probabilidade explode (P(30 d) = 0,996 em esfera → azul) e gera alertas de ruído. A decisão 006 exige ≥ 3 campanhas e ≥ 180 dias para publicar e alertar, e ainda falta implementar.
+- **Acurácia com n = 0** devolve zeros; pela decisão 006, deve devolver nulos (falta implementar).
 - **Banco desatualizado.** O `preditor_p2` está na migração `0005`; o código está em `0008`. É preciso rodar `alembic upgrade head` antes do job diário.
 - **`data_source="real"` é declarado à mão**; derivá-lo da origem dos dados continua pendente.
 - **Schema `oferta-v1`** só aceita os anos 2020–2039 (decisão pendente sobre páginas de 2018–2019).
 
 ## 7. O que depende de Aurimar
 
+0. **Banco local canônico** (decisão 006, item 4): autorizar recriar `preditor` a partir do `preditor_p2`.
 1. **SSH da VPS.** A tentativa com as chaves locais foi negada (`docs/ACTIONS.md`). Sem isso não há API pública, cron nem job diário em produção.
 2. **Conferência do conjunto de ouro.** Usar `data/gold/review.md` e `data/gold/duvidas.md` (13 campanhas P1). Isso libera a métrica oficial do extrator (decisão 004) e pode reduzir as só-gap.
 3. **Aprovar o deploy na Vercel.** Plano em `docs/deploy-vercel.md`: primeiro deploy em `mock` e protegido.
