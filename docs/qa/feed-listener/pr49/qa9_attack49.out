@@ -1,0 +1,168 @@
+{
+ "N1_status": {
+  "pontospravoar.com": [
+   "ok",
+   2,
+   0
+  ],
+  "passageirodeprimeira.com": [
+   "ok",
+   2,
+   2
+  ],
+  "www.melhorescartoes.com.br": [
+   "ok",
+   1,
+   1
+  ]
+ },
+ "N1_counts": {
+  "raw": 5,
+  "offer": 2,
+  "health": 3
+ },
+ "N1_ppv_corpo": {
+  "max_len": 46,
+  "tem_corpo": 0
+ },
+ "N1_gap": [
+  [
+   "https://passageirodeprimeira.com/p1/",
+   "False",
+   "2026-10-14"
+  ],
+  [
+   "https://passageirodeprimeira.com/p2/",
+   "True",
+   "2026-09-01"
+  ]
+ ],
+ "N1_requests_ppv_corpo": [],
+ "P1_sleeps": {
+  "n_requests": 9,
+  "n_sleeps": 6,
+  "todos_10": true
+ },
+ "P1_req_por_dominio": {
+  "pontospravoar.com": 2,
+  "passageirodeprimeira.com": 4,
+  "www.melhorescartoes.com.br": 3
+ },
+ "P1_sleeps_esperados": 6,
+ "I1_reexec": {
+  "novos": {
+   "pontospravoar.com": 0,
+   "passageirodeprimeira.com": 0,
+   "www.melhorescartoes.com.br": 0
+  },
+  "fetch_artigos": [],
+  "antes": {
+   "raw": 5,
+   "offer": 2,
+   "health": 3
+  },
+  "depois": {
+   "raw": 5,
+   "offer": 2,
+   "health": 3
+  }
+ },
+ "F1_robots_403": {
+  "status_pdp": "robots_unavailable",
+  "outras": {
+   "pontospravoar.com": "ok",
+   "www.melhorescartoes.com.br": "ok"
+  },
+  "fetch_feed_pdp": false,
+  "counts": {
+   "raw": 3,
+   "offer": 1,
+   "health": 3
+  }
+ },
+ "F1_health": [
+  [
+   "passageirodeprimeira.com",
+   "True",
+   "0"
+  ],
+  [
+   "pontospravoar.com",
+   "False",
+   "2"
+  ],
+  [
+   "www.melhorescartoes.com.br",
+   "False",
+   "1"
+  ]
+ ],
+ "F2_disallow_url_p2": {
+  "baixou_p2": false,
+  "baixou_p1": true,
+  "status": "ok"
+ },
+ "F3_disallow_feed": {
+  "status": "robots_disallowed",
+  "fetch_feed": false,
+  "outras_ok": true
+ },
+ "F4_robots_404": "ok",
+ "X1_feed_500_e_excecao": {
+  "pontospravoar.com": "ok",
+  "passageirodeprimeira.com": "feed_unavailable",
+  "www.melhorescartoes.com.br": "feed_unavailable"
+ },
+ "X1_excecao_nao_tratada": null,
+ "X2_excecao_em_http_get_robots": {
+  "pontospravoar.com": "ok",
+  "passageirodeprimeira.com": "ok",
+  "www.melhorescartoes.com.br": "robots_unavailable"
+ },
+ "X3_xml_quebrado": {
+  "pontospravoar.com": "ok",
+  "passageirodeprimeira.com": "feed_unavailable",
+  "www.melhorescartoes.com.br": "ok"
+ },
+ "A1_todos_artigos_404": {
+  "status": "ok",
+  "items_new": 0,
+  "offers": 0,
+  "failures": 2
+ },
+ "A1_health": [
+  [
+   "passageirodeprimeira.com",
+   "True",
+   "0"
+  ]
+ ],
+ "A2_retomada": {
+  "items_new": 2,
+  "falhas": 0
+ },
+ "E1_feed_vazio": {
+  "status": "ok",
+  "items_new": 0,
+  "offers": 0,
+  "failures": 0
+ },
+ "E2_titulo_duplicado_items_new": 2,
+ "E2_raw": 4,
+ "X4_excecao_interna_pdp": "EXC RuntimeError: falha interna simulada -> run_once abortou; melhorescartoes visitado? True",
+ "X4_raw_apos": [
+  [
+   "pontospravoar.com",
+   2
+  ]
+ ],
+ "S1_source_status": {
+  "pontospravoar.com": {
+   "last_checked_at": "2026-10-14 12:00:00+00:00",
+   "last_success_at": "2026-10-14 12:00:00+00:00",
+   "consecutive_failures": "0",
+   "last_item_at": "2026-10-14 10:00:00+00:00",
+   "delay_hours": "2.0"
+  }
+ }
+}
