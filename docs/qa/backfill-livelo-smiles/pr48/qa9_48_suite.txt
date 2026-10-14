@@ -1,0 +1,5 @@
+0005 (head)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+240 passed, 2 warnings in 44.41s
+All checks passed!

@@ -1,0 +1,130 @@
+{
+ "reprocess": {
+  "1": {
+   "raw_messages": 1239,
+   "old_offers": 0,
+   "new_offers": 64,
+   "merged_extensions": 3,
+   "discarded_vs_old": 0
+  },
+  "idempotente": true,
+  "meu": 64,
+  "autor": 64,
+  "so_autor": 0,
+  "so_meu": 0
+ },
+ "por_par": {
+  "esfera->azul_fidelidade": 1,
+  "esfera->smiles": 3,
+  "livelo->latam_pass": 5,
+  "livelo->smiles": 55
+ },
+ "sem_bonus": 1,
+ "bonus_110_58": 0,
+ "raw_pub": [
+  897,
+  877
+ ],
+ "loader_campos": [
+  "bonus_pct",
+  "destination",
+  "end_at",
+  "event_type",
+  "first_seen_at",
+  "gap_only",
+  "origin",
+  "segment_label",
+  "segmented",
+  "start_at"
+ ],
+ "loader_sem_estado_final": true,
+ "mistas": 11,
+ "mistas_first_seen_igual_min_sem_gap": [
+  11,
+  11
+ ],
+ "mistas_first_seen_mudou_vs_tabela": 0,
+ "extrator": {
+  "inclusive_livelo_esfera_para_smiles": [
+   [
+    "livelo",
+    "smiles",
+    90.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "exceto_esfera": [
+   [
+    null,
+    null,
+    70.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "menos_de_24h_sem_virgula": [
+   [
+    null,
+    null,
+    90.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "menos_de_com_virgula": [
+   [
+    "livelo",
+    "smiles",
+    90.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "exceto_no_meio": [
+   [
+    "livelo",
+    "smiles",
+    80.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "salvo_final": [
+   [
+    "livelo",
+    "smiles",
+    100.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "milhas_bonus": [
+   [
+    "livelo",
+    "latam_pass",
+    35.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "pontos_bonus": [
+   [
+    "livelo",
+    "smiles",
+    40.0,
+    null,
+    "2026-05-10"
+   ]
+  ],
+  "controle_simples": [
+   [
+    "livelo",
+    "smiles",
+    100.0,
+    null,
+    "2026-05-11"
+   ]
+  ]
+ }
+}
