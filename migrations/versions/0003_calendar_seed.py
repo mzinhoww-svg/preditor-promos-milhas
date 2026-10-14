@@ -1,8 +1,14 @@
 """seed calendar_event (idempotente)"""
+from pathlib import Path
+
 from alembic import op
 
 revision = "0003"
-down_revision = "0002"
+# Compativel com a main atual (sem 0002) e com o PR #19 (com 0002) quando mesclado.
+if (Path(__file__).resolve().parent / "0002_observed_at.py").is_file():
+    down_revision = "0002"
+else:
+    down_revision = "0001"
 
 UP = """
 INSERT INTO calendar_event(name, kind, event_date)
