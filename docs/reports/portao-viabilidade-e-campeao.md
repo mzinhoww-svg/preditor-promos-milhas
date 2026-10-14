@@ -72,7 +72,7 @@ Não há predição de produção resolvida. Os números que aparecem nos testes
 - **Segunda fonte fraca:** o Pontos pra Voar (só título, decisão 002) validou 0 campanhas, e todas as 7 validadas são PdP + MC.
 - **Tipos ausentes:** não há nenhuma campanha de `purchase_discount` nem de `boosted_accrual`.
 - **Extrator e conjunto de ouro:** a medida contra o ouro é provisória (`gold_provisional`, aguarda conferência de Aurimar). No split dev, a pipeline acha 28/28 campanhas, com direção e bônus 100% e fim 79%.
-- **Datas inferidas:** 92 de 111 evidências têm início inferido (`start_inferred`, data em que a oferta foi vista).
+- **Datas inferidas:** 90 de 109 evidências têm início inferido (`start_inferred`, data em que a oferta foi vista).
 
 ## 7. O que muda o resultado
 
